@@ -34,6 +34,7 @@ import PreviewPage from './pages/PreviewPage'
 import SignupPage from './pages/SignupPage'
 import GlPage from './pages/GlPage'
 import DesktopSignInPage from './pages/DesktopSignInPage'
+import ModulesPage from './pages/ModulesPage'
 import RouteErrorCard from './components/RouteErrorCard'
 import { CallbackPage, RootShell } from './RootShell'
 
@@ -298,9 +299,17 @@ const desktopSignInRoute = createRoute({
   component: DesktopSignInPage,
 })
 
+/** Desktop edition: the module chooser (ADR-D3). */
+const modulesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/modules',
+  component: ModulesPage,
+})
+
 const childRoutes = [
   callbackRoute,
   desktopSignInRoute,
+  modulesRoute,
   entryRoute,
   dashboardRoute,
   sosRoute,

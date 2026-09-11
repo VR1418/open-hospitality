@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 import anyio
-from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, UploadFile
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
@@ -264,13 +264,29 @@ class _SpaStaticFiles(StaticFiles):
         segments = path.split("/")
         return "." in segments[-1] or any(seg.startswith(".") for seg in segments)
 
+    @staticmethod
+    def _url_form(path: str) -> str:
+        """StaticFiles hands `get_response` an OS-NORMALISED path: on Windows
+        `/api/nope` arrives as `api\\nope` and `/.git/HEAD` as `.git\\HEAD`.
+        Every "/"-based check here then misses — unknown API paths answer 200
+        with the portal page and the dot-segment guard never fires. Found by
+        the desktop edition fork, whose Windows build is its main build;
+        compare in URL form so the rules hold on every OS."""
+        return path.replace("\\", "/")
+
     def _should_fall_back(self, path: str) -> bool:
+        path = self._url_form(path)
         return not self._is_api_path(path) and not self._names_a_file(path)
 
     async def get_response(self, path: str, scope: Scope) -> Response:
         try:
             response = await super().get_response(path, scope)
         except StarletteHTTPException as exc:
+            # A non-GET to an unknown API path gets StaticFiles' 405, which
+            # reads as "that route exists, wrong method" — a lie about a route
+            # nothing serves. It is a 404 like its GET twin.
+            if exc.status_code == 405 and self._is_api_path(self._url_form(path)):
+                raise StarletteHTTPException(status_code=404) from exc
             if exc.status_code != 404 or not self._should_fall_back(path):
                 raise
             return await super().get_response("index.html", scope)
@@ -304,6 +320,7 @@ def create_app(
         Callable[[str, str, dict[str, Any], str | None], None] | None
     ) = None,
     exchange_qbo_code: Callable[[str], str] | None = None,
+    mount: Callable[[str], bool] | None = None,
 ) -> FastAPI:
     settings = get_settings()
     # There is NO provider-name fail-fast here any more (OH-17). Two used to
@@ -441,59 +458,71 @@ def create_app(
     # active-org resolution (L3) — its 400/403 refusals fire before any
     # handler, and it stashes the request's org-bound session factory.
     operator_gates = [Depends(require_operator), Depends(require_active_org)]
-    app.include_router(portal_router, dependencies=operator_gates)
-    app.include_router(workforce_router, dependencies=operator_gates)
-    app.include_router(property_config_router, dependencies=operator_gates)
-    app.include_router(night_audit_router, dependencies=operator_gates)
-    app.include_router(checklist_router, dependencies=operator_gates)
+
+    # Which surfaces this deployment serves. Every router — and the two inline
+    # routes below — is registered through `allow(<surface name>)`, so a
+    # deployment can leave a surface UNMOUNTED: not hidden, absent. Nothing
+    # listens, and a request 404s. The default mounts everything, which is
+    # every deployment that passes no `mount`. (Desktop edition fork: its
+    # module chooser drives this — docs/desktop/adr/adr-d3-module-gating.md.)
+    allow = mount or (lambda _surface: True)
+
+    def _include(surface: str, router: APIRouter, *, gated: bool = True) -> None:
+        if allow(surface):
+            app.include_router(router, dependencies=operator_gates if gated else [])
+
+    _include("portal", portal_router)
+    _include("workforce", workforce_router)
+    _include("property_config", property_config_router)
+    _include("night_audit", night_audit_router)
+    _include("checklist", checklist_router)
     # The per-tenant connect surface (OH-17). EVERY route inside narrows to
     # org_admin through its own `require_integration_admin` — the read too,
     # unlike the checklist — so the outer gate here is only authentication.
-    app.include_router(integrations_router, dependencies=operator_gates)
+    _include("integrations", integrations_router)
     # The GL surface (OH-27). Reads ride these gates; every mutation inside
     # narrows to org_admin through its own `require_gl_admin`.
-    app.include_router(gl_router, dependencies=operator_gates)
+    _include("gl", gl_router)
     # The Intuit OAuth callback, and it is included with NO dependencies on
     # purpose (D-OH17.11): it arrives as a top-level browser navigation with
     # no bearer token and no active-org header, so both gates above would
     # refuse it. Its ONLY authorization is the HMAC-signed `state` it verifies
     # itself, which is why it is a separate router — "ungated" is then a fact
     # about this line rather than a comment somebody can quietly falsify by
-    # adding `dependencies=` here. Do not merge it back into
+    # adding `gated=True` here. Do not merge it back into
     # `integrations_router`; do not add gates to it.
-    app.include_router(integrations_callback_router)
+    _include("integrations_callback", integrations_callback_router, gated=False)
     # Face-template enrollment (F3). Route-level require_onboarder narrows to
     # org_admin/property_gm — require_operator is only the outer gate.
-    app.include_router(face_enrollment_router, dependencies=operator_gates)
-    app.include_router(kiosk_admin_router, dependencies=operator_gates)
+    _include("face_enrollment", face_enrollment_router)
+    _include("kiosk_admin", kiosk_admin_router)
     # Timecard review/approval. The router's own require_approver narrows this
     # further to org_admin/property_gm — require_operator is only the outer gate.
-    app.include_router(timecard_router, dependencies=operator_gates)
+    _include("timecard", timecard_router)
     # Schedule builder (D1). The router's own require_scheduler narrows every
     # route to org_admin/property_gm — require_operator is only the outer gate.
-    app.include_router(schedule_router, dependencies=operator_gates)
+    _include("schedule", schedule_router)
     # CRM pull (J4). The router's require_crm_scheduler narrows to
     # org_admin/property_gm (demand is a manager surface) — the outer
     # gate is only authentication, like the schedule router.
-    app.include_router(crm_router, dependencies=operator_gates)
+    _include("crm", crm_router)
     # Sealed-PII vault (C1). The public-key route needs only an authenticated
     # operator; the profile write/status routes (Task 6) add require_payroll_admin
     # on top of this outer gate.
-    app.include_router(pii_router, dependencies=operator_gates)
+    _include("pii", pii_router)
     # E4: sick-leave balance/usage/adjustments -- payroll-admin-gated inside
     # the router, operator-authenticated at the door like the vault.
-    app.include_router(sick_leave_router, dependencies=operator_gates)
+    _include("sick_leave", sick_leave_router)
     # Pay-run execution/results (C2). Route-level require_payroll_admin composes
     # on top of this outer operator gate (same pattern as the vault routes).
-    app.include_router(payroll_run_router, dependencies=operator_gates)
+    _include("payroll_run", payroll_run_router)
     # Device-authenticated (X-Kiosk-Token), NOT an operator session — so this
     # router is deliberately included without require_operator.
-    app.include_router(kiosk_router)
+    _include("kiosk", kiosk_router, gated=False)
     # Public, UNGATED signup surface (Track B/B1) — like kiosk_router, mounted
     # without operator_gates. Its own invite + OTP checks are the gate.
-    app.include_router(signup_router)
+    _include("signup", signup_router, gated=False)
 
-    @app.post("/ingest", dependencies=operator_gates)
     async def ingest(request: Request, file: UploadFile) -> dict[str, object]:
         # The request's org-bound factory (L3): the upload lands inside
         # the caller's validated active org — require_active_org stashed
@@ -553,12 +582,15 @@ def create_app(
             "skipped": r.skipped,
         }
 
+    if allow("ingest"):
+        app.post("/ingest", dependencies=operator_gates)(ingest)
+
     app.state.preview_rate_limiter = RateLimiter(max_events=20, window_seconds=60.0)
     # Hard ceiling across ALL callers, independent of the per-IP key: the global
     # limiter is the cap that holds even if the per-IP host is spoofable.
     app.state.preview_global_limiter = RateLimiter(max_events=300, window_seconds=60.0)
 
-    @app.post("/api/preview")  # PUBLIC: no operator_gates, no session, persists nothing
+    # PUBLIC: no operator_gates, no session, persists nothing
     async def preview(request: Request) -> dict[str, object]:
         # Per-IP limiter FIRST, then the global ceiling — so a single abusive IP
         # is rejected on its own budget BEFORE it can consume a token from the
@@ -617,6 +649,9 @@ def create_app(
         # documented residual for the pilot — bounded for now by the 10MB size
         # cap + the page ceiling; tracked as a follow-up.
         return await anyio.to_thread.run_sync(_parse_preview_sync, data)
+
+    if allow("preview"):
+        app.post("/api/preview")(preview)
 
     # Serve the built portal SPA when a frontend build exists. Mounted LAST so
     # the /api/* and /ingest routes above always win; without a build the app

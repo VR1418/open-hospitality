@@ -23,6 +23,7 @@ import { hasRole } from './lib/roles'
 import { badgeLabel, useChecklist, type ChecklistBadge } from './lib/useChecklist'
 import { useAuth } from './auth/authContext'
 import { getMe } from './api/client'
+import { getModules, hiddenPaths } from './api/desktop'
 import type { Me } from './api/types'
 import BuildStamp from './components/BuildStamp'
 import OrgPicker from './components/OrgPicker'
@@ -73,6 +74,8 @@ type NavItem = {
   exact?: boolean
   soon?: boolean
   show?: (me: Me | undefined) => boolean
+  // Desktop edition only: shown when /api/me/modules answers (ADR-D3).
+  desktopOnly?: boolean
 }
 
 type NavSection = {
@@ -98,7 +101,10 @@ const SECTIONS: NavSection[] = [
   // router's operator gate; the dismiss controls inside are gated separately.
   {
     label: null,
-    items: [{ to: SETUP_PATH, label: 'Setup', icon: ChecklistIcon }],
+    items: [
+      { to: SETUP_PATH, label: 'Setup', icon: ChecklistIcon },
+      { to: '/modules', label: 'Modules', icon: GridIcon, desktopOnly: true },
+    ],
   },
   {
     label: 'Employee Management',
@@ -211,8 +217,12 @@ function SidebarContent({
   onNavigate,
   collapsed = false,
   onToggleCollapse,
+  hidden,
+  desktop,
 }: {
   me: Me | undefined
+  hidden: Set<string>
+  desktop: boolean
   theme: Theme
   onToggleTheme: () => void
   username: string | undefined
@@ -289,7 +299,13 @@ function SidebarContent({
 
       <nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
         {SECTIONS.map((section, si) => {
-          const visible = section.items.filter((e) => e.show === undefined || e.show(me))
+          const visible = section.items.filter(
+            (e) =>
+              (e.show === undefined || e.show(me)) &&
+              // Desktop edition: a module that is off takes its pages with it.
+              !(e.to !== undefined && hidden.has(e.to)) &&
+              (e.desktopOnly !== true || desktop),
+          )
           if (visible.length === 0) return null
           return (
             <div key={section.label ?? `sec-${si}`}>
@@ -431,6 +447,9 @@ export default function Layout() {
   )
   const { user, logout } = useAuth()
   const me = useQuery({ queryKey: ['me'], queryFn: getMe })
+  // Desktop edition (ADR-D3): null on a hosted deployment (the route 404s),
+  // and a failed read hides nothing — the server's mount is the enforcement.
+  const modules = useQuery({ queryKey: ['modules'], queryFn: getModules, retry: false })
   const username = user?.profile.preferred_username
 
   function handleToggleCollapse() {
@@ -443,6 +462,8 @@ export default function Layout() {
 
   const sidebarProps = {
     me: me.data,
+    hidden: hiddenPaths(modules.data?.modules),
+    desktop: modules.data != null,
     theme,
     onToggleTheme: () => setTheme(toggleTheme()),
     username,

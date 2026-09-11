@@ -34,9 +34,11 @@ Modified upstream files:
     pyproject.toml
     frontend/package.json
     frontend/src/auth/oidc.ts
+    frontend/src/Layout.tsx
     frontend/src/lib/lastRoute.ts
     frontend/src/RootShell.tsx
     frontend/src/router.tsx
+    src/usali/server.py
 
 This fork is not endorsed by, affiliated with, or supported by the upstream
 project or its maintainers.

@@ -24,8 +24,16 @@ from usali.desktop.bootstrap import (
     owner_url,
     prepare_database,
 )
-from usali.desktop.identity import DesktopUser
+from fastapi.testclient import TestClient
+
+from usali.desktop import modules_api
+from usali.desktop.identity import DesktopUser, LocalIssuer
 from usali.desktop.intake import ReportIntake
+from usali.desktop.modules import mount_predicate
+from usali.desktop.settings import MODULES_KEY, read_modules, write_setting
+from usali.keycloak_admin import InMemoryKeycloakAdmin
+from usali.photo_store import InMemoryPhotoStore
+from usali.server import create_app
 from usali.desktop.pg_runtime import (
     SUPERUSER,
     PgCluster,
@@ -113,6 +121,74 @@ def test_first_run_prepares_a_walled_database_with_nothing_connected(
         # zero rows, not all of them.
         with serving.connect() as conn:
             assert conn.execute(text("SELECT count(*) FROM organization")).scalar() == 0
+    finally:
+        serving.dispose()
+
+
+def test_the_desktop_chain_keeps_its_own_history(
+    running: tuple[PgCluster, int, DesktopKeys, Path],
+) -> None:
+    _, port, keys, _ = running
+    owner = create_engine(owner_url(port, keys))
+    try:
+        with owner.connect() as conn:
+            assert conn.execute(
+                text("SELECT count(*) FROM desktop.alembic_version_desktop")
+            ).scalar() == 1
+            # Upstream's ledger holds upstream's head only — never ours.
+            assert conn.execute(text("SELECT count(*) FROM public.alembic_version")).scalar() == 1
+    finally:
+        owner.dispose()
+    serving = make_engine(app_url(port, keys))
+    try:
+        with make_session_factory(serving)() as session:
+            assert read_modules(session) is None
+            write_setting(session, MODULES_KEY, ["accounting"])
+            session.commit()
+            assert read_modules(session) == ["accounting"]
+    finally:
+        serving.dispose()
+
+
+def test_the_modules_api_saves_the_owners_choice_and_asks_for_a_reload(
+    running: tuple[PgCluster, int, DesktopKeys, Path], tmp_path: Path,
+) -> None:
+    _, port, keys, _ = running
+    issuer = LocalIssuer.from_pem(keys.issuer_private_key_pem)
+    serving = make_engine(app_url(port, keys))
+    reloads: list[bool] = []
+    try:
+        app = create_app(
+            inbox_dir=tmp_path / "i", processed_dir=tmp_path / "r", failed_dir=tmp_path / "f",
+            dist_dir=tmp_path / "no-portal", session_factory=make_session_factory(serving),
+            token_verifier=issuer.verifier(), keycloak_admin=InMemoryKeycloakAdmin(),
+            photo_store=InMemoryPhotoStore(), mount=mount_predicate({"accounting"}),
+        )
+        modules_api.install(app, enabled=frozenset({"accounting"}),
+                            reload=lambda: reloads.append(True))
+        client = TestClient(app)
+        owner = {"Authorization": f"Bearer {issuer.mint(OWNER)}"}
+
+        listed = client.get("/api/me/modules", headers=owner)
+        assert listed.status_code == 200
+        state = {m["id"]: m["enabled"] for m in listed.json()["modules"]}
+        assert state == {"accounting": True, "payroll": False, "utilities": False}
+
+        saved = client.put("/api/desktop/modules", headers=owner,
+                           json={"enabled": ["accounting", "payroll"]})
+        assert saved.status_code == 200
+        assert saved.json()["reloading"] is True
+        assert reloads == [True]
+        with make_session_factory(serving)() as session:
+            assert read_modules(session) == ["accounting", "payroll"]
+
+        # Choosing is the owner's call: an operator with no org_admin grant is refused.
+        stranger = DesktopUser(subject="someone-else", username="x",
+                               roles=("org_admin",), org_alias="pilot-hotel-group")
+        refused = client.put("/api/desktop/modules",
+                             headers={"Authorization": f"Bearer {issuer.mint(stranger)}"},
+                             json={"enabled": ["accounting"]})
+        assert refused.status_code == 403
     finally:
         serving.dispose()
 

@@ -30,7 +30,7 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI
 
-from usali.desktop import session_api
+from usali.desktop import modules_api, session_api
 from usali.desktop.bootstrap import (
     DesktopKeys,
     KeysMissing,
@@ -42,6 +42,7 @@ from usali.desktop.bootstrap import (
 )
 from usali.desktop.identity import DesktopUser, LocalIssuer
 from usali.desktop.intake import ReportIntake
+from usali.desktop.modules import mount_predicate, resolve
 from usali.desktop.paths import DesktopPaths
 from usali.desktop.pg_runtime import (
     PgCluster,
@@ -118,7 +119,13 @@ def _configure_engine_env(paths: DesktopPaths, keys: DesktopKeys, *, url: str, a
 
 
 def build_app(
-    paths: DesktopPaths, issuer: LocalIssuer, codes: session_api.LaunchCodes, dist: Path
+    paths: DesktopPaths,
+    issuer: LocalIssuer,
+    codes: session_api.LaunchCodes,
+    dist: Path,
+    *,
+    enabled: frozenset[str],
+    reload: Callable[[], None],
 ) -> FastAPI:
     # Upstream's own SPA static handler, reused rather than copied.
     from usali.server import _SpaStaticFiles, create_app
@@ -131,8 +138,11 @@ def build_app(
         # A directory that never exists, so create_app mounts no SPA: its
         # catch-all mount must come AFTER desktop sign-in is routed, below.
         dist_dir=paths.system_root / "no-portal-here",
+        # ADR-D3: a module that is off is not mounted at all.
+        mount=mount_predicate(enabled),
     )
     session_api.install(app, issuer=issuer, user=OWNER, codes=codes)
+    modules_api.install(app, enabled=enabled, reload=reload)
     if dist.is_dir():
         app.mount("/", _SpaStaticFiles(directory=dist, html=True), name="spa")
     else:
@@ -159,6 +169,55 @@ class _ApiServer:
     def stop(self) -> None:
         self._server.should_exit = True
         self._thread.join(timeout=10)
+
+
+class _Portal:
+    """The local server, rebuildable in place. A module change builds a new
+    app (with the new set mounted) and swaps it in on the SAME port, so the
+    owner's browser tab and session carry straight on (PRD 5.1: modules
+    change "without reinstalling" — and without restarting, either)."""
+
+    def __init__(self, build: Callable[[], FastAPI], port: int) -> None:
+        self._build = build
+        self._port = port
+        self._lock = threading.Lock()
+        self._server: _ApiServer | None = None
+
+    def _serve(self) -> _ApiServer:
+        app = self._build()
+        failure: Exception | None = None
+        # The port was released a moment ago; give the OS a beat to agree.
+        for _ in range(20):
+            server = _ApiServer(app, self._port)
+            try:
+                server.start()
+                return server
+            except RuntimeError as exc:
+                failure = exc
+                time.sleep(0.25)
+        raise RuntimeError("the local server did not come back") from failure
+
+    def start(self) -> None:
+        with self._lock:
+            self._server = self._serve()
+
+    def reload(self) -> None:
+        # Called from inside a request's background task, which runs on the
+        # very server being replaced — so the swap happens on its own thread.
+        threading.Thread(target=self._reload, name="api-reload", daemon=True).start()
+
+    def _reload(self) -> None:
+        with self._lock:
+            if self._server is not None:
+                self._server.stop()
+            self._server = self._serve()
+        _LOG.info("modules changed; the local server was rebuilt")
+
+    def stop(self) -> None:
+        with self._lock:
+            if self._server is not None:
+                self._server.stop()
+                self._server = None
 
 
 def _reveal(folder: Path) -> None:
@@ -244,19 +303,30 @@ def run(args: argparse.Namespace) -> int:
             n = load_sample_data(owner_url(pg_port, keys), resources, paths.drop_folder)
             _LOG.info("sample data: %d reports copied to %s", n, paths.drop_folder)
 
+        from usali.db import make_engine, make_session_factory
+        from usali.desktop.settings import read_modules
+        from usali.tenancy import FOUNDING_ORG_ID, OrgBoundSessionFactory
+
+        serving_engine = make_engine(serving_url)
+        serving_sessions = make_session_factory(serving_engine)
         issuer = LocalIssuer.from_pem(keys.issuer_private_key_pem)
         codes = session_api.LaunchCodes()
-        app = build_app(paths, issuer, codes, resources / "frontend" / "dist-desktop")
-        server = _ApiServer(app, api_port)
-        server.start()
+        dist = resources / "frontend" / "dist-desktop"
 
-        from usali.db import make_engine, make_session_factory
-        from usali.tenancy import FOUNDING_ORG_ID, OrgBoundSessionFactory
+        def build() -> FastAPI:
+            # Read on every (re)build: the stored choice is what gets mounted.
+            with serving_sessions() as session:
+                enabled = resolve(read_modules(session))
+            _LOG.info("modules on: %s", ", ".join(sorted(enabled)))
+            return build_app(paths, issuer, codes, dist, enabled=enabled, reload=portal.reload)
+
+        portal = _Portal(build, api_port)
+        portal.start()
 
         # The intake writes as the serving role, bound to the founding org —
         # the same walls as every request (L2), never the owner's session.
         intake = ReportIntake(
-            OrgBoundSessionFactory(make_session_factory(make_engine(serving_url)), FOUNDING_ORG_ID),
+            OrgBoundSessionFactory(serving_sessions, FOUNDING_ORG_ID),
             drop_folder=paths.drop_folder,
             read_folder=paths.read_folder,
             unreadable_folder=paths.unreadable_folder,
@@ -282,7 +352,8 @@ def run(args: argparse.Namespace) -> int:
                 _run_console(base_url)
         finally:
             intake.stop()
-            server.stop()
+            portal.stop()
+            serving_engine.dispose()
     finally:
         cluster.stop()
         _LOG.info("stopped")

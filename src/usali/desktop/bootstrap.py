@@ -194,23 +194,59 @@ def migration_revisions(resources: Path, url: str) -> tuple[str | None, str]:
     return current, head
 
 
-def migrate(owner: str, resources: Path, *, allow_upgrade: bool) -> str:
-    """'created' (a fresh install), 'current', or 'upgraded'.
-
-    A fresh database is migrated without asking — that IS the install. An
+def _consent(current: str | None, head: str, *, allow_upgrade: bool) -> None:
+    """A fresh database is migrated without asking — that IS the install. An
     existing one is only upgraded with the owner's say-so (PRD I-5): until M3
     gives that a dialog and a pre-upgrade backup, the say-so is a flag."""
-    current, head = migration_revisions(resources, owner)
-    if current == head:
-        return "current"
-    if current is not None and not allow_upgrade:
+    if current is not None and current != head and not allow_upgrade:
         raise NeedsUpgradeConsent(
             "This version of Open Hospitality needs to update how your books are stored. "
             "Make sure you have a recent copy of your data, then start it with "
             f"--upgrade-database to go ahead. (Your data: {current}; this version: {head}.)"
         )
+
+
+def migrate(owner: str, resources: Path, *, allow_upgrade: bool) -> str:
+    """Upstream's chain: 'created' (a fresh install), 'current', or 'upgraded'."""
+    current, head = migration_revisions(resources, owner)
+    if current == head:
+        return "current"
+    _consent(current, head, allow_upgrade=allow_upgrade)
     with _db_url_env(owner):
         command.upgrade(_alembic_config(resources, owner), "head")
+    return "created" if current is None else "upgraded"
+
+
+_DESKTOP_MIGRATIONS = Path(__file__).with_name("migrations")
+
+
+def _desktop_config(url: str) -> Config:
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_DESKTOP_MIGRATIONS))
+    cfg.set_main_option("sqlalchemy.url", url)
+    return cfg
+
+
+def migrate_desktop(owner: str, *, allow_upgrade: bool) -> str:
+    """The desktop chain (schema `desktop`, its own version table), under the
+    same consent rule as upstream's."""
+    from usali.desktop.migrations.env_names import SCHEMA, VERSION_TABLE
+
+    head = ScriptDirectory.from_config(_desktop_config(owner)).get_current_head()
+    if head is None:
+        raise RuntimeError(f"no desktop migrations under {_DESKTOP_MIGRATIONS}")
+    engine = create_engine(owner)
+    try:
+        with engine.connect() as conn:
+            current = MigrationContext.configure(
+                conn, opts={"version_table": VERSION_TABLE, "version_table_schema": SCHEMA}
+            ).get_current_revision()
+    finally:
+        engine.dispose()
+    if current == head:
+        return "current"
+    _consent(current, head, allow_upgrade=allow_upgrade)
+    command.upgrade(_desktop_config(owner), "head")
     return "created" if current is None else "upgraded"
 
 
@@ -366,6 +402,7 @@ def prepare_database(
     owner = owner_url(port, keys)
     ensure_roles(owner, keys)
     outcome = migrate(owner, resources, allow_upgrade=allow_upgrade)
+    migrate_desktop(owner, allow_upgrade=allow_upgrade)
     state = _read_state(state_file)
     if not state.get("seeded_at"):
         seed_first_run(owner, resources, user)
