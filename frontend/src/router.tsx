@@ -33,6 +33,7 @@ import SchedulePage from './pages/SchedulePage'
 import PreviewPage from './pages/PreviewPage'
 import SignupPage from './pages/SignupPage'
 import GlPage from './pages/GlPage'
+import DesktopSignInPage from './pages/DesktopSignInPage'
 import RouteErrorCard from './components/RouteErrorCard'
 import { CallbackPage, RootShell } from './RootShell'
 
@@ -290,8 +291,16 @@ const signupRoute = createRoute({
   }),
 })
 
+/** Desktop edition: trades the tray icon's one-time code for a session. */
+const desktopSignInRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/desktop-signin',
+  component: DesktopSignInPage,
+})
+
 const childRoutes = [
   callbackRoute,
+  desktopSignInRoute,
   entryRoute,
   dashboardRoute,
   sosRoute,

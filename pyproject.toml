@@ -35,6 +35,12 @@ face = [
     "numpy>=2.5.2",
     "pillow>=12.3.0",
 ]
+# Desktop edition (docs/desktop/): the tray icon. pystray is LGPL-3.0 —
+# shipped only in one-folder builds so it stays replaceable (NOTICE).
+desktop = [
+    "pystray>=0.19.5",
+    "pillow>=12.3.0",
+]
 dev = [
     "pytest>=9.1.1",
     "testcontainers[postgres]>=4.15.0",
@@ -46,6 +52,7 @@ dev = [
 
 [project.scripts]
 usali = "usali.cli:main"
+oh-desktop = "usali.desktop.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -87,4 +94,8 @@ strict = true
 [dependency-groups]
 dev = [
     "reportlab>=5.0.1",
+]
+# Desktop edition packaging (scripts/desktop/build.py).
+build = [
+    "pyinstaller>=6.11.0",
 ]

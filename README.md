@@ -13,6 +13,7 @@
 > close to upstream as possible so improvements can flow both ways.
 >
 > **Plan:** [`docs/desktop/PRD-desktop-edition.md`](docs/desktop/PRD-desktop-edition.md)
+> · **Run it (M1):** [`docs/desktop/M1.md`](docs/desktop/M1.md)
 > · **Upstream:** [csharp36/open-hospitality](https://github.com/csharp36/open-hospitality)
 
 

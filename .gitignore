@@ -25,6 +25,10 @@ failed/
 # Frontend (P7 portal) build artifacts
 frontend/node_modules/
 frontend/dist/
+frontend/dist-desktop/
+
+# Desktop edition: vendored PostgreSQL binaries (scripts/desktop/fetch_postgres.py)
+vendor/
 frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/

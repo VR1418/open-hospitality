@@ -21,9 +21,35 @@ This distribution is a MODIFIED version of Open Hospitality
 Apache License, Version 2.0.
 
 Modifications in this distribution are made by the maintainers of this fork
-and are described in docs/desktop/PRD-desktop-edition.md. Modified files
-carry a change notice in accordance with Apache License 2.0, Section 4(b).
+and are described in docs/desktop/PRD-desktop-edition.md. In accordance with
+Apache License 2.0, Section 4(b), the upstream files this fork has changed are
+listed below, and each change carries an inline note naming the desktop
+edition. Files under src/usali/desktop/, scripts/desktop/, packaging/desktop/,
+docs/desktop/ and tests/test_desktop_* are additions, not modifications.
+
+Modified upstream files:
+    .gitignore
+    NOTICE
+    README.md
+    pyproject.toml
+    frontend/package.json
+    frontend/src/auth/oidc.ts
+    frontend/src/lib/lastRoute.ts
+    frontend/src/RootShell.tsx
+    frontend/src/router.tsx
 
 This fork is not endorsed by, affiliated with, or supported by the upstream
 project or its maintainers.
+--------------------------------------------------------------------------
+THIRD-PARTY COMPONENTS IN THE DESKTOP BUILD
+
+PostgreSQL (https://www.postgresql.org), bundled as binaries from the
+zonky embedded-postgres project. PostgreSQL License. Copyright (c) 1996-2026,
+The PostgreSQL Global Development Group; portions Copyright (c) 1994, The
+Regents of the University of California.
+
+pystray (https://github.com/moses-palmer/pystray), used for the tray icon.
+GNU Lesser General Public License v3.0. It is shipped as a separate,
+replaceable Python module inside the application folder; the desktop build
+is never packaged as a single-file executable.
 --------------------------------------------------------------------------

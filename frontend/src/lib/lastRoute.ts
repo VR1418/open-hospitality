@@ -15,12 +15,15 @@ const HOME = '/dashboard'
  * OIDC code exchange, and '/signup' carries an invite token consumed on first
  * use, so restoring either dead-ends the newly-authenticated owner; and '/try'
  * is the public marketing route — remembering it would strand a freshly
- * authenticated user back on the anonymous preview page.
+ * authenticated user back on the anonymous preview page. The desktop
+ * edition's '/desktop-signin' is one-shot for the callback's reason: its
+ * launch code is spent on arrival, and restoring it would loop sign-in.
  */
 function restorable(href: string): boolean {
   return (
     href !== '/' &&
     !href.startsWith('/callback') &&
+    !href.startsWith('/desktop-signin') &&
     !href.startsWith('/signup') &&
     !href.startsWith('/try')
   )

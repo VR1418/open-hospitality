@@ -59,6 +59,9 @@ export function CallbackPage() {
  * route ids ('/', '/coverage', …) — which pages resolve via getRouteApi —
  * stay unchanged.
  *
+ * The desktop edition's /desktop-signin is unguarded for the callback's
+ * reason: it is where a session is MADE, from the tray icon's one-time code.
+ *
  * These four render unguarded: the callback completes OIDC, the kiosk
  * authenticates by DEVICE token (no operator session exists on an iPad),
  * /signup is reached by an invited owner who has no session yet (invite
@@ -75,6 +78,7 @@ export function RootShell() {
   }, [href])
   if (
     pathname === '/callback' ||
+    pathname === '/desktop-signin' ||
     pathname === '/kiosk' ||
     pathname === '/signup' ||
     pathname === '/try' ||
