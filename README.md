@@ -1,5 +1,21 @@
 # Open Hospitality
 
+> ### ⚠️ This is a modified fork
+>
+> This repository is a **modified build** of
+> [csharp36/open-hospitality](https://github.com/csharp36/open-hospitality),
+> redistributed under the Apache License 2.0. It is **not endorsed by or affiliated with**
+> the upstream project.
+>
+> **What's different:** upstream is building a hosted, multi-tenant service. This fork targets a
+> **free desktop application for Mac and Windows** — bundled dependencies, local accounts,
+> bring-your-own AI and email, and selectable feature modules. The accounting engine is kept as
+> close to upstream as possible so improvements can flow both ways.
+>
+> **Plan:** [`docs/desktop/PRD-desktop-edition.md`](docs/desktop/PRD-desktop-edition.md)
+> · **Upstream:** [csharp36/open-hospitality](https://github.com/csharp36/open-hospitality)
+
+
 **The open-source accounting and labor platform for hotels.** Open Hospitality
 turns raw PMS reports into a USALI-compliant picture of a property's money and
 labor — a Summary Operating Statement, Schedule 14/15 labor cost,

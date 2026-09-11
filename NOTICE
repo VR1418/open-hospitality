@@ -12,3 +12,18 @@ the License at
 "USALI" refers to the Uniform System of Accounts for the Lodging Industry, an
 industry accounting standard; its use here is descriptive and implies no
 endorsement.
+
+--------------------------------------------------------------------------
+MODIFICATIONS
+
+This distribution is a MODIFIED version of Open Hospitality
+(https://github.com/csharp36/open-hospitality), redistributed under the
+Apache License, Version 2.0.
+
+Modifications in this distribution are made by the maintainers of this fork
+and are described in docs/desktop/PRD-desktop-edition.md. Modified files
+carry a change notice in accordance with Apache License 2.0, Section 4(b).
+
+This fork is not endorsed by, affiliated with, or supported by the upstream
+project or its maintainers.
+--------------------------------------------------------------------------
