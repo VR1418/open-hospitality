@@ -42,11 +42,12 @@ from usali.models import (
     Employee,
     EmployeeAssignment,
     KioskDevice,
+    NightAuditState,
     Punch,
     RoleAssignment,
     Timecard,
 )
-from usali.reporting import summary_operating_statement_from_journal
+from usali.reporting import revenue_by_day, summary_operating_statement_from_journal
 from usali.tenancy import FOUNDING_ORG_ID, OrgBoundSessionFactory
 
 REPO = Path(__file__).resolve().parents[1]
@@ -244,6 +245,40 @@ def test_totals_are_built_from_summed_parts(world: World) -> None:
     occupied = sum((Decimal(h["rooms_occupied"]) for h in paired), Decimal(0))
     rooms = sum((Decimal(h["rooms_total"]) for h in paired), Decimal(0))
     assert Decimal(t["occupancy_pct"]) == (occupied * 100 / rooms).quantize(Decimal("0.1"))
+
+
+def test_the_trend_is_a_fortnight_of_daily_revenue_across_the_hotels(world: World) -> None:
+    body = world.portfolio(world.owner)
+    trend = body["trend"]
+    assert len(trend) == 14
+    assert trend[-1]["business_date"] == DAY.isoformat()
+    assert trend[0]["business_date"] == (DAY - timedelta(days=13)).isoformat()
+    # The day itself has revenue; a day nobody reported is a gap, not a zero.
+    assert Decimal(trend[-1]["revenue"]) > 0
+    assert any(p["revenue"] is None for p in trend)
+    # It sums the hotels: the last day is more than any one of them alone.
+    with world.org_sessions() as s:
+        hisj = revenue_by_day(s, "HISJ", DAY, DAY)[DAY]
+    assert Decimal(trend[-1]["revenue"]) > hisj
+
+
+def test_the_findings_are_what_last_nights_audit_turned_up(world: World) -> None:
+    body = world.portfolio(world.owner)
+    findings = body["findings"]
+    # The hotel that sent nothing for the day says so once — not once per
+    # report it didn't send.
+    stdemo = [f for f in findings if f["property_id"] == "STDEMO"]
+    assert [f["kind"] for f in stdemo] == ["no_reports"]
+    assert stdemo[0]["hotel"] and stdemo[0]["detail"] == MISSING_DAY
+    # Every finding names its hotel and says something in plain words.
+    assert all(f["hotel"] and f["detail"] for f in findings)
+    assert {f["kind"] for f in findings} <= {
+        "no_reports", "missing_report", "check_failed", "not_in_books",
+    }
+    # Reading them changed nothing: upstream's own GET creates a state row,
+    # and the Overview must not.
+    with world.org_sessions() as s:
+        assert s.get(NightAuditState, "STDEMO") is None
 
 
 def test_a_hotel_manager_sees_their_hotel_and_no_other(world: World) -> None:

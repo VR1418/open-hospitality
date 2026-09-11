@@ -1939,6 +1939,21 @@ def _rooms_by_day(
     return {d: Decimal(str(v)) for d, v in rows}
 
 
+def revenue_by_day(
+    session: Session, property_id: str, start: date, end: date
+) -> dict[date, Decimal]:
+    """Total operating revenue per day over an inclusive window — the public
+    face of `_revenue_by_day`, for a caller that wants the series without the
+    labor analytics wrapped around it (the desktop edition's Overview trend).
+
+    FACT-derived, like every other statistic here: it answers "what did the
+    reports say", where the statement's headline answers "what is posted to
+    the journal". The two agree once a day is posted, and a caller showing
+    both should say which is which.
+    """
+    return _revenue_by_day(session, property_id, start, end)
+
+
 def _revenue_by_day(
     session: Session, property_id: str, start: date, end: date
 ) -> dict[date, Decimal]:

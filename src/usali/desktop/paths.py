@@ -102,6 +102,19 @@ class DesktopPaths:
         return self.system_root / "state.json"
 
     @property
+    def backup_config_file(self) -> Path:
+        """Where backups go, and when the last one was taken. A file, not a
+        `desktop.setting` row: the backup runs before the database starts
+        (ADR-D4), so its settings cannot live inside it."""
+        return self.system_root / "backup.json"
+
+    @property
+    def backup_wrap_file(self) -> Path:
+        """The backup key wrapped under the owner's recovery code; copied into
+        every backup so one can be opened on another computer."""
+        return self.system_root / "backup-key.wrapped.json"
+
+    @property
     def logs(self) -> Path:
         return self.system_root / "logs"
 

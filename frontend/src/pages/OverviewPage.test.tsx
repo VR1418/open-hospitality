@@ -51,6 +51,22 @@ const PORTFOLIO: Portfolio = {
     revpar: '99.75', month_revenue: '91200.00', month_labour_cost: '14200.00',
     month_labour_pct: '15.6', staff: { staff: 33, on_clock: 9, timecards_to_approve: 3 },
   },
+  trend: [
+    { business_date: '2026-07-05', revenue: '8100.00' },
+    { business_date: '2026-07-06', revenue: null },
+    { business_date: '2026-07-07', revenue: '9840.00' },
+  ],
+  findings: [
+    {
+      property_id: 'LAKE', hotel: 'Lakeside Suites', kind: 'no_reports',
+      label: 'No reports yet', detail: 'No reports for this day yet.', delta: null,
+    },
+    {
+      property_id: 'HISJ', hotel: 'Holiday Inn San Jose', kind: 'check_failed',
+      label: 'AR roll-forward', detail: 'Prior close plus today’s activity doesn’t tie.',
+      delta: '120.50',
+    },
+  ],
 }
 
 function renderAt(path = '/overview') {
@@ -97,6 +113,35 @@ describe('OverviewPage', () => {
     expect(within(hotels).getByText('No reports for this day yet.')).toBeInTheDocument()
     expect(within(hotels).getByText('Missing')).toBeInTheDocument()
     expect(within(hotels).queryByRole('button', { name: 'Open Lakeside Suites' })).toBeNull()
+  })
+
+  it('shows the revenue trend, saying which figures it draws', async () => {
+    renderAt()
+    const trend = await screen.findByRole('region', { name: 'Revenue trend' })
+    expect(within(trend).getByText(/from the reports read/)).toBeInTheDocument()
+    expect(within(trend).getByRole('img', { name: /Revenue per day, 3 days to 2026-07-07/ }))
+      .toBeInTheDocument()
+    expect(within(trend).getByText('Best day $9,840')).toBeInTheDocument()
+  })
+
+  it('shows what last night’s audit turned up, with the amount it is out by', async () => {
+    renderAt()
+    const audit = await screen.findByRole('region', { name: 'Last night’s audit' })
+    expect(within(audit).getByText('2 to look at')).toBeInTheDocument()
+    expect(within(audit).getByText('No reports yet')).toBeInTheDocument()
+    expect(within(audit).getByText('AR roll-forward')).toBeInTheDocument()
+    expect(within(audit).getByText('Out by $120.50')).toBeInTheDocument()
+    expect(within(audit).getByRole('link', { name: 'Open Close the day' })).toHaveAttribute(
+      'href',
+      '/night-audit',
+    )
+  })
+
+  it('says so plainly when the audit found nothing', async () => {
+    vi.mocked(getPortfolio).mockResolvedValue({ ...PORTFOLIO, findings: [] })
+    renderAt()
+    const audit = await screen.findByRole('region', { name: 'Last night’s audit' })
+    expect(within(audit).getByText(/every hotel’s reports are in/)).toBeInTheDocument()
   })
 
   it('shows the staff picture when Payroll & People is on', async () => {

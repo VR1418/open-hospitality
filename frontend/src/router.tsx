@@ -38,6 +38,8 @@ import ModulesPage from './pages/ModulesPage'
 import AccountPage from './pages/AccountPage'
 import WelcomePage from './pages/WelcomePage'
 import OverviewPage from './pages/OverviewPage'
+import BackupsPage from './pages/BackupsPage'
+import UpdatesPage from './pages/UpdatesPage'
 import RouteErrorCard from './components/RouteErrorCard'
 import { CallbackPage, RootShell } from './RootShell'
 
@@ -344,6 +346,20 @@ const overviewRoute = createRoute({
   component: OverviewPage,
 })
 
+/** Desktop edition: is there a newer version? */
+const updatesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/updates',
+  component: UpdatesPage,
+})
+
+/** Desktop edition: backups (ADR-D4). */
+const backupsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/backups',
+  component: BackupsPage,
+})
+
 const childRoutes = [
   callbackRoute,
   desktopSignInRoute,
@@ -351,6 +367,8 @@ const childRoutes = [
   accountRoute,
   welcomeRoute,
   overviewRoute,
+  backupsRoute,
+  updatesRoute,
   entryRoute,
   dashboardRoute,
   sosRoute,

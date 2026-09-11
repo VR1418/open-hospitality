@@ -340,6 +340,21 @@ export type PortfolioTotals = {
   staff: PortfolioStaff | null
 }
 
+export type TrendPoint = {
+  business_date: string
+  /** Total across the hotels, from the reports read; null on a day none reported. */
+  revenue: string | null
+}
+
+export type Finding = {
+  property_id: string
+  hotel: string
+  kind: 'no_reports' | 'missing_report' | 'check_failed' | 'not_in_books'
+  label: string
+  detail: string
+  delta: string | null
+}
+
 export type Portfolio = {
   business_date: string | null
   month_start: string | null
@@ -347,6 +362,97 @@ export type Portfolio = {
   staff_shown: boolean
   hotels: PortfolioHotel[]
   totals: PortfolioTotals
+  /** The fortnight ending on business_date, oldest first. */
+  trend: TrendPoint[]
+  findings: Finding[]
+}
+
+// --- Updates (src/usali/desktop/update_api.py) ------------------------------
+
+export type UpdateStatus = {
+  /** False until somewhere is published for the app to look. */
+  configured: boolean
+  current: string
+  latest: string | null
+  url: string | null
+  notes: string | null
+  checked_at: string | null
+  error: string | null
+  update_available: boolean
+}
+
+export async function getUpdate(): Promise<UpdateStatus | null> {
+  const res = await fetch('/api/desktop/update', { headers: await authHeaders() })
+  if (res.status === 404) return null
+  if (res.status === 401) redirectToLogin()
+  if (!res.ok) throw new Error(await detail(res))
+  return (await res.json()) as UpdateStatus
+}
+
+export async function checkForUpdate(): Promise<UpdateStatus> {
+  const res = await signedIn('/api/desktop/update/check', { method: 'POST' })
+  return (await res.json()) as UpdateStatus
+}
+
+// --- Backups (src/usali/desktop/backup_api.py, ADR-D4) ---------------------
+
+export type BackupFile = {
+  name: string
+  size_mb: number
+  taken_at: string | null
+  app_version: string | null
+  readable: boolean
+}
+
+export type BackupStatus = {
+  folder: string | null
+  suggested_folder: string
+  last_backup_at: string | null
+  last_file: string | null
+  /** True once the recovery code has been confirmed: only then can a backup
+   * be opened on another computer. */
+  armed: boolean
+  /** True when the next start will take one. */
+  due: boolean
+  keep: number
+  files: BackupFile[]
+}
+
+export async function getBackupStatus(): Promise<BackupStatus | null> {
+  const res = await fetch('/api/desktop/backup', { headers: await authHeaders() })
+  if (res.status === 404) return null
+  if (res.status === 401) redirectToLogin()
+  if (!res.ok) throw new Error(await detail(res))
+  return (await res.json()) as BackupStatus
+}
+
+export async function setBackupFolder(folder: string): Promise<BackupStatus> {
+  const res = await signedIn('/api/desktop/backup', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folder }),
+  })
+  return (await res.json()) as BackupStatus
+}
+
+/** Confirm the recovery code once, so backups carry a copy of their key
+ * wrapped under it. The server checks it before wrapping anything. */
+export async function armBackups(recoveryCode: string): Promise<void> {
+  await signedIn(
+    '/api/desktop/backup/arm',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recovery_code: recoveryCode }),
+    },
+    // A refused code is the endpoint's own 401, not a dead session.
+    { redirectOn401: false },
+  )
+}
+
+export async function backupNow(): Promise<{ detail: string }> {
+  const res = await signedIn('/api/desktop/backup/now', { method: 'POST' })
+  return (await res.json()) as { detail: string }
 }
 
 /** Every hotel the caller may see, for one day (default: the latest day any

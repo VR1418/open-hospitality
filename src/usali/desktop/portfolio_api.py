@@ -37,6 +37,7 @@ from usali.assignments import (
 from usali.auth import Principal, request_session_factory, require_active_org, require_operator
 from usali.inventory import InventoryInconsistent, InventoryNotConfigured, rooms_available
 from usali.models import Employee, KioskDevice, Property, Punch, Timecard
+from usali.night_audit import ledger_checks, slot_status
 from usali.timecards import punch_states
 from usali.workforce import resolve_scope
 
@@ -90,12 +91,32 @@ class TotalsOut(BaseModel):
     staff: StaffOut | None
 
 
+class TrendPoint(BaseModel):
+    business_date: date
+    # Total across the hotels, from the reports read; null on a day none of
+    # them reported, so the chart can leave a gap rather than draw a zero.
+    revenue: str | None
+
+
+class FindingOut(BaseModel):
+    property_id: str
+    hotel: str
+    kind: Literal["no_reports", "missing_report", "check_failed", "not_in_books"]
+    label: str
+    detail: str
+    delta: str | None
+
+
 class PortfolioOut(BaseModel):
     business_date: date | None
     month_start: date | None
     staff_shown: bool
     hotels: list[HotelOut]
     totals: TotalsOut
+    # The last 14 days ending on `business_date`, oldest first.
+    trend: list[TrendPoint]
+    # What the night's audit turned up, across the hotels.
+    findings: list[FindingOut]
 
 
 def _money(v: Decimal | None) -> str | None:
@@ -229,6 +250,64 @@ def _staff(
     }
 
 
+TREND_DAYS = 14
+
+
+def _trend(session: Session, property_ids: list[str], day: date | None) -> list[TrendPoint]:
+    """Revenue per day across the hotels, for the fortnight ending on `day`.
+
+    `reporting.revenue_by_day` is FACT-derived — what the reports said —
+    where a hotel's headline revenue above is the posted journal's. They
+    agree once a day is posted, and the page says which is which. The
+    statement is not rebuilt per day per hotel: that is 14 x N statements
+    for a shape."""
+    if day is None:
+        return []
+    start = day - timedelta(days=TREND_DAYS - 1)
+    totals: dict[date, Decimal] = {}
+    for property_id in property_ids:
+        for on, amount in reporting.revenue_by_day(session, property_id, start, day).items():
+            totals[on] = totals.get(on, Decimal(0)) + amount
+    days = [start + timedelta(days=i) for i in range(TREND_DAYS)]
+    return [TrendPoint(business_date=d, revenue=_money(totals.get(d))) for d in days]
+
+
+def _findings(
+    session: Session, hotels: list[Property], days: dict[str, "_Day"], day: date | None,
+) -> list[FindingOut]:
+    """What last night's audit turned up, in the owner's words: a hotel that
+    sent nothing, a report still to come, a balance check that failed, or a
+    day the books haven't taken. Read-only on purpose — upstream's
+    `GET /night-audit` creates and commits a state row as a side effect of
+    reading, which is right for one hotel's page and wrong for a home screen
+    that touches every hotel."""
+    if day is None:
+        return []
+    out: list[FindingOut] = []
+    for prop in hotels:
+        entry = days[prop.property_id]
+        common = {"property_id": prop.property_id, "hotel": prop.name}
+        if entry.status == "missing":
+            out.append(FindingOut(**common, kind="no_reports", label="No reports yet",
+                                  detail=entry.note or MISSING_DAY, delta=None))
+            continue
+        if entry.status == "error":
+            out.append(FindingOut(**common, kind="not_in_books", label="Not in the books",
+                                  detail=entry.note or NOT_IN_BOOKS, delta=None))
+            continue
+        for slot in slot_status(session, prop.property_id, day, prop.pms_source):
+            if not slot["landed"]:
+                out.append(FindingOut(
+                    **common, kind="missing_report", label=str(slot["label"]),
+                    detail="This report hasn't arrived for the day.", delta=None,
+                ))
+        for check in ledger_checks(session, prop.property_id, day, prop.pms_source):
+            if check.status == "fail":
+                out.append(FindingOut(**common, kind="check_failed", label=check.name,
+                                      detail=check.detail, delta=check.delta))
+    return out
+
+
 def _sum(values: Iterable[Decimal | None]) -> Decimal | None:
     present = [v for v in values if v is not None]
     return sum(present, Decimal(0)) if present else None
@@ -280,6 +359,8 @@ def portfolio(
 
         days = {p.property_id: _day_for(session, p.property_id, day, p.property_id in latest)
                 for p in hotels}
+        trend = _trend(session, sorted(visible), day)
+        findings = _findings(session, hotels, days, day)
         staff = _staff(session, sorted(visible), now.date(), now) if staff_shown else {}
         staff_total: StaffOut | None = None
         if staff_shown:
@@ -335,6 +416,8 @@ def portfolio(
             for p in hotels
         ],
         totals=totals,
+        trend=trend,
+        findings=findings,
     )
 
 

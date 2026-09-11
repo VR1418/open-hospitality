@@ -30,9 +30,18 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI
 
-from usali.desktop import accounts_api, modules_api, portfolio_api, session_api, welcome_api
+from usali.desktop import (
+    accounts_api,
+    backup_api,
+    modules_api,
+    portfolio_api,
+    session_api,
+    update_api,
+    welcome_api,
+)
+from usali.desktop import backup
 from usali.desktop.accounts import LocalAccountAdmin, SessionFactory
-from usali.desktop.keystore import KeychainUnavailable, OsKeyStore, open_keys
+from usali.desktop.keystore import KeychainUnavailable, KeyStore, MemoryKeyStore, OsKeyStore, open_keys
 from usali.desktop.bootstrap import (
     DesktopKeys,
     KeysMissing,
@@ -130,6 +139,9 @@ def build_app(
     reload: Callable[[], None],
     sessions: SessionFactory,
     checker: accounts_api.SessionChecker,
+    # The keychain the accounts API arms backups through (ADR-D4). Tests that
+    # are not about backups leave it out and get one that forgets.
+    store: KeyStore | None = None,
 ) -> FastAPI:
     # Upstream's own SPA static handler, reused rather than copied.
     from usali.server import _SpaStaticFiles, create_app
@@ -153,10 +165,13 @@ def build_app(
     accounts_api.install(
         app, issuer=issuer, codes=codes, sessions=sessions,
         org_alias=OWNER.org_alias, checker=checker,
+        paths=paths, store=store or MemoryKeyStore(),
     )
     modules_api.install(app, enabled=enabled, reload=reload)
     welcome_api.install(app)
     portfolio_api.install(app)
+    update_api.install(app)
+    backup_api.install(app, paths=paths, store=store or MemoryKeyStore(), sessions=sessions)
     if dist.is_dir():
         app.mount("/", _SpaStaticFiles(directory=dist, html=True), name="spa")
     else:
@@ -284,10 +299,29 @@ def _run_console(base_url: str) -> None:
         pass
 
 
+def _restore(paths: DesktopPaths, archive: Path, recovery_code: str | None,
+             store: KeyStore) -> int:
+    """`--restore`: the books from a backup file, on a computer that has none.
+    The recovery code is the key (ADR-D4); it is asked for rather than passed
+    on a command line unless the caller chose to."""
+    code = recovery_code or input("Your recovery code: ").strip()
+    manifest = backup.restore(paths, archive, recovery_code=code, store=store)
+    print(
+        f"\nRestored your books from {archive.name} "
+        f"(backed up {manifest.get('created_at', 'at an unknown time')}).\n"
+        "Start Open Hospitality again to open them.\n",
+        flush=True,
+    )
+    return 0
+
+
 def run(args: argparse.Namespace) -> int:
     paths = DesktopPaths.default()
     paths.ensure()
     _configure_logging(paths.logs)
+    store = OsKeyStore()
+    if args.restore is not None:
+        return _restore(paths, Path(args.restore), args.recovery_code, store)
     resources = resource_root()
     # Upstream resolves some mapping paths against the working directory
     # (scripts/e2e_backend.py does the same chdir, for the same reason).
@@ -299,12 +333,14 @@ def run(args: argparse.Namespace) -> int:
         log_file=paths.logs / "database.log",
     )
     keys = open_keys(
-        sealed=paths.sealed_keys_file, legacy=paths.keys_file, store=OsKeyStore(),
+        sealed=paths.sealed_keys_file, legacy=paths.keys_file, store=store,
         database_exists=cluster.exists(),
     )
     if not cluster.exists():
         _LOG.info("first run: creating the database in %s", paths.database)
         cluster.init(keys.db_owner_password)
+    # The one moment the cluster is quiescent by construction (ADR-D4).
+    backup.maybe_backup(paths, store=store, force=args.backup_now)
     pg_port = free_port(PG_PREFERRED_PORT)
     cluster.start(pg_port)
     try:
@@ -338,7 +374,7 @@ def run(args: argparse.Namespace) -> int:
             _LOG.info("modules on: %s", ", ".join(sorted(enabled)))
             return build_app(
                 paths, issuer, codes, dist, enabled=enabled, reload=portal.reload,
-                sessions=serving_sessions, checker=checker,
+                sessions=serving_sessions, checker=checker, store=store,
             )
 
         portal = _Portal(build, api_port)
@@ -393,11 +429,24 @@ def main(argv: list[str] | None = None) -> int:
         "--upgrade-database", action="store_true",
         help="allow this version to update an existing database (make a copy first)",
     )
+    parser.add_argument(
+        "--backup-now", action="store_true",
+        help="back up before opening, whenever the last backup was taken",
+    )
+    parser.add_argument(
+        "--restore", metavar="FILE",
+        help="restore your books from a backup file (this computer must have none)",
+    )
+    parser.add_argument(
+        "--recovery-code", metavar="CODE",
+        help="the recovery code that opens the backup, if you'd rather not be asked",
+    )
     args = parser.parse_args(argv)
     try:
         return run(args)
     except (
         PostgresNotFound, PostgresFailed, KeysMissing, KeychainUnavailable, NeedsUpgradeConsent,
+        backup.BackupError,
     ) as exc:
         # Expected refusals: the message already names the next step.
         _LOG.error("%s", exc)

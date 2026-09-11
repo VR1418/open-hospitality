@@ -24,6 +24,7 @@ Every refusal says what to do next (principle 5). Sign-in refusals never say
 which half was wrong, so the screen can't be used to find real usernames.
 """
 
+import logging
 import threading
 import time
 from collections.abc import Callable
@@ -44,7 +45,10 @@ from usali.auth import (
     require_operator,
 )
 from usali.desktop import accounts as acct
+from usali.desktop import backup
 from usali.desktop.identity import DesktopUser, LocalIssuer
+from usali.desktop.keystore import KeyStore
+from usali.desktop.paths import DesktopPaths
 from usali.desktop.passwords import (
     PasswordRejected,
     check_new_password,
@@ -122,6 +126,9 @@ class SessionChecker:
                               if not k.endswith(f"|{subject}")}
 
 
+_LOG = logging.getLogger(__name__)
+
+
 @dataclass(frozen=True)
 class _Context:
     issuer: LocalIssuer
@@ -130,6 +137,19 @@ class _Context:
     org_alias: str
     checker: SessionChecker
     limiter: RateLimiter
+    paths: DesktopPaths
+    store: KeyStore
+
+
+def _arm_backups(ctx: _Context, recovery_code: str) -> None:
+    """Wrap the backup key under this recovery code (ADR-D4), so a backup can
+    be opened on another computer. Called at the two moments the code exists
+    in the clear. Best effort, always: a keychain hiccup must never cost the
+    owner the account they were creating."""
+    try:
+        backup.write_wrap(ctx.paths, recovery_code=recovery_code, store=ctx.store)
+    except Exception as exc:  # never fail sign-in over a backup
+        _LOG.warning("backups are not armed yet: %s", exc)
 
 
 def _ctx(request: Request) -> _Context:
@@ -217,6 +237,7 @@ def setup_owner(body: OwnerSetupIn, request: Request, response: Response) -> Tok
         assert account is not None
         out = _token(ctx, s, account, body.device_label)
         s.commit()
+    _arm_backups(ctx, recovery)
     _no_store(response)
     return out.model_copy(update={"recovery_code": recovery})
 
@@ -318,6 +339,9 @@ def recover(body: RecoverIn, request: Request, response: Response) -> TokenOut:
         out = _token(ctx, s, fresh, body.device_label)
         s.commit()
     ctx.checker.forget(account.subject)
+    # The old code no longer opens future backups; this one does. Files
+    # already written keep the wrap they were taken with.
+    _arm_backups(ctx, recovery)
     _no_store(response)
     return out.model_copy(update={"recovery_code": recovery})
 
@@ -467,9 +491,12 @@ def install(
     sessions: acct.SessionFactory,
     org_alias: str,
     checker: SessionChecker,
+    paths: DesktopPaths,
+    store: KeyStore,
 ) -> None:
     app.state.desktop_accounts = _Context(
         issuer=issuer, codes=codes, sessions=sessions, org_alias=org_alias, checker=checker,
+        paths=paths, store=store,
         # Across every login on this computer: 30 password tries a minute is
         # plenty for a human and nothing for a guesser.
         limiter=RateLimiter(max_events=30, window_seconds=60.0),

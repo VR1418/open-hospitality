@@ -151,6 +151,8 @@ const TABS: NavTab[] = [
 const SETTINGS: NavItem[] = [
   { to: SETUP_PATH, label: 'Setup checklist', icon: ChecklistIcon },
   { to: '/property-config', label: 'Your hotels', icon: FileIcon, show: isScheduler },
+  { to: '/backups', label: 'Backups', icon: FileIcon, desktopOnly: true },
+  { to: '/updates', label: 'Updates', icon: SyncIcon, desktopOnly: true },
   { to: '/modules', label: 'Modules', icon: GridIcon, desktopOnly: true },
   { to: '/integrations', label: 'Connections', icon: SyncIcon, show: isOrgAdmin },
   { to: '/coverage', label: 'Report codes', icon: CoverageIcon },

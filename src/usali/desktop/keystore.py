@@ -195,6 +195,19 @@ def _retire_plain_copy(legacy: Path, keys: DesktopKeys) -> None:
     _LOG.info("keys are sealed; removed the plain-text copy %s", legacy)
 
 
+def read_master(sealed: Path, store: KeyStore) -> bytes:
+    """The master key that unseals this install's keys — for the backup, which
+    carries it wrapped so the books can be opened on another computer
+    (ADR-D4). Nothing else should need it."""
+    install_id = str(json.loads(sealed.read_text(encoding="utf-8")).get("install_id", ""))
+    kept = store.get(entry_name(install_id))
+    if kept is None:
+        raise KeysMissing(
+            "This computer's password store no longer holds the key that unlocks your books."
+        )
+    return base64.b64decode(kept)
+
+
 def open_keys(
     *, sealed: Path, legacy: Path, store: KeyStore, database_exists: bool,
 ) -> DesktopKeys:

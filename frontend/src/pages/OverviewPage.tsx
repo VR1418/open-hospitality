@@ -9,7 +9,8 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { useState, type ReactNode } from 'react'
 
 import { getMe } from '../api/client'
-import { getPortfolio, type PortfolioHotel } from '../api/desktop'
+import { getPortfolio, type Finding, type PortfolioHotel, type TrendPoint } from '../api/desktop'
+import { barRampCss } from '../lib/chartBars'
 import {
   Badge,
   Card,
@@ -55,6 +56,67 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
       <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">{value}</p>
       {detail !== undefined && <p className="mt-0.5 text-xs text-ink-muted">{detail}</p>}
     </div>
+  )
+}
+
+function shortDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`)
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+}
+
+/** Revenue per day across the hotels. Bars, not a line: each day is a
+ * separate night's takings, and a missing day is a gap, never a slope. */
+function TrendBars({ points }: { points: TrendPoint[] }) {
+  const values = points.map((p) => (p.revenue === null ? null : Number(p.revenue)))
+  const max = Math.max(1, ...values.map((v) => v ?? 0))
+  const best = values.reduce<number>((a, v) => (v !== null && v > a ? v : a), 0)
+  return (
+    <div>
+      <div className="flex h-32 items-end gap-1.5" role="img"
+           aria-label={`Revenue per day, ${points.length} days to ${points.at(-1)?.business_date ?? ''}`}>
+        {points.map((p, i) => {
+          const value = values[i] ?? null
+          return (
+            <div key={p.business_date} className="flex min-w-0 flex-1 flex-col justify-end">
+              <div
+                className="rounded-t"
+                style={{
+                  height: value === null ? 2 : `${Math.max(2, (value / max) * 100)}%`,
+                  background: value === null ? 'var(--color-line)' : barRampCss('var(--color-chart-1)'),
+                }}
+                title={value === null ? `${p.business_date}: no reports` : `${p.business_date}: ${dollars(String(value))}`}
+              />
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-1 flex justify-between text-[11px] text-ink-faint">
+        <span>{points[0] !== undefined ? shortDate(points[0].business_date) : ''}</span>
+        <span>Best day {dollars(String(best))}</span>
+        <span>{points.at(-1) !== undefined ? shortDate(points.at(-1)!.business_date) : ''}</span>
+      </div>
+    </div>
+  )
+}
+
+function FindingRow({ finding }: { finding: Finding }) {
+  const tone: Record<Finding['kind'], 'warn' | 'danger' | 'neutral'> = {
+    no_reports: 'warn',
+    missing_report: 'warn',
+    check_failed: 'danger',
+    not_in_books: 'danger',
+  }
+  return (
+    <li className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-line py-2 text-sm">
+      <Badge tone={tone[finding.kind]}>{finding.label}</Badge>
+      <span className="font-medium text-ink">{finding.hotel}</span>
+      <span className="text-ink-muted">{finding.detail}</span>
+      {finding.delta !== null && (
+        <span className="tabular-nums text-danger-red">Out by {dollars(finding.delta, 2)}</span>
+      )}
+    </li>
   )
 }
 
@@ -166,6 +228,43 @@ export default function OverviewPage() {
         />
         <Metric label="Month so far" value={dollars(totals.month_revenue)} detail="Total revenue" />
       </section>
+
+      <div className="grid gap-5 lg:grid-cols-[3fr_2fr]">
+        <Card role="region" aria-label="Revenue trend">
+          <h2 className={sectionHeadClass}>Revenue, last 14 days</h2>
+          <p className="mb-3 mt-0.5 text-xs text-ink-muted">
+            All hotels together, from the reports read.
+          </p>
+          {data.trend.length === 0 ? (
+            <p className="text-sm text-ink-muted">No reports read yet.</p>
+          ) : (
+            <TrendBars points={data.trend} />
+          )}
+        </Card>
+
+        <Card role="region" aria-label="Last night’s audit">
+          <h2 className={sectionHeadClass}>Last night’s audit</h2>
+          {data.findings.length === 0 ? (
+            <p className="mt-2 text-sm text-ink">
+              Nothing to look at — every hotel’s reports are in and their balances tie.
+            </p>
+          ) : (
+            <>
+              <p className="mb-1 mt-0.5 text-xs text-ink-muted">
+                {data.findings.length} to look at
+              </p>
+              <ul className="flex flex-col">
+                {data.findings.map((f) => (
+                  <FindingRow key={`${f.property_id}-${f.kind}-${f.label}`} finding={f} />
+                ))}
+              </ul>
+              <Link to="/night-audit" className="mt-3 inline-block text-sm text-accent underline">
+                Open Close the day
+              </Link>
+            </>
+          )}
+        </Card>
+      </div>
 
       <Card role="region" aria-label="Hotels">
         <h2 className={sectionHeadClass}>Hotels</h2>

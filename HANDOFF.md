@@ -84,6 +84,15 @@ uv run oh-desktop --sample-data --no-tray --no-browser   # prints a sign-in link
 | "Add a hotel" after setup: `/welcome?add=hotel` reopens the wizard's hotel steps | Done |
 | **Known, not fixed here:** upstream's `gl_api.py` read routes don't check per-hotel access (any operator in the group can read any hotel's ledger). Offered as its own task, intended as an upstream PR | Open |
 
+**M3: it's trustworthy.** In progress.
+
+| Slice | State |
+|---|---|
+| **Backup and restore** ([ADR-D4](docs/desktop/adr/adr-d4-backup-and-restore.md)). `src/usali/desktop/backup.py`: the cluster files copied while it is STOPPED (the launcher's one quiescent moment — the bundle ships no `pg_dump`), sealed with AES-256-GCM in a folder the owner's cloud drive syncs. Each file carries the master key wrapped under the backup key, and the backup key wrapped under the owner's RECOVERY CODE — so backup file + recovery code reopens the books on a new computer, which is the hole ADR-D5 left. `--restore` refuses to overwrite existing books. `/backups` page, `backup_api.py`, and the wrap is armed at owner setup and re-armed on recovery | Done. 21 backend tests (13 + 8 API), including a real cluster backed up, restored elsewhere and started |
+| Code signing and notarisation | **Blocked on certificates** — they must be bought in the owner's name. [SIGNING.md](docs/desktop/SIGNING.md) has the routes, rough costs and the exact build steps. PRD open decision 3 (whose accounts) is the real blocker |
+| Update check. `updates.py` + `update_api.py` + `/updates`: the app asks a published file what the latest version is, compares it with its own and SAYS SO, with a link — it never installs anything, and sends nothing about the install (PRD's no-telemetry line). Where to look is `OH_UPDATE_URL`; unset means the page says checks aren't set up rather than inventing an address | Done (19 tests). **A deviation from PRD I-5's "install on quit"**: an installer that replaces itself needs signed builds, and the one-folder build is ~250 MB either way |
+| First outside testers | After signing: an unsigned build shows an OS warning on first open, which is where a hotel owner stops |
+
 ## Decisions already made (don't re-open without reason)
 
 - **The engine is never forked.** New code lives in `src/usali/desktop/`, and
