@@ -25,6 +25,7 @@ dependencies = [
     "pyhpke>=0.6.5",
     "google-cloud-storage>=3.13.1",
     "defusedxml>=0.7.1",
+    "argon2-cffi>=25.1.0",
 ]
 
 [project.optional-dependencies]

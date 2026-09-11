@@ -15,13 +15,14 @@ operator door, `organization` as a JSON array of org ALIASES (never ids),
 
 import hashlib
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import jwt
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from usali.auth import TokenVerifier
+from usali.auth import AuthError, Principal, TokenVerifier
 
 ISSUER = "urn:open-hospitality:desktop"
 # Must equal Settings.oidc_audience's default: the claim the resource server
@@ -82,8 +83,12 @@ class LocalIssuer:
     def ttl_seconds(self) -> int:
         return self._ttl
 
-    def mint(self, user: DesktopUser, *, now: int | None = None) -> str:
+    def mint(
+        self, user: DesktopUser, *, now: int | None = None, session_id: str | None = None,
+        ttl_seconds: int | None = None,
+    ) -> str:
         issued = int(time.time()) if now is None else now
+        ttl = self._ttl if ttl_seconds is None else ttl_seconds
         claims: dict[str, object] = {
             "iss": self._issuer,
             "aud": self._audience,
@@ -91,13 +96,15 @@ class LocalIssuer:
             "preferred_username": user.username,
             "iat": issued,
             "nbf": issued,
-            "exp": issued + self._ttl,
+            "exp": issued + ttl,
             "realm_access": {"roles": list(user.roles)},
             "organization": [user.org_alias],
         }
+        if session_id is not None:
+            claims["sid"] = session_id
         return jwt.encode(claims, self._key, algorithm="RS256", headers={"kid": self.kid})
 
-    def verifier(self) -> TokenVerifier:
+    def _resolver(self) -> Callable[[str], object]:
         public = self._public
         kid = self.kid
 
@@ -106,6 +113,47 @@ class LocalIssuer:
                 raise KeyError(requested)  # the verifier's injected-resolver contract
             return public
 
-        return TokenVerifier(
-            issuer=self._issuer, audience=self._audience, signing_key_resolver=resolve
+        return resolve
+
+    def verifier(
+        self, *, session_is_live: Callable[[str, str], bool] | None = None
+    ) -> TokenVerifier:
+        """Upstream's verifier over the local key. With `session_is_live`,
+        also refuse a token whose sign-in session has ended (A-7)."""
+        if session_is_live is None:
+            return TokenVerifier(
+                issuer=self._issuer, audience=self._audience,
+                signing_key_resolver=self._resolver(),
+            )
+        return SessionCheckedVerifier(
+            issuer=self._issuer, audience=self._audience,
+            signing_key_resolver=self._resolver(), session_is_live=session_is_live,
         )
+
+
+class SessionCheckedVerifier(TokenVerifier):
+    """Upstream's `TokenVerifier`, unchanged, plus ONE desktop rule: the
+    token's `sid` must name a sign-in session that is still live. That is
+    what makes "sign out that device" (PRD A-7) and disabling a person take
+    effect at once, rather than when their token happens to expire."""
+
+    def __init__(
+        self,
+        *,
+        issuer: str,
+        audience: str,
+        signing_key_resolver: Callable[[str], object],
+        session_is_live: Callable[[str, str], bool],
+    ) -> None:
+        super().__init__(
+            issuer=issuer, audience=audience, signing_key_resolver=signing_key_resolver
+        )
+        self._session_is_live = session_is_live
+
+    def verify(self, token: str) -> Principal:
+        principal = super().verify(token)  # signature, issuer, audience, expiry
+        # Already verified above; this second read only fetches the sid.
+        sid = jwt.decode(token, options={"verify_signature": False}).get("sid")
+        if not isinstance(sid, str) or not self._session_is_live(sid, principal.subject):
+            raise AuthError("sign-in session has ended")
+        return principal

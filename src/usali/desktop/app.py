@@ -30,7 +30,8 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI
 
-from usali.desktop import modules_api, session_api
+from usali.desktop import accounts_api, modules_api, session_api
+from usali.desktop.accounts import LocalAccountAdmin, SessionFactory
 from usali.desktop.bootstrap import (
     DesktopKeys,
     KeysMissing,
@@ -126,6 +127,8 @@ def build_app(
     *,
     enabled: frozenset[str],
     reload: Callable[[], None],
+    sessions: SessionFactory,
+    checker: accounts_api.SessionChecker,
 ) -> FastAPI:
     # Upstream's own SPA static handler, reused rather than copied.
     from usali.server import _SpaStaticFiles, create_app
@@ -134,14 +137,22 @@ def build_app(
         inbox_dir=paths.uploads,
         processed_dir=paths.read_folder,
         failed_dir=paths.unreadable_folder,
-        token_verifier=issuer.verifier(),
+        # Upstream's verifier over the local key, plus "is this sign-in still live?"
+        token_verifier=issuer.verifier(session_is_live=checker),
+        # Upstream's onboarding creates and disables LOCAL logins through its
+        # own Keycloak seam (ADR-D1).
+        keycloak_admin=LocalAccountAdmin(sessions, org_alias=OWNER.org_alias),
         # A directory that never exists, so create_app mounts no SPA: its
         # catch-all mount must come AFTER desktop sign-in is routed, below.
         dist_dir=paths.system_root / "no-portal-here",
         # ADR-D3: a module that is off is not mounted at all.
         mount=mount_predicate(enabled),
     )
-    session_api.install(app, issuer=issuer, user=OWNER, codes=codes)
+    session_api.install(app, codes=codes)
+    accounts_api.install(
+        app, issuer=issuer, codes=codes, sessions=sessions,
+        org_alias=OWNER.org_alias, checker=checker,
+    )
     modules_api.install(app, enabled=enabled, reload=reload)
     if dist.is_dir():
         app.mount("/", _SpaStaticFiles(directory=dist, html=True), name="spa")
@@ -311,6 +322,7 @@ def run(args: argparse.Namespace) -> int:
         serving_sessions = make_session_factory(serving_engine)
         issuer = LocalIssuer.from_pem(keys.issuer_private_key_pem)
         codes = session_api.LaunchCodes()
+        checker = accounts_api.SessionChecker(serving_sessions)
         dist = resources / "frontend" / "dist-desktop"
 
         def build() -> FastAPI:
@@ -318,7 +330,10 @@ def run(args: argparse.Namespace) -> int:
             with serving_sessions() as session:
                 enabled = resolve(read_modules(session))
             _LOG.info("modules on: %s", ", ".join(sorted(enabled)))
-            return build_app(paths, issuer, codes, dist, enabled=enabled, reload=portal.reload)
+            return build_app(
+                paths, issuer, codes, dist, enabled=enabled, reload=portal.reload,
+                sessions=serving_sessions, checker=checker,
+            )
 
         portal = _Portal(build, api_port)
         portal.start()

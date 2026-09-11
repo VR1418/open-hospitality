@@ -50,6 +50,14 @@ zonky embedded-postgres project. PostgreSQL License. Copyright (c) 1996-2026,
 The PostgreSQL Global Development Group; portions Copyright (c) 1994, The
 Regents of the University of California.
 
+Common-password list (src/usali/desktop/data/common-passwords.txt): the
+UK NCSC's 100,000 most-used passwords, as published in SecLists
+(https://github.com/danielmiessler/SecLists). MIT License, Copyright (c) 2018
+Daniel Miessler.
+
+argon2-cffi (https://github.com/hynek/argon2-cffi), password hashing.
+MIT License.
+
 pystray (https://github.com/moses-palmer/pystray), used for the tray icon.
 GNU Lesser General Public License v3.0. It is shipped as a separate,
 replaceable Python module inside the application folder; the desktop build
