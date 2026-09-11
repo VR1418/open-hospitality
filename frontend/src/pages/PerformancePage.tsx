@@ -104,7 +104,7 @@ export default function PerformancePage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Performance"
+        title="Occupancy and rates"
         subtitle="Occupancy, ADR, RevPAR, and TRevPAR for the window — each against its prior period and prior year, with the PMS reconciliation."
       />
 

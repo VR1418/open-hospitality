@@ -55,7 +55,7 @@ export default function ReportsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="CPA Monthly Pack"
+        title="For your accountant"
         actions={packQuery.data !== undefined ? <DownloadJsonButton pack={packQuery.data} /> : undefined}
       />
 

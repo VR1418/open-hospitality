@@ -173,7 +173,7 @@ export default function QboPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="QBO Push" />
+      <PageHeader title="Send to QuickBooks" />
 
       <Card>
         <MonthPickerBar

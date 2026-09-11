@@ -1,19 +1,23 @@
-// App shell: collapsible left sidebar (brand, sectioned nav, user card) plus a
-// top bar holding the mobile menu button and a search stub. Everything is
-// token-based (surface/ink/accent/nav-active) so dark mode needs no variants,
-// and the whole chrome is print:hidden — the wall-grid print view
-// (SchedulePage) shows ONLY the week grid.
+// App shell: collapsible left sidebar (brand, tabbed nav, settings, user
+// card) plus a top bar holding the mobile menu button and a search stub.
+// Everything is token-based (surface/ink/accent/nav-active) so dark mode
+// needs no variants, and the whole chrome is print:hidden — the wall-grid
+// print view (SchedulePage) shows ONLY the week grid.
 //
-// Nav is grouped: Dashboard on top, then Setup, then Employee Management,
-// then Accounting.
-// `soon: true` items are visible-but-inert placeholders for pages that land
-// later. Collapsed mode keeps every control's accessible name: labels go
-// sr-only (never unmounted), so tests and screen readers see the same nav.
-// The Setup link is the one nav entry whose accessible name carries data —
-// match it with { name: /^Setup/ } unless you are pinning the count.
+// Desktop edition (docs/desktop/): the nav is three tabs — Accounting, the
+// main part and first; People (the Payroll & People module); and Ops (the
+// modules still to come) — each listing its pages in an owner's words, not
+// an accountant's: "Profit and loss", not "SOS"; "Send to QuickBooks", not
+// "QBO". Settings sit at the bottom of every tab and never hide, because the
+// Setup checklist's badge lives there.
+//
+// Collapsed mode keeps every control's accessible name: labels go sr-only
+// (never unmounted), so tests and screen readers see the same nav. The Setup
+// link is the one nav entry whose accessible name carries data — match it
+// with { name: /^Setup checklist/ } unless you are pinning the count.
 
 import { useEffect, useState, type ComponentType, type SVGProps } from 'react'
-import { Link, Outlet, useNavigate } from '@tanstack/react-router'
+import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 
 import { currentTheme, toggleTheme, type Theme } from './lib/theme'
@@ -50,9 +54,9 @@ import {
   SearchIcon,
   StatementIcon,
   SyncIcon,
+  TrendUpIcon,
   UploadIcon,
   UserIcon,
-  WalletIcon,
 } from './components/icons'
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>
@@ -60,14 +64,12 @@ type IconComponent = ComponentType<SVGProps<SVGSVGElement>>
 const COLLAPSED_KEY = 'usali.sidebar-collapsed'
 
 // The one nav entry that carries a badge, so the route is named once rather
-// than spelled twice — the `SECTIONS` item and the render-time match.
+// than spelled twice — the settings item and the render-time match.
 const SETUP_PATH = '/setup'
 
 // `show` gates by role exactly as the old top bar did — the link is a
 // convenience; enforcement stays server-side. `soon` renders a muted,
-// non-interactive placeholder, and does NOT exempt an item from `show`:
-// showing someone a coming-soon entry for work their role will never do is a
-// promise the product cannot keep.
+// non-interactive placeholder, and does NOT exempt an item from `show`.
 type NavItem = {
   label: string
   icon: IconComponent
@@ -79,8 +81,12 @@ type NavItem = {
   desktopOnly?: boolean
 }
 
-type NavSection = {
-  label: string | null
+type TabId = 'accounting' | 'people' | 'ops'
+
+type NavTab = {
+  id: TabId
+  label: string
+  icon: IconComponent
   items: NavItem[]
 }
 
@@ -90,66 +96,78 @@ const isPayroll = (me: Me | undefined) => hasRole(me, 'payroll_admin')
 // isScheduler, and a nav entry is a promise about what this account can do.
 const isOrgAdmin = (me: Me | undefined) => hasRole(me, 'org_admin')
 
-const SECTIONS: NavSection[] = [
+// The main part, first, and the tab anything outside the tabs falls back to.
+const ACCOUNTING_TAB: NavTab = {
+  id: 'accounting',
+  label: 'Accounting',
+  icon: StatementIcon,
+  items: [
+    { to: '/overview', label: 'Overview', icon: GaugeIcon, desktopOnly: true },
+    { to: '/dashboard', label: 'Hotel dashboard', icon: GaugeIcon },
+    { to: '/sos', label: 'Profit and loss', icon: StatementIcon, exact: true },
+    { to: '/performance', label: 'Occupancy and rates', icon: TrendUpIcon },
+    { to: '/night-audit', label: 'Close the day', icon: MoonIcon, show: isScheduler },
+    { to: '/upload', label: 'Add reports', icon: UploadIcon },
+    { to: '/gl', label: 'Books', icon: BankIcon },
+    { to: '/reports', label: 'For your accountant', icon: ReportsIcon },
+    { to: '/qbo', label: 'Send to QuickBooks', icon: SyncIcon },
+  ],
+}
+
+const TABS: NavTab[] = [
+  ACCOUNTING_TAB,
   {
-    label: null,
-    items: [{ to: '/dashboard', label: 'Dashboard', icon: GaugeIcon }],
-  },
-  // Ungrouped and second, above both sections: setup belongs to neither
-  // Accounting nor Employee Management, and it never hides — the badge
-  // retires at all_clear but the page stays the home for reconnecting an
-  // integration later. No `show`: reading the checklist needs only the
-  // router's operator gate; the dismiss controls inside are gated separately.
-  {
-    label: null,
+    id: 'people',
+    label: 'People',
+    icon: PeopleIcon,
     items: [
-      { to: SETUP_PATH, label: 'Setup', icon: ChecklistIcon },
-      { to: '/modules', label: 'Modules', icon: GridIcon, desktopOnly: true },
-      { to: '/account', label: 'Sign-in & security', icon: UserIcon, desktopOnly: true },
-    ],
-  },
-  {
-    label: 'Employee Management',
-    items: [
-      { to: '/payroll-dashboard', label: 'Payroll Dashboard', icon: GridIcon },
-      { to: '/employees', label: 'Employees', icon: PeopleIcon, show: isScheduler },
-      // The schedule page IS the weekly schedule — one entry, not a live route
-      // beside a placeholder promising the same thing.
-      { to: '/schedule', label: 'Weekly Schedule', icon: CalendarIcon, show: isScheduler },
-      { to: '/payroll', label: 'Pay runs', icon: BanknoteIcon, show: isPayroll },
-      // Payroll-gated even though it is only a placeholder: a nav entry is a
-      // promise about what this account can do, and a GM will never be the one
-      // setting compensation.
-      { label: 'Payroll & Compensation', icon: WalletIcon, soon: true, show: isPayroll },
+      { to: '/payroll-dashboard', label: 'Staff and labour', icon: GridIcon },
+      { to: '/employees', label: 'Staff', icon: PeopleIcon, show: isScheduler },
+      { to: '/schedule', label: 'Schedule', icon: CalendarIcon, show: isScheduler },
       { to: '/timecards', label: 'Timecards', icon: ClockIcon, show: isScheduler },
-      { to: '/kiosk', label: 'Kiosk', icon: KioskIcon },
-      { to: '/kiosk-devices', label: 'Kiosks', icon: KioskIcon, show: isScheduler },
-      { to: '/property-config', label: 'Property config', icon: FileIcon, show: isScheduler },
+      { to: '/payroll', label: 'Pay runs', icon: BanknoteIcon, show: isPayroll },
+      { to: '/kiosk-devices', label: 'Time clock tablets', icon: KioskIcon, show: isScheduler },
+      { to: '/kiosk', label: 'Time clock screen', icon: KioskIcon },
     ],
   },
   {
-    label: 'Accounting',
+    id: 'ops',
+    label: 'Ops',
+    icon: ChecklistIcon,
+    // The Hotel Management Utilities module (usali.desktop.modules): shown so
+    // an owner can see where it's going, never selectable.
     items: [
-      { to: '/sos', label: 'SOS', icon: StatementIcon, exact: true },
-      { to: '/upload', label: 'Upload', icon: UploadIcon },
-      { to: '/reports', label: 'Reports', icon: ReportsIcon },
-      { to: '/performance', label: 'Performance', icon: GaugeIcon },
-      { to: '/qbo', label: 'QBO', icon: SyncIcon },
-      { to: '/integrations', label: 'Integrations', icon: SyncIcon, show: isOrgAdmin },
-      { to: '/coverage', label: 'Coverage', icon: CoverageIcon },
-      { label: 'Daily Reports', icon: FileIcon, soon: true },
-      { to: '/night-audit', label: 'Night Audit', icon: MoonIcon, show: isScheduler },
-      { to: '/gl', label: 'General Ledger', icon: BankIcon },
+      { label: 'Housekeeping board', icon: ChecklistIcon, soon: true },
+      { label: 'Maintenance tickets', icon: FileIcon, soon: true },
+      { label: 'Documents', icon: FileIcon, soon: true },
+      { label: 'Vendors', icon: PeopleIcon, soon: true },
+      { label: 'Guest demand', icon: TrendUpIcon, soon: true },
     ],
   },
 ]
 
+// No `show` on Setup: reading the checklist needs only the router's
+// operator gate; the dismiss controls inside are gated separately.
+const SETTINGS: NavItem[] = [
+  { to: SETUP_PATH, label: 'Setup checklist', icon: ChecklistIcon },
+  { to: '/property-config', label: 'Your hotels', icon: FileIcon, show: isScheduler },
+  { to: '/modules', label: 'Modules', icon: GridIcon, desktopOnly: true },
+  { to: '/integrations', label: 'Connections', icon: SyncIcon, show: isOrgAdmin },
+  { to: '/coverage', label: 'Report codes', icon: CoverageIcon },
+  { to: '/account', label: 'Sign-in and security', icon: UserIcon, desktopOnly: true },
+]
+
+/** The tab a page belongs to, or null for pages outside the tabs (settings). */
+function tabForPath(pathname: string): TabId | null {
+  return TABS.find((t) => t.items.some((i) => i.to === pathname))?.id ?? null
+}
+
 const ROLE_LABELS: [string, string][] = [
-  ['org_admin', 'Org Admin'],
-  ['property_gm', 'Property GM'],
-  ['payroll_admin', 'Payroll Admin'],
-  ['accountant', 'Accountant'],
-  ['department_manager', 'Dept Manager'],
+  ['org_admin', 'Owner'],
+  ['property_gm', 'Hotel manager'],
+  ['payroll_admin', 'Payroll manager'],
+  ['accountant', 'Bookkeeper'],
+  ['department_manager', 'Department head'],
 ]
 
 function primaryRoleLabel(me: Me | undefined): string | null {
@@ -159,12 +177,9 @@ function primaryRoleLabel(me: Me | undefined): string | null {
 }
 
 // The pill is a glyph: '!' is punctuation and most screen readers announce
-// nothing for it at default verbosity, so on its own the one state
-// `badgeLabel` exists to signal would reach a screen-reader user as a bare
-// "Setup". `title` cannot stand in — on a span that already has text it is not
-// the accessible name, is not reliably announced, and is unreachable on touch.
-// So the sentence goes into the link's `aria-label` (see `setupLinkName`) and the
-// pill is hidden from the tree as the duplicate it is.
+// nothing for it at default verbosity, so the sentence goes into the link's
+// `aria-label` (see `setupLinkName`) and the pill is hidden from the tree as
+// the duplicate it is.
 function SetupBadge({ badge, collapsed }: { badge: ChecklistBadge; collapsed: boolean }) {
   return (
     <span
@@ -172,9 +187,8 @@ function SetupBadge({ badge, collapsed }: { badge: ChecklistBadge; collapsed: bo
       aria-hidden="true"
       title={badge.title}
       // Collapsed, the rail centres a single chip per row; an `ml-auto` pill
-      // would eat the free space and drag the Setup icon off that centreline,
-      // so it leaves the flow and sits over the chip's corner instead
-      // (`itemBase` is already `relative`).
+      // would drag the icon off that centreline, so it sits over the chip's
+      // corner instead (`itemBase` is already `relative`).
       className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${badgeToneClasses[badge.tone]} ${
         collapsed ? 'absolute right-1 top-0.5' : 'ml-auto'
       }`}
@@ -186,27 +200,11 @@ function SetupBadge({ badge, collapsed }: { badge: ChecklistBadge; collapsed: bo
 
 /**
  * The Setup link's accessible name: the visible label first, so Label-in-Name
- * (WCAG 2.5.3) still holds and "click Setup" still works by voice.
- *
- * `aria-label` rather than an sr-only sibling carrying the same sentence, for
- * two reasons.
- *
- * sr-only text is real text: three suites mount this shell, and two of them
- * query the checklist wording with `getByText`, which does not care that a
- * node is visually hidden. Putting the words in the name only — never in the
- * document — keeps the sidebar out of their results.
- *
- * And the two variants do not even agree on the name. In a browser they do:
- * Tailwind's sr-only sets position:absolute, which blockifies computed
- * display, so the accname algorithm inserts a separator. In jsdom no
- * stylesheet loads, the span stays display:inline, and the sr-only variant
- * computes "Setup3 items still to set up". `aria-label` is the only variant
- * whose name is the same in the tests and in the product — which is the
- * promise the header of this file makes.
+ * (WCAG 2.5.3) still holds. `aria-label` rather than sr-only text so the name
+ * is the same in jsdom and in a browser, and the checklist wording never
+ * lands in the document for other suites' `getByText` to trip over.
  */
 function setupLinkName(label: string, badge: ChecklistBadge | null): string | undefined {
-  // Colon, not a space: it gives a screen reader a prosodic break instead of
-  // a run-on, and `label` still prefixes the name, so Label-in-Name holds.
   return badge === null ? undefined : `${label}: ${badge.title}`
 }
 
@@ -221,10 +219,17 @@ function SidebarContent({
   onToggleCollapse,
   hidden,
   desktop,
+  peopleOff,
+  activeTab,
+  onPickTab,
 }: {
   me: Me | undefined
   hidden: Set<string>
   desktop: boolean
+  /** Desktop edition: Payroll & People is turned off. */
+  peopleOff: boolean
+  activeTab: TabId
+  onPickTab: (tab: TabId) => void
   theme: Theme
   onToggleTheme: () => void
   username: string | undefined
@@ -235,14 +240,9 @@ function SidebarContent({
 }) {
   const roleLabel = primaryRoleLabel(me)
   const initials = (username ?? '?').slice(0, 2).toUpperCase()
-  // The mobile drawer mounts a second copy of this component while it is open;
-  // TanStack dedupes on the shared key, so that is still one fetch.
-  //
-  // No badge until the first successful read: it is an ambient pointer and
-  // cannot honestly report a number it does not have. A *later* background
-  // failure keeps the last-known count rather than flickering the pointer off
-  // — TanStack retains `data`, and that is deliberate. Either way the loud
-  // failure belongs on /setup, which is where the operator went to find out.
+  // No badge until the first successful read; a later background failure
+  // keeps the last-known count (TanStack retains `data`). The loud failure
+  // belongs on /setup.
   const checklist = useChecklist()
   const badge = checklist.data === undefined ? null : badgeLabel(checklist.data)
 
@@ -255,6 +255,64 @@ function SidebarContent({
     className: `${itemBase} bg-nav-active font-semibold text-nav-active-ink before:absolute before:-left-2 before:top-1/2 before:h-[18px] before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-accent`,
   }
   const labelClass = collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate text-left'
+
+  const visible = (items: NavItem[]) =>
+    items.filter(
+      (e) =>
+        (e.show === undefined || e.show(me)) &&
+        // Desktop edition: a module that is off takes its pages with it.
+        !(e.to !== undefined && hidden.has(e.to)) &&
+        (e.desktopOnly !== true || desktop),
+    )
+
+  function renderItem(e: NavItem) {
+    const IconGlyph = e.icon
+    if (e.soon === true || e.to === undefined) {
+      return (
+        <span
+          key={e.label}
+          aria-disabled="true"
+          title={collapsed ? `${e.label} (coming soon)` : undefined}
+          className={`${itemBase} cursor-default text-ink-faint`}
+        >
+          <span className={chipBase}>
+            <IconGlyph className="shrink-0" />
+          </span>
+          <span className={labelClass}>{e.label}</span>
+          {!collapsed && (
+            <span className="rounded-full bg-surface-sunken px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide">
+              Soon
+            </span>
+          )}
+        </span>
+      )
+    }
+    const isSetup = e.to === SETUP_PATH
+    return (
+      <Link
+        key={e.to}
+        to={e.to}
+        className={navLink}
+        activeProps={navLinkActive}
+        activeOptions={e.exact === true ? { exact: true } : undefined}
+        onClick={onNavigate}
+        title={collapsed ? e.label : undefined}
+        aria-label={isSetup ? setupLinkName(e.label, badge) : undefined}
+      >
+        <span className={`${chipBase} group-hover:text-accent`}>
+          <IconGlyph className="shrink-0" />
+        </span>
+        <span className={labelClass}>{e.label}</span>
+        {/* Deliberately NOT inside `labelClass`: collapsed, the count is the
+            only thing still pointing at setup. */}
+        {isSetup && badge !== null && <SetupBadge badge={badge} collapsed={collapsed} />}
+      </Link>
+    )
+  }
+
+  const tab = TABS.find((t) => t.id === activeTab) ?? ACCOUNTING_TAB
+  const tabItems = visible(tab.items)
+  const settings = visible(SETTINGS)
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -299,83 +357,88 @@ function SidebarContent({
         )}
       </div>
 
-      <nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
-        {SECTIONS.map((section, si) => {
-          const visible = section.items.filter(
-            (e) =>
-              (e.show === undefined || e.show(me)) &&
-              // Desktop edition: a module that is off takes its pages with it.
-              !(e.to !== undefined && hidden.has(e.to)) &&
-              (e.desktopOnly !== true || desktop),
-          )
-          if (visible.length === 0) return null
+      <div
+        role="tablist"
+        aria-label="Sections"
+        className={
+          collapsed
+            ? 'flex flex-col items-center gap-1 px-2 pb-2'
+            : 'mx-3 mb-2 grid grid-cols-3 gap-1 rounded-lg bg-surface-sunken p-1'
+        }
+      >
+        {TABS.map((t) => {
+          const selected = t.id === activeTab
+          const TabGlyph = t.icon
           return (
-            <div key={section.label ?? `sec-${si}`}>
-              {section.label !== null &&
-                (collapsed ? (
-                  <div aria-hidden="true" className="mx-1 my-3 border-t border-line" />
-                ) : (
-                  <p className="mb-1 mt-5 flex items-center gap-2 px-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-faint">
-                    <span
-                      aria-hidden="true"
-                      className="inline-block size-1.5 rounded-full bg-accent/70"
-                    />
-                    {section.label}
-                    <span aria-hidden="true" className="h-px flex-1 bg-line" />
-                  </p>
-                ))}
-              <div className="flex flex-col gap-0.5">
-                {visible.map((e) => {
-                  const IconGlyph = e.icon
-                  if (e.soon === true || e.to === undefined) {
-                    return (
-                      <span
-                        key={e.label}
-                        aria-disabled="true"
-                        title={collapsed ? `${e.label} (soon)` : undefined}
-                        className={`${itemBase} cursor-default text-ink-faint`}
-                      >
-                        <span className={chipBase}>
-                          <IconGlyph className="shrink-0" />
-                        </span>
-                        <span className={labelClass}>{e.label}</span>
-                        {!collapsed && (
-                          <span className="rounded-full bg-surface-sunken px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide">
-                            Soon
-                          </span>
-                        )}
-                      </span>
-                    )
-                  }
-                  const isSetup = e.to === SETUP_PATH
-                  return (
-                    <Link
-                      key={e.to}
-                      to={e.to}
-                      className={navLink}
-                      activeProps={navLinkActive}
-                      activeOptions={e.exact === true ? { exact: true } : undefined}
-                      onClick={onNavigate}
-                      title={collapsed ? e.label : undefined}
-                      aria-label={isSetup ? setupLinkName(e.label, badge) : undefined}
-                    >
-                      <span className={`${chipBase} group-hover:text-accent`}>
-                        <IconGlyph className="shrink-0" />
-                      </span>
-                      <span className={labelClass}>{e.label}</span>
-                      {/* Deliberately NOT inside `labelClass`: collapsed, the
-                          count is the only thing still pointing at setup. */}
-                      {isSetup && badge !== null && (
-                        <SetupBadge badge={badge} collapsed={collapsed} />
-                      )}
-                    </Link>
-                  )
-                })}
-              </div>
-            </div>
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              id={`nav-tab-${t.id}`}
+              aria-selected={selected}
+              aria-controls="nav-panel"
+              title={collapsed ? t.label : undefined}
+              onClick={() => onPickTab(t.id)}
+              className={
+                collapsed
+                  ? `grid size-9 place-items-center rounded-lg ${
+                      selected ? 'bg-nav-active text-nav-active-ink' : 'text-ink-muted hover:bg-surface-sunken'
+                    }`
+                  : `rounded-md px-1 py-1.5 text-xs font-semibold transition-colors ${
+                      selected
+                        ? 'bg-surface-raised text-ink shadow-card'
+                        : 'text-ink-muted hover:text-ink'
+                    }`
+              }
+            >
+              {collapsed ? (
+                <>
+                  <TabGlyph aria-hidden="true" />
+                  <span className="sr-only">{t.label}</span>
+                </>
+              ) : (
+                t.label
+              )}
+            </button>
           )
         })}
-      </nav>
+      </div>
+
+      <div
+        id="nav-panel"
+        role="tabpanel"
+        aria-labelledby={`nav-tab-${activeTab}`}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
+          {tab.id === 'people' && peopleOff ? (
+            <p className={collapsed ? 'sr-only' : 'px-2 py-2 text-sm text-ink-muted'}>
+              Payroll &amp; People is off.{' '}
+              <Link to="/modules" className="underline" onClick={onNavigate}>
+                Turn it on in Modules
+              </Link>
+              .
+            </p>
+          ) : (
+            <div className="flex flex-col gap-0.5">{tabItems.map(renderItem)}</div>
+          )}
+          {tab.id === 'ops' && !collapsed && (
+            <p className="px-2 pt-2 text-xs text-ink-faint">Coming in a later version.</p>
+          )}
+
+          {settings.length > 0 &&
+            (collapsed ? (
+              <div aria-hidden="true" className="mx-1 my-3 border-t border-line" />
+            ) : (
+              <p className="mb-1 mt-5 flex items-center gap-2 px-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink-faint">
+                <span aria-hidden="true" className="inline-block size-1.5 rounded-full bg-accent/70" />
+                Settings
+                <span aria-hidden="true" className="h-px flex-1 bg-line" />
+              </p>
+            ))}
+          <div className="flex flex-col gap-0.5">{settings.map(renderItem)}</div>
+        </nav>
+      </div>
 
       <div className="border-t border-line p-3">
         <div
@@ -392,7 +455,7 @@ function SidebarContent({
           </span>
           <span className={collapsed ? 'sr-only' : 'min-w-0 flex-1'}>
             <span className="block truncate text-sm font-semibold text-ink">{username ?? '—'}</span>
-            <span className="block truncate text-xs text-ink-muted">{roleLabel ?? 'Operator'}</span>
+            <span className="block truncate text-xs text-ink-muted">{roleLabel ?? 'Staff'}</span>
           </span>
           <button
             type="button"
@@ -427,7 +490,7 @@ function GlobalPropertySelect() {
   return (
     <select
       aria-label="Active property"
-      title="Property (applies across the app)"
+      title="Hotel (applies across the app)"
       className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink"
       value={property ?? ''}
       onChange={(e) => setProperty(e.target.value)}
@@ -466,6 +529,15 @@ export default function Layout() {
   }, [welcome.data, navigate])
   const username = user?.profile.preferred_username
 
+  // The tab follows the page you're on; picking a tab only changes the list
+  // until you move, so settings pages keep whichever tab you were in.
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const [picked, setPicked] = useState<{ tab: TabId; at: string } | null>(null)
+  const activeTab: TabId =
+    picked !== null && picked.at === pathname
+      ? picked.tab
+      : (tabForPath(pathname) ?? picked?.tab ?? 'accounting')
+
   function handleToggleCollapse() {
     setCollapsed((prev) => {
       const next = !prev
@@ -478,6 +550,9 @@ export default function Layout() {
     me: me.data,
     hidden: hiddenPaths(modules.data?.modules),
     desktop: modules.data != null,
+    peopleOff: modules.data?.modules.some((m) => m.id === 'payroll' && !m.enabled) ?? false,
+    activeTab,
+    onPickTab: (tab: TabId) => setPicked({ tab, at: pathname }),
     theme,
     onToggleTheme: () => setTheme(toggleTheme()),
     username,

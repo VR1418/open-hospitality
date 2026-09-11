@@ -304,3 +304,58 @@ export async function addHotel(body: NewHotel): Promise<{ property_id: string; n
 export async function finishWelcome(): Promise<void> {
   await signedIn('/api/desktop/welcome/finish', { method: 'POST' })
 }
+
+// --- All hotels at a glance (src/usali/desktop/portfolio_api.py) ------------
+
+export type PortfolioStaff = { staff: number; on_clock: number; timecards_to_approve: number }
+
+export type PortfolioHotel = {
+  property_id: string
+  name: string
+  pms_source: string
+  /** in: the day's reports are read; missing: not yet; error: read but unusable. */
+  status: 'in' | 'missing' | 'error'
+  note: string | null
+  revenue: string | null
+  occupancy_pct: string | null
+  adr: string | null
+  revpar: string | null
+  rooms_occupied: string | null
+  rooms_total: string | null
+  month_revenue: string | null
+  month_labour_cost: string | null
+  staff: PortfolioStaff | null
+}
+
+export type PortfolioTotals = {
+  hotels: number
+  hotels_in: number
+  revenue: string | null
+  occupancy_pct: string | null
+  adr: string | null
+  revpar: string | null
+  month_revenue: string | null
+  month_labour_cost: string | null
+  month_labour_pct: string | null
+  staff: PortfolioStaff | null
+}
+
+export type Portfolio = {
+  business_date: string | null
+  month_start: string | null
+  /** True when Payroll & People is on: the staff figures are filled in. */
+  staff_shown: boolean
+  hotels: PortfolioHotel[]
+  totals: PortfolioTotals
+}
+
+/** Every hotel the caller may see, for one day (default: the latest day any
+ * has reports for). Null on a hosted deployment, which has no such route. */
+export async function getPortfolio(date?: string): Promise<Portfolio | null> {
+  const qs = date ? `?date=${encodeURIComponent(date)}` : ''
+  const res = await fetch(`/api/desktop/portfolio${qs}`, { headers: await authHeaders() })
+  if (res.status === 404) return null
+  if (res.status === 401) redirectToLogin()
+  if (!res.ok) throw new Error(await detail(res))
+  return (await res.json()) as Portfolio
+}

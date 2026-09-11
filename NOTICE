@@ -33,12 +33,33 @@ Modified upstream files:
     README.md
     pyproject.toml
     frontend/package.json
+    frontend/src/App.test.tsx
     frontend/src/auth/oidc.ts
     frontend/src/Layout.tsx
     frontend/src/lib/lastRoute.ts
     frontend/src/RootShell.tsx
     frontend/src/router.tsx
+    frontend/src/pages/ChecklistPage.tsx
+    frontend/src/pages/CoveragePage.tsx
+    frontend/src/pages/DashboardPage.tsx
+    frontend/src/pages/EmployeesPage.tsx
+    frontend/src/pages/GlPage.tsx
+    frontend/src/pages/GlPage.test.tsx
+    frontend/src/pages/IntegrationsPage.tsx
+    frontend/src/pages/KioskDevicesPage.tsx
+    frontend/src/pages/NightAuditPage.tsx
+    frontend/src/pages/PayrollDashboardPage.tsx
+    frontend/src/pages/PerformancePage.tsx
+    frontend/src/pages/PropertyConfigPage.tsx
+    frontend/src/pages/QboPage.tsx
+    frontend/src/pages/ReportsPage.tsx
+    frontend/src/pages/SosPage.tsx
+    frontend/src/pages/UploadPage.tsx
     src/usali/server.py
+
+  The page-title changes are the desktop edition's plain-language names
+  (docs/desktop/PRD-desktop-edition.md, appendix A): e.g. "Summary Operating
+  Statement" is "Profit and loss", "QBO Push" is "Send to QuickBooks".
 
 This fork is not endorsed by, affiliated with, or supported by the upstream
 project or its maintainers.

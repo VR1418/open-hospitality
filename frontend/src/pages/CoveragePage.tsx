@@ -46,7 +46,7 @@ export default function CoveragePage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Mapping Coverage"
+        title="Report codes"
         actions={
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-xs font-medium text-ink-muted">USALI edition</span>

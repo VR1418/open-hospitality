@@ -63,7 +63,7 @@ export default function AccountPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Sign-in & security"
+        title="Sign-in and security"
         subtitle="Where you’re signed in, your password, and who else can sign in."
       />
       <SessionsCard />

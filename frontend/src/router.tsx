@@ -37,6 +37,7 @@ import DesktopSignInPage from './pages/DesktopSignInPage'
 import ModulesPage from './pages/ModulesPage'
 import AccountPage from './pages/AccountPage'
 import WelcomePage from './pages/WelcomePage'
+import OverviewPage from './pages/OverviewPage'
 import RouteErrorCard from './components/RouteErrorCard'
 import { CallbackPage, RootShell } from './RootShell'
 
@@ -63,10 +64,23 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined
 }
 
+/**
+ * Desktop edition: the Overview opens a hotel's dashboard on the day it was
+ * showing — `?date=2026-07-07`. Optional; anything that isn't a date is
+ * ignored and the page keeps its own default.
+ */
+export type DashboardSearch = { date?: string }
+
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dashboard',
   component: DashboardPage,
+  validateSearch: (search: Record<string, unknown>): DashboardSearch => ({
+    date:
+      typeof search.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(search.date)
+        ? search.date
+        : undefined,
+  }),
 })
 
 /**
@@ -323,12 +337,20 @@ const welcomeRoute = createRoute({
   component: WelcomePage,
 })
 
+/** Desktop edition: every hotel at a glance — the owner's home page. */
+const overviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/overview',
+  component: OverviewPage,
+})
+
 const childRoutes = [
   callbackRoute,
   desktopSignInRoute,
   modulesRoute,
   accountRoute,
   welcomeRoute,
+  overviewRoute,
   entryRoute,
   dashboardRoute,
   sosRoute,

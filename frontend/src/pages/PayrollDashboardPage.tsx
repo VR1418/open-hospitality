@@ -780,7 +780,7 @@ function Header({
   return (
     <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
       <div className="min-w-0">
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Payroll Dashboard</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-ink">Staff and labour</h1>
         <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-ink-muted">
           <span>Labor cost and productivity</span>
           {propertyName !== null && (

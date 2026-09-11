@@ -65,7 +65,7 @@ export default function NightAuditPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Night audit"
+        title="Close the day"
         subtitle="Upload the night's reports, verify the close ties to the last one, then roll the property to the next business date."
       />
 

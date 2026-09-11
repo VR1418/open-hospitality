@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Link } from '@tanstack/react-router'
+import { getRouteApi, Link } from '@tanstack/react-router'
 import { useQueries, useQuery } from '@tanstack/react-query'
 
 import { getSos } from '../api/client'
@@ -405,6 +405,9 @@ function SetupCard() {
 
 const TREND_DAYS = 14
 
+// getRouteApi avoids the router.tsx <-> DashboardPage.tsx circular value import.
+const routeApi = getRouteApi('/dashboard')
+
 export default function DashboardPage() {
   const { user } = useAuth()
   const username = user?.profile.preferred_username
@@ -412,12 +415,14 @@ export default function DashboardPage() {
   const { property, selected } = useGlobalProperty()
   const [pickedDate, setPickedDate] = useState<string | undefined>(undefined)
   const [slot, setSlot] = useState<HTMLElement | null>(null)
+  // Desktop edition: the Overview links here on the day it was showing.
+  const { date: linkedDate } = routeApi.useSearch()
 
   useEffect(() => {
     setSlot(document.getElementById('topbar-slot'))
   }, [])
 
-  const date = pickedDate ?? todayIso()
+  const date = pickedDate ?? linkedDate ?? todayIso()
 
   const ready = property !== undefined
 

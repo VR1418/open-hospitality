@@ -374,7 +374,7 @@ export default function EmployeesPage() {
       {/* header card — title, context, and the primary action in one frame */}
       <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Employees</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">Staff</h1>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
             <span>Workforce Roster</span>
             {selected !== undefined && (

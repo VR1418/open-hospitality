@@ -72,11 +72,18 @@ export default function WelcomePage() {
   // answers leave off.
   const [chosenStep, setStep] = useState<Step | null>(null)
   const [draft, setDraft] = useState<HotelDraft | null>(null)
-  const finishedBefore = welcome.data?.finished === true && chosenStep === null
-  const step = chosenStep ?? (welcome.data != null && !finishedBefore ? firstStep(welcome.data) : null)
+  // "Add a hotel" on the Overview reopens just the hotel steps
+  // (/welcome?add=hotel), however long ago the install was set up.
+  const [addMode] = useState(
+    () => new URLSearchParams(window.location.search).get('add') === 'hotel',
+  )
+  const finishedBefore = !addMode && welcome.data?.finished === true && chosenStep === null
+  const step =
+    chosenStep ??
+    (welcome.data != null && !finishedBefore ? (addMode ? 'hotel' : firstStep(welcome.data)) : null)
 
   useEffect(() => {
-    if (finishedBefore) window.location.replace('/dashboard')
+    if (finishedBefore) window.location.replace('/overview')
   }, [finishedBefore])
 
   if (welcome.isError) {
@@ -117,6 +124,7 @@ export default function WelcomePage() {
         <HotelStep
           state={state}
           draft={draft}
+          addMode={addMode}
           onNext={(d) => {
             setDraft(d)
             setStep('fiscal')
@@ -128,8 +136,9 @@ export default function WelcomePage() {
       return (
         <FiscalStep
           draft={draft as HotelDraft}
+          addMode={addMode}
           onBack={() => setStep('hotel')}
-          onDone={() => setStep('modules')}
+          onDone={() => (addMode ? window.location.assign('/overview') : setStep('modules'))}
         />
       )
     case 'modules':
@@ -222,16 +231,18 @@ function GroupStep({ initial, onDone }: { initial: string; onDone: () => void })
 function HotelStep({
   state,
   draft,
+  addMode,
   onNext,
   onSkip,
 }: {
   state: WelcomeState
   draft: HotelDraft | null
+  addMode: boolean
   onNext: (d: HotelDraft) => void
   onSkip: () => void
 }) {
   const existing = state.properties
-  const [adding, setAdding] = useState(existing.length === 0)
+  const [adding, setAdding] = useState(addMode || existing.length === 0)
   const [name, setName] = useState(draft?.name ?? '')
   const [reportName, setReportName] = useState(draft?.report_name ?? '')
   const [pms, setPms] = useState(draft?.pms_source ?? state.pms_choices[0]?.id ?? '')
@@ -264,7 +275,10 @@ function HotelStep({
   const roomCount = Number(rooms)
 
   return (
-    <Shell step="hotel" title="Your first hotel">
+    <Shell
+      step={addMode ? undefined : 'hotel'}
+      title={addMode ? 'Add a hotel' : 'Your first hotel'}
+    >
       <form
         className="flex flex-col gap-4"
         onSubmit={(e: FormEvent) => {
@@ -335,7 +349,7 @@ function HotelStep({
             onChange={(e) => setRooms(e.target.value)}
           />
         </Label>
-        <div>
+        <div className="flex flex-wrap items-center gap-3">
           <button
             type="submit"
             className={primaryButtonClass}
@@ -343,6 +357,11 @@ function HotelStep({
           >
             Continue
           </button>
+          {addMode && (
+            <a href="/overview" className={`${secondaryButtonClass} inline-flex items-center`}>
+              Cancel
+            </a>
+          )}
         </div>
       </form>
     </Shell>
@@ -351,10 +370,12 @@ function HotelStep({
 
 function FiscalStep({
   draft,
+  addMode,
   onBack,
   onDone,
 }: {
   draft: HotelDraft
+  addMode: boolean
   onBack: () => void
   onDone: () => void
 }) {
@@ -376,7 +397,7 @@ function FiscalStep({
   })
 
   return (
-    <Shell step="fiscal" title={`${draft.name}’s financial year`}>
+    <Shell step={addMode ? undefined : 'fiscal'} title={`${draft.name}’s financial year`}>
       <p className="mb-5 text-sm text-ink-muted">
         Your statements are grouped into the periods of your financial year. Most hotels use
         calendar months starting in January — if you’re not sure, ask your accountant. You can

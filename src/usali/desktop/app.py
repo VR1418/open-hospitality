@@ -30,7 +30,7 @@ from typing import Any
 import uvicorn
 from fastapi import FastAPI
 
-from usali.desktop import accounts_api, modules_api, session_api, welcome_api
+from usali.desktop import accounts_api, modules_api, portfolio_api, session_api, welcome_api
 from usali.desktop.accounts import LocalAccountAdmin, SessionFactory
 from usali.desktop.keystore import KeychainUnavailable, OsKeyStore, open_keys
 from usali.desktop.bootstrap import (
@@ -156,6 +156,7 @@ def build_app(
     )
     modules_api.install(app, enabled=enabled, reload=reload)
     welcome_api.install(app)
+    portfolio_api.install(app)
     if dist.is_dir():
         app.mount("/", _SpaStaticFiles(directory=dist, html=True), name="spa")
     else:

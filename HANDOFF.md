@@ -75,6 +75,15 @@ uv run oh-desktop --sample-data --no-tray --no-browser   # prints a sign-in link
 
 **M2 is complete.** Next is M3 (signing, auto-update, backup and restore).
 
+**After M2, from owner feedback: the menu and an all-hotels dashboard.**
+
+| Slice | State |
+|---|---|
+| Nav in an owner's words, in three tabs: **Accounting** (first: Overview, Hotel dashboard, Profit and loss, Occupancy and rates, Close the day, Add reports, Books, For your accountant, Send to QuickBooks), **People** (the Payroll & People module) and **Ops** (modules still to come); **Settings** always at the bottom. Page titles renamed to match (listed in `NOTICE`) | Done |
+| `/overview` — every hotel for the last closed day, totals pooled from parts (never averaged percentages), and when Payroll & People is on: on the clock now (counted where they clocked in), staff, timecards to approve (ended periods only), labour vs revenue. Backend `src/usali/desktop/portfolio_api.py`, scoped by upstream's `resolve_scope` | Done |
+| "Add a hotel" after setup: `/welcome?add=hotel` reopens the wizard's hotel steps | Done |
+| **Known, not fixed here:** upstream's `gl_api.py` read routes don't check per-hotel access (any operator in the group can read any hotel's ledger). Offered as its own task, intended as an upstream PR | Open |
+
 ## Decisions already made (don't re-open without reason)
 
 - **The engine is never forked.** New code lives in `src/usali/desktop/`, and

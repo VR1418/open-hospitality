@@ -92,7 +92,7 @@ export default function SosPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Summary Operating Statement" />
+      <PageHeader title="Profit and loss" />
 
       <Card>
         <PickerBar

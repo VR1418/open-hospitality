@@ -261,7 +261,7 @@ export default function IntegrationsPage() {
   if (integrations.error instanceof ApiError && integrations.error.status === 503) {
     return (
       <>
-        <PageHeader title="Integrations" />
+        <PageHeader title="Connections" />
         <Card>
           <p className="text-sm">{integrations.error.detail}</p>
         </Card>
@@ -271,7 +271,7 @@ export default function IntegrationsPage() {
 
   return (
     <>
-      <PageHeader title="Integrations" />
+      <PageHeader title="Connections" />
       {integrations.error !== null && integrations.error !== undefined && (
         <Card><p className="text-sm">{errorMessage(integrations.error)}</p></Card>
       )}

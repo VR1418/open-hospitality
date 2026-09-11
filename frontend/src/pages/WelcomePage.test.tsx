@@ -157,6 +157,41 @@ describe('WelcomePage', () => {
     expect(screen.getByLabelText('Hotel name')).toHaveValue('Redstone Inn')
   })
 
+  it('“Add a hotel” reopens just the hotel steps on a finished install', async () => {
+    window.history.replaceState(null, '', '/welcome?add=hotel')
+    getWelcome.mockResolvedValue({
+      ...FRESH,
+      finished: true,
+      group_named: true,
+      group_name: 'Redstone Hotels',
+      properties: [
+        { property_id: 'RI', name: 'Redstone Inn', pms_source: 'SKYTOUCH',
+          has_fiscal_calendar: true, has_rooms: true },
+      ],
+    })
+    try {
+      renderPage()
+
+      // Straight to the form: no "you already have" list, no step numbers.
+      expect(await screen.findByRole('heading', { name: 'Add a hotel' })).toBeInTheDocument()
+      expect(screen.queryByText(/Step \d of 4/)).toBeNull()
+      expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/overview')
+      await type('Hotel name', 'Harbour View')
+      await userEvent.selectOptions(screen.getByLabelText('Front-desk system (PMS)'), 'OPERA')
+      await type('Rooms you can sell', '120')
+      await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+      await userEvent.click(await screen.findByRole('button', { name: 'Save and continue' }))
+
+      expect(addHotel).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Harbour View', pms_source: 'OPERA', total_rooms: 120 }),
+      )
+      // It never asks the module question again.
+      expect(finishWelcome).not.toHaveBeenCalled()
+    } finally {
+      window.history.replaceState(null, '', '/')
+    }
+  })
+
   it('an owner who left half-way picks up at the first unanswered question', async () => {
     getWelcome.mockResolvedValue({
       ...FRESH,

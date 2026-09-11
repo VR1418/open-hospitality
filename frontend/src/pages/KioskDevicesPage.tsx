@@ -41,7 +41,7 @@ export default function KioskDevicesPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Kiosk devices"
+        title="Time clock tablets"
         subtitle="The tablets running the time clock. Enroll one per hotel — a shared tablet gets one enrollment per hotel it serves."
       />
 

@@ -105,7 +105,7 @@ describe('GlPage', () => {
   it('renders the no-property empty state when no property exists', async () => {
     vi.mocked(getProperties).mockResolvedValue([])
     renderPage()
-    expect(await screen.findByRole('heading', { name: 'General Ledger' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Books' })).toBeInTheDocument()
     expect(await screen.findByText('No property selected yet.')).toBeInTheDocument()
     expect(getGlPeriods).not.toHaveBeenCalled()
   })
@@ -274,7 +274,7 @@ describe('GlPage', () => {
       expect(
         await screen.findByText('not a fixed-point decimal: "12,066.37"'),
       ).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: /general ledger/i })).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Books' })).toBeInTheDocument()
     } finally {
       errorSpy.mockRestore()
     }

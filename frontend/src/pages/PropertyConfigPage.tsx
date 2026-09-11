@@ -32,7 +32,7 @@ export default function PropertyConfigPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Property configuration"
+        title="Your hotels"
         subtitle="Sellable-room inventory, out-of-order blocks, and the fiscal calendar this property runs on."
       />
 

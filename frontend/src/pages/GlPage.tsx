@@ -124,7 +124,7 @@ export default function GlPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="General Ledger"
+        title="Books"
         subtitle="The trial balance and the books' periods, from the journal."
       />
 

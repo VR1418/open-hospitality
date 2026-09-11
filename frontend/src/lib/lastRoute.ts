@@ -6,7 +6,10 @@
 // visit) the entry route opens the dashboard.
 
 const STORAGE_KEY = 'usali.last-route'
-const HOME = '/dashboard'
+// Desktop edition: the owner's home is every hotel at a glance. Read from the
+// build mode directly (as auth/oidc does) rather than imported from it, so
+// this module stays free of the auth stack.
+const HOME = import.meta.env.VITE_AUTH_MODE === 'desktop' ? '/overview' : '/dashboard'
 
 /**
  * Paths that must never become the restore target: '/' is the entry route

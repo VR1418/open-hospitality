@@ -52,7 +52,7 @@ export default function ChecklistPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Setup"
+        title="Setup checklist"
         subtitle="What is left to configure. The checklist never blocks you — the required items are what reporting needs."
       />
 
