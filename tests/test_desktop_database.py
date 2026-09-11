@@ -16,7 +16,6 @@ from sqlalchemy.exc import OperationalError
 from usali.db import make_engine, make_session_factory
 from usali.desktop.bootstrap import (
     DesktopKeys,
-    KeysMissing,
     NeedsUpgradeConsent,
     app_url,
     load_sample_data,
@@ -65,7 +64,7 @@ OWNER = DesktopUser(
 def running(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple[PgCluster, int, DesktopKeys, Path]]:
     assert BIN is not None
     root = tmp_path_factory.mktemp("desktop")
-    keys = DesktopKeys.load_or_create(root / "keys.json", database_exists=False)
+    keys = DesktopKeys.generate()
     cluster = PgCluster(bin_dir=BIN, data_dir=root / "database", log_file=root / "database.log")
     cluster.init(keys.db_owner_password)
     port = free_port(55433)
@@ -258,9 +257,3 @@ def test_the_intake_reads_every_sample_report_including_packs(
         assert sos.total_operating_revenue > 0
     finally:
         serving.dispose()
-
-
-def test_missing_keys_for_an_existing_database_refuse_loudly(tmp_path: Path) -> None:
-    with pytest.raises(KeysMissing):
-        DesktopKeys.load_or_create(tmp_path / "keys.json", database_exists=True)
-    assert not (tmp_path / "keys.json").exists()

@@ -58,6 +58,11 @@ Daniel Miessler.
 argon2-cffi (https://github.com/hynek/argon2-cffi), password hashing.
 MIT License.
 
+keyring (https://github.com/jaraco/keyring), access to the OS keychain
+(ADR-D5), with its helpers jaraco.classes, jaraco.context, jaraco.functools
+and more-itertools. MIT License. On Windows it uses pywin32-ctypes
+(https://github.com/enthought/pywin32-ctypes), BSD 3-Clause License.
+
 pystray (https://github.com/moses-palmer/pystray), used for the tray icon.
 GNU Lesser General Public License v3.0. It is shipped as a separate,
 replaceable Python module inside the application folder; the desktop build

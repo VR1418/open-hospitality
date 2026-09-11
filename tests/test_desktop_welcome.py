@@ -65,7 +65,7 @@ class World:
 def world(tmp_path_factory: pytest.TempPathFactory) -> Iterator[World]:
     assert BIN is not None
     root = tmp_path_factory.mktemp("welcome")
-    keys = DesktopKeys.load_or_create(root / "keys.json", database_exists=False)
+    keys = DesktopKeys.generate()
     cluster = PgCluster(bin_dir=BIN, data_dir=root / "database", log_file=root / "db.log")
     cluster.init(keys.db_owner_password)
     port = free_port(55436)

@@ -32,6 +32,7 @@ from fastapi import FastAPI
 
 from usali.desktop import accounts_api, modules_api, session_api, welcome_api
 from usali.desktop.accounts import LocalAccountAdmin, SessionFactory
+from usali.desktop.keystore import KeychainUnavailable, OsKeyStore, open_keys
 from usali.desktop.bootstrap import (
     DesktopKeys,
     KeysMissing,
@@ -296,7 +297,10 @@ def run(args: argparse.Namespace) -> int:
         data_dir=paths.database,
         log_file=paths.logs / "database.log",
     )
-    keys = DesktopKeys.load_or_create(paths.keys_file, database_exists=cluster.exists())
+    keys = open_keys(
+        sealed=paths.sealed_keys_file, legacy=paths.keys_file, store=OsKeyStore(),
+        database_exists=cluster.exists(),
+    )
     if not cluster.exists():
         _LOG.info("first run: creating the database in %s", paths.database)
         cluster.init(keys.db_owner_password)
@@ -391,7 +395,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return run(args)
-    except (PostgresNotFound, PostgresFailed, KeysMissing, NeedsUpgradeConsent) as exc:
+    except (
+        PostgresNotFound, PostgresFailed, KeysMissing, KeychainUnavailable, NeedsUpgradeConsent,
+    ) as exc:
         # Expected refusals: the message already names the next step.
         _LOG.error("%s", exc)
         print(f"\n{exc}\n", file=sys.stderr)

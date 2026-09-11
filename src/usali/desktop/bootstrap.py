@@ -5,10 +5,8 @@ invariant"): cluster roles → migrations as the owner → reference data → th
 founding org and its owner grant. Only then does anything serve, and serving
 connects as `usali_app` — the RLS-bound role — never as the owner.
 
-Keys live in one file in the system folder. PRD A-4/AI-1 put the signing
-key and provider keys in the OS keychain; that move is M2's (ADR-D1). The
-file is written owner-only on POSIX and sits in the per-user app-data
-folder on Windows, and the M3 backup must carry it — a database whose keys
+The keys (`DesktopKeys`) are sealed at rest under a master key held in the
+OS keychain — see usali.desktop.keystore and ADR-D5. A database whose keys
 are lost cannot be opened, by design.
 """
 
@@ -20,7 +18,7 @@ import secrets
 import shutil
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -85,27 +83,6 @@ class DesktopKeys:
             issuer_private_key_pem=LocalIssuer.generate_pem(),
         )
 
-    @classmethod
-    def load_or_create(cls, path: Path, *, database_exists: bool) -> "DesktopKeys":
-        if path.is_file():
-            return cls(**json.loads(path.read_text(encoding="utf-8")))
-        if database_exists:
-            # Generating fresh keys here would lock the owner out of their own
-            # books AND make every encrypted field unreadable. Stop and say so.
-            raise KeysMissing(
-                f"The key file that unlocks your books is missing ({path}). Without it the "
-                "database cannot be opened. Put keys.json back in that folder from your "
-                "backup, then start Open Hospitality again."
-            )
-        keys = cls.generate()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(path.name + ".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(asdict(keys), f, indent=2)
-        os.replace(tmp, path)
-        return keys
-
 
 def owner_url(port: int, keys: DesktopKeys) -> str:
     return db_url(port=port, user=SUPERUSER, password=keys.db_owner_password)
@@ -151,7 +128,7 @@ def ensure_roles(owner: str, keys: DesktopKeys) -> None:
     """The two cluster roles the migration chain refuses to run without
     (l2a0rlswall, b1a0provrole) — LOGIN and nothing else, as
     scripts/dev_pg_init.sql creates them. Re-applied every start so the
-    passwords always match keys.json."""
+    passwords always match the install's keys."""
     provisioner = get_settings().provisioner_db_role
     engine = create_engine(owner, isolation_level="AUTOCOMMIT")
     try:

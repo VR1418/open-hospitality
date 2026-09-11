@@ -87,7 +87,14 @@ class DesktopPaths:
         return self.system_root / "database"
 
     @property
+    def sealed_keys_file(self) -> Path:
+        """The install's keys, sealed under a master key in the OS keychain
+        (usali.desktop.keystore)."""
+        return self.system_root / "keys.sealed.json"
+
+    @property
     def keys_file(self) -> Path:
+        """M1's plain-text keys. Read once to seal them, then deleted."""
         return self.system_root / "keys.json"
 
     @property

@@ -71,7 +71,9 @@ uv run oh-desktop --sample-data --no-tray --no-browser   # prints a sign-in link
 | Local accounts, backend: Argon2id, breached-password list, recovery code, per-device sessions, setup codes, Keycloak seam | Done (44 desktop tests) |
 | Local accounts, frontend: `/desktop-signin` (first-run owner, sign-in, set-up code, recovery, recovery-code screen) and `/account` "Sign-in & security" (your sign-ins, change password, owner hands out set-up codes) | Done. Verified end to end on Windows against a fresh install. Set-up codes live on `/account`, not upstream's Employees page, so no upstream page changed |
 | First-run wizard `/welcome`: hotel group → first hotel (name, name as its reports print it, PMS, rooms) → fiscal year → modules. Backend `src/usali/desktop/welcome_api.py` writes the property **with its detection alias** (upstream's `create_first_property` writes none, so its hotels could never match a report), rooms and fiscal calendar in one transaction. Layout sends the owner there until it's finished | Done. Verified end to end on Windows: fresh install → wizard → the sample choiceADVANTAGE pack dropped in the folder resolved to the new hotel and its statement built from the posted journal |
-| **Keys into the OS keychain (PRD A-4)** | **Next** — the last M2 item |
+| Keys into the OS keychain (PRD A-4, ADR-D5): the six install secrets are sealed (AES-256-GCM) in `keys.sealed.json` under a master key held only in Credential Manager / Keychain (`src/usali/desktop/keystore.py`). M1 installs move over on first launch; the plain `keys.json` is deleted only after the sealed copy reads back identical | Done. **Consequence:** copying the folder alone no longer moves or backs up an install — M3's backup must carry the master key (ADR-D5 proposes wrapping it with the recovery code) |
+
+**M2 is complete.** Next is M3 (signing, auto-update, backup and restore).
 
 ## Decisions already made (don't re-open without reason)
 

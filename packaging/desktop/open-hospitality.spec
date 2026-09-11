@@ -11,7 +11,7 @@
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 ROOT = Path(SPECPATH).resolve().parents[1]  # noqa: F821 — SPECPATH is injected by PyInstaller
 sys.path.insert(0, str(ROOT / "src"))
@@ -45,12 +45,16 @@ datas = [
     (str(ROOT / "NOTICE"), "."),
 ]
 datas += collect_data_files("pdfminer")  # font metrics + CMaps pdfplumber reads
+# keyring finds its OS backends through entry points, which need the
+# package's metadata in the bundle (ADR-D5).
+datas += copy_metadata("keyring")
 
 hiddenimports = (
     # Migrations are loaded by FILE PATH, so nothing they import is visible
     # to the analyser — take the whole engine.
     collect_submodules("usali")
     + collect_submodules("pystray")  # the platform backend is chosen at runtime
+    + collect_submodules("keyring.backends")  # likewise the keychain backend
     + ["psycopg_binary"]
 )
 
