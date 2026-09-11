@@ -27,7 +27,7 @@ import {
   signIn,
   type DesktopToken,
 } from '../api/desktop'
-import { getUser, storeDesktopSession } from '../auth/oidc'
+import { clearDesktopSession, getUser, storeDesktopSession } from '../auth/oidc'
 import { Card, controlLargeClass } from '../components/ui'
 
 type Screen =
@@ -78,6 +78,21 @@ export default function DesktopSignInPage() {
     const wasSignedOut = new URLSearchParams(window.location.search).has('signed-out')
     setSignedOut(wasSignedOut)
     void (async () => {
+      let setupRequired: boolean
+      try {
+        setupRequired = await getSetupRequired()
+      } catch {
+        setScreen({ kind: 'unreachable' })
+        return
+      }
+      if (setupRequired) {
+        // No accounts exist, so any session this browser holds belongs to
+        // an install that is gone (same address, new data). Following it
+        // would bounce through a refusal and lose the launch code on the way.
+        await clearDesktopSession().catch(() => {})
+        setScreen(code === null ? { kind: 'no-launch-code' } : { kind: 'owner-setup', code })
+        return
+      }
       // Already signed in on this browser (the tray's "Open my books" after a
       // first sign-in): straight to the books. A token the server has since
       // refused is removed by login() before it sends anyone here.
@@ -86,15 +101,7 @@ export default function DesktopSignInPage() {
         openBooks()
         return
       }
-      let setupRequired: boolean
-      try {
-        setupRequired = await getSetupRequired()
-      } catch {
-        setScreen({ kind: 'unreachable' })
-        return
-      }
-      if (!setupRequired) setScreen({ kind: 'sign-in' })
-      else setScreen(code === null ? { kind: 'no-launch-code' } : { kind: 'owner-setup', code })
+      setScreen({ kind: 'sign-in' })
     })()
   }, [])
 

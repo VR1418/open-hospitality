@@ -36,6 +36,7 @@ import GlPage from './pages/GlPage'
 import DesktopSignInPage from './pages/DesktopSignInPage'
 import ModulesPage from './pages/ModulesPage'
 import AccountPage from './pages/AccountPage'
+import WelcomePage from './pages/WelcomePage'
 import RouteErrorCard from './components/RouteErrorCard'
 import { CallbackPage, RootShell } from './RootShell'
 
@@ -315,11 +316,19 @@ const accountRoute = createRoute({
   component: AccountPage,
 })
 
+/** Desktop edition: the owner's first-run wizard (signed in, no app chrome). */
+const welcomeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/welcome',
+  component: WelcomePage,
+})
+
 const childRoutes = [
   callbackRoute,
   desktopSignInRoute,
   modulesRoute,
   accountRoute,
+  welcomeRoute,
   entryRoute,
   dashboardRoute,
   sosRoute,

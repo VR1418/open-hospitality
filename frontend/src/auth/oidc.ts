@@ -83,6 +83,11 @@ export async function storeDesktopSession(accessToken: string, expiresIn: number
   })
   await userManager.storeUser(user)
 }
+/** Forget this browser's desktop session without asking the server — for a
+ * token the server cannot know (an install with no accounts yet). */
+export function clearDesktopSession(): Promise<void> {
+  return userManager.removeUser()
+}
 export function getUser(): Promise<User | null> {
   return userManager.getUser()
 }

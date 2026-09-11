@@ -12,8 +12,8 @@
 // The Setup link is the one nav entry whose accessible name carries data —
 // match it with { name: /^Setup/ } unless you are pinning the count.
 
-import { useState, type ComponentType, type SVGProps } from 'react'
-import { Link, Outlet } from '@tanstack/react-router'
+import { useEffect, useState, type ComponentType, type SVGProps } from 'react'
+import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 
 import { currentTheme, toggleTheme, type Theme } from './lib/theme'
@@ -23,7 +23,7 @@ import { hasRole } from './lib/roles'
 import { badgeLabel, useChecklist, type ChecklistBadge } from './lib/useChecklist'
 import { useAuth } from './auth/authContext'
 import { getMe } from './api/client'
-import { getModules, hiddenPaths } from './api/desktop'
+import { getModules, getWelcome, hiddenPaths } from './api/desktop'
 import type { Me } from './api/types'
 import BuildStamp from './components/BuildStamp'
 import OrgPicker from './components/OrgPicker'
@@ -452,6 +452,18 @@ export default function Layout() {
   // Desktop edition (ADR-D3): null on a hosted deployment (the route 404s),
   // and a failed read hides nothing — the server's mount is the enforcement.
   const modules = useQuery({ queryKey: ['modules'], queryFn: getModules, retry: false })
+  // Desktop edition: until the owner has finished the first-run wizard there
+  // is no property for anything to describe, so every page sends them there.
+  const welcome = useQuery({
+    queryKey: ['welcome'],
+    queryFn: getWelcome,
+    retry: false,
+    enabled: modules.data != null && isOrgAdmin(me.data),
+  })
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (welcome.data?.finished === false) void navigate({ to: '/welcome', replace: true })
+  }, [welcome.data, navigate])
   const username = user?.profile.preferred_username
 
   function handleToggleCollapse() {

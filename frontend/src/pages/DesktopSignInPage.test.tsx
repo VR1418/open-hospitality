@@ -6,10 +6,12 @@ import DesktopSignInPage from './DesktopSignInPage'
 
 const storeDesktopSession = vi.fn<(token: string, expiresIn: number) => Promise<void>>()
 const getUser = vi.fn<() => Promise<{ expired: boolean } | null>>()
+const clearDesktopSession = vi.fn<() => Promise<void>>()
 
 vi.mock('../auth/oidc', () => ({
   storeDesktopSession: (token: string, expiresIn: number) => storeDesktopSession(token, expiresIn),
   getUser: () => getUser(),
+  clearDesktopSession: () => clearDesktopSession(),
 }))
 
 function arriveAt(url: string) {
@@ -45,11 +47,13 @@ describe('DesktopSignInPage', () => {
   beforeEach(() => {
     storeDesktopSession.mockResolvedValue(undefined)
     getUser.mockResolvedValue(null)
+    clearDesktopSession.mockResolvedValue(undefined)
   })
   afterEach(() => {
     vi.unstubAllGlobals()
     storeDesktopSession.mockReset()
     getUser.mockReset()
+    clearDesktopSession.mockReset()
     arriveAt('/')
   })
 
@@ -108,6 +112,19 @@ describe('DesktopSignInPage', () => {
 
       expect(await screen.findByRole('alert')).toHaveTextContent('don’t match')
       expect(fetchMock.mock.calls.map(([u]) => u)).toEqual(['/api/desktop/status'])
+    })
+
+    it('a session left in the browser by an earlier install never gets in the way', async () => {
+      // Same address, new data: a stored, unexpired token from the old
+      // install. Following it would lose the launch code to a refusal.
+      getUser.mockResolvedValue({ expired: false })
+      server({ '/api/desktop/status': () => json(200, { setup_required: true }) })
+      arriveAt('/desktop-signin#code=launch-123')
+
+      render(<DesktopSignInPage />)
+
+      expect(await screen.findByRole('heading', { name: 'Set up your books' })).toBeInTheDocument()
+      expect(clearDesktopSession).toHaveBeenCalled()
     })
 
     it('without the launch code, says how to open it from the tray — and offers no form', async () => {
@@ -180,13 +197,16 @@ describe('DesktopSignInPage', () => {
 
     it('an already signed-in browser goes straight to the books', async () => {
       getUser.mockResolvedValue({ expired: false })
-      const fetchMock = server({})
+      const fetchMock = server({ '/api/desktop/status': () => json(200, { setup_required: false }) })
       arriveAt('/desktop-signin#code=launch-123')
 
       render(<DesktopSignInPage />)
 
       await waitFor(() => expect(getUser).toHaveBeenCalled())
-      expect(fetchMock).not.toHaveBeenCalled()
+      // Only the one question; no sign-in form is shown or sent.
+      expect(fetchMock.mock.calls.map(([u]) => u)).toEqual(['/api/desktop/status'])
+      expect(screen.queryByRole('heading', { name: 'Sign in' })).toBeNull()
+      expect(clearDesktopSession).not.toHaveBeenCalled()
     })
   })
 

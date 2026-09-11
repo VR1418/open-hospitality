@@ -5,33 +5,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { getMe } from '../api/client'
-import { getModules, saveModules, type DesktopModule } from '../api/desktop'
+import { getModules, saveModules, waitForModules, type DesktopModule } from '../api/desktop'
 import { Badge, Card, PageHeader, sectionHeadClass, type BadgeTone } from '../components/ui'
 import { errorMessage } from '../lib/errors'
 import { hasRole } from '../lib/roles'
 
 const buttonClass =
   'shrink-0 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface-sunken disabled:cursor-not-allowed disabled:opacity-50'
-
-function sameSet(a: string[], b: string[]): boolean {
-  return a.length === b.length && a.every((x) => b.includes(x))
-}
-
-/** After a change the local server rebuilds itself; ask until it answers
- * with the new set mounted (a few seconds at most). */
-async function waitForModules(enabled: string[]): Promise<void> {
-  for (let i = 0; i < 40; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    try {
-      const now = await getModules()
-      const on = (now?.modules ?? []).filter((m) => m.enabled).map((m) => m.id)
-      if (sameSet(on, enabled)) return
-    } catch {
-      // The server is between builds; keep asking.
-    }
-  }
-  throw new Error('Open Hospitality is taking longer than usual to switch. Reload this page.')
-}
 
 function statusOf(m: DesktopModule): { tone: BadgeTone; word: string } {
   if (m.status === 'coming_soon') return { tone: 'neutral', word: 'Coming soon' }

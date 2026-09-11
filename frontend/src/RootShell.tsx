@@ -85,6 +85,14 @@ export function RootShell() {
     pathname === '/try/'
   )
     return <Outlet />
+  // Desktop edition: the first-run wizard needs a signed-in owner but none of
+  // the app's chrome — nothing in the sidebar works until it is finished.
+  if (pathname === '/welcome')
+    return (
+      <RequireAuth>
+        <Outlet />
+      </RequireAuth>
+    )
   return (
     <RequireAuth>
       <Layout />

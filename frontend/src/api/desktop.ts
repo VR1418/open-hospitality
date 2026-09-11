@@ -50,6 +50,26 @@ export async function saveModules(enabled: string[]): Promise<ModulesResponse> {
   return (await res.json()) as ModulesResponse
 }
 
+function sameSet(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((x) => b.includes(x))
+}
+
+/** After a module change the local server rebuilds itself; ask until it
+ * answers with the new set mounted (a few seconds at most). */
+export async function waitForModules(enabled: string[]): Promise<void> {
+  for (let i = 0; i < 40; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    try {
+      const now = await getModules()
+      const on = (now?.modules ?? []).filter((m) => m.enabled).map((m) => m.id)
+      if (sameSet(on, enabled)) return
+    } catch {
+      // The server is between builds; keep asking.
+    }
+  }
+  throw new Error('Open Hospitality is taking longer than usual to switch. Reload this page.')
+}
+
 /** Nav paths belonging to modules that are OFF. Hiding them is a courtesy —
  * those routes are not mounted, which is the enforcement. */
 export function hiddenPaths(modules: DesktopModule[] | undefined): Set<string> {
@@ -211,4 +231,76 @@ export async function giveSetupCode(subject: string): Promise<SetupCode> {
     method: 'POST',
   })
   return (await res.json()) as SetupCode
+}
+
+// --- First-run wizard (src/usali/desktop/welcome_api.py) --------------------
+
+export type WelcomeProperty = {
+  property_id: string
+  name: string
+  pms_source: string
+  has_fiscal_calendar: boolean
+  has_rooms: boolean
+}
+
+/** A PMS this install can read, from the engine's own detection registry. */
+export type PmsChoice = { id: string; name: string }
+
+export type WelcomeState = {
+  finished: boolean
+  group_name: string
+  /** False while the hotel group still has the name a fresh install gives it. */
+  group_named: boolean
+  properties: WelcomeProperty[]
+  pms_choices: PmsChoice[]
+}
+
+/** The wizard's progress. Null on a hosted deployment, which has no such
+ * route — so nothing there is ever sent to the wizard. */
+export async function getWelcome(): Promise<WelcomeState | null> {
+  const res = await fetch('/api/desktop/welcome', { headers: await authHeaders() })
+  if (res.status === 404) return null
+  if (res.status === 401) redirectToLogin()
+  if (!res.ok) throw new Error(await detail(res))
+  return (await res.json()) as WelcomeState
+}
+
+export async function nameGroup(name: string): Promise<void> {
+  await signedIn('/api/desktop/welcome/group', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  })
+}
+
+export type FiscalChoice = {
+  calendar_type: 'calendar_month' | '445'
+  fiscal_year_start_month: number
+  /** 0 = Monday … 6 = Sunday; only for a 4-4-5 calendar. */
+  week_start_weekday: number | null
+}
+
+export type NewHotel = {
+  name: string
+  /** The hotel's name as the PMS prints it at the top of its reports. */
+  report_name: string
+  pms_source: string
+  total_rooms: number
+  timezone: string
+  fiscal: FiscalChoice
+}
+
+/** One request: the property, the name its reports are recognised by, its
+ * rooms and its fiscal calendar are saved together or not at all. */
+export async function addHotel(body: NewHotel): Promise<{ property_id: string; name: string }> {
+  const res = await signedIn('/api/desktop/welcome/property', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return (await res.json()) as { property_id: string; name: string }
+}
+
+export async function finishWelcome(): Promise<void> {
+  await signedIn('/api/desktop/welcome/finish', { method: 'POST' })
 }

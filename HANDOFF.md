@@ -70,8 +70,8 @@ uv run oh-desktop --sample-data --no-tray --no-browser   # prints a sign-in link
 | Windows fix to upstream's portal fallback (unknown API paths answered 200) | Done, listed in `docs/desktop/UPSTREAM.md` |
 | Local accounts, backend: Argon2id, breached-password list, recovery code, per-device sessions, setup codes, Keycloak seam | Done (44 desktop tests) |
 | Local accounts, frontend: `/desktop-signin` (first-run owner, sign-in, set-up code, recovery, recovery-code screen) and `/account` "Sign-in & security" (your sign-ins, change password, owner hands out set-up codes) | Done. Verified end to end on Windows against a fresh install. Set-up codes live on `/account`, not upstream's Employees page, so no upstream page changed |
-| **First-run wizard:** hotel group → first property (name, PMS, fiscal calendar) → modules | **Next** |
-| Keys into the OS keychain (PRD A-4) | To do |
+| First-run wizard `/welcome`: hotel group → first hotel (name, name as its reports print it, PMS, rooms) → fiscal year → modules. Backend `src/usali/desktop/welcome_api.py` writes the property **with its detection alias** (upstream's `create_first_property` writes none, so its hotels could never match a report), rooms and fiscal calendar in one transaction. Layout sends the owner there until it's finished | Done. Verified end to end on Windows: fresh install → wizard → the sample choiceADVANTAGE pack dropped in the folder resolved to the new hotel and its statement built from the posted journal |
+| **Keys into the OS keychain (PRD A-4)** | **Next** — the last M2 item |
 
 ## Decisions already made (don't re-open without reason)
 
