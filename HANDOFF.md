@@ -68,9 +68,9 @@ uv run oh-desktop --sample-data --no-tray --no-browser   # prints a sign-in link
 | Desktop settings chain (own schema, own migration history) | Done |
 | Modules: registry, `create_app(mount=…)`, Modules page, live reload (ADR-D3) | Done |
 | Windows fix to upstream's portal fallback (unknown API paths answered 200) | Done, listed in `docs/desktop/UPSTREAM.md` |
-| **Local accounts, backend:** Argon2id, breached-password list, recovery code, per-device sessions, setup codes, Keycloak seam | **Written; see the last commit for its test status** |
-| **Local accounts, frontend:** sign-in / first-run / setup-code / recovery screens, "Your sign-ins", setup codes on the People page | **Next — until this lands, the app can't sign in** (the old M1 shortcut was removed) |
-| First-run wizard: hotel group → first property (name, PMS, fiscal calendar) → modules | To do |
+| Local accounts, backend: Argon2id, breached-password list, recovery code, per-device sessions, setup codes, Keycloak seam | Done (44 desktop tests) |
+| Local accounts, frontend: `/desktop-signin` (first-run owner, sign-in, set-up code, recovery, recovery-code screen) and `/account` "Sign-in & security" (your sign-ins, change password, owner hands out set-up codes) | Done. Verified end to end on Windows against a fresh install. Set-up codes live on `/account`, not upstream's Employees page, so no upstream page changed |
+| **First-run wizard:** hotel group → first property (name, PMS, fiscal calendar) → modules | **Next** |
 | Keys into the OS keychain (PRD A-4) | To do |
 
 ## Decisions already made (don't re-open without reason)

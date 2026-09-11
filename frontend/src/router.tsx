@@ -35,6 +35,7 @@ import SignupPage from './pages/SignupPage'
 import GlPage from './pages/GlPage'
 import DesktopSignInPage from './pages/DesktopSignInPage'
 import ModulesPage from './pages/ModulesPage'
+import AccountPage from './pages/AccountPage'
 import RouteErrorCard from './components/RouteErrorCard'
 import { CallbackPage, RootShell } from './RootShell'
 
@@ -292,7 +293,8 @@ const signupRoute = createRoute({
   }),
 })
 
-/** Desktop edition: trades the tray icon's one-time code for a session. */
+/** Desktop edition: the front door — first-run owner setup, sign-in,
+ * set-up codes and recovery (PRD 6.2). */
 const desktopSignInRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/desktop-signin',
@@ -306,10 +308,18 @@ const modulesRoute = createRoute({
   component: ModulesPage,
 })
 
+/** Desktop edition: your sign-ins, your password, and (owner) set-up codes. */
+const accountRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/account',
+  component: AccountPage,
+})
+
 const childRoutes = [
   callbackRoute,
   desktopSignInRoute,
   modulesRoute,
+  accountRoute,
   entryRoute,
   dashboardRoute,
   sosRoute,

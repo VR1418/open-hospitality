@@ -51,6 +51,7 @@ import {
   StatementIcon,
   SyncIcon,
   UploadIcon,
+  UserIcon,
   WalletIcon,
 } from './components/icons'
 
@@ -104,6 +105,7 @@ const SECTIONS: NavSection[] = [
     items: [
       { to: SETUP_PATH, label: 'Setup', icon: ChecklistIcon },
       { to: '/modules', label: 'Modules', icon: GridIcon, desktopOnly: true },
+      { to: '/account', label: 'Sign-in & security', icon: UserIcon, desktopOnly: true },
     ],
   },
   {

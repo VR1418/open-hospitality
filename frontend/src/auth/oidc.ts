@@ -3,10 +3,11 @@
 //   VITE_OIDC_AUTHORITY, VITE_OIDC_CLIENT_ID
 //
 // Desktop edition (VITE_AUTH_MODE=desktop, docs/desktop/): there is no OIDC
-// provider. The launcher's one-time code is traded for a token at
-// /desktop-signin, and that token is stored in the SAME oidc-client-ts user
-// store — so getUser(), getAccessToken(), authHeaders() and every page keep
-// working unchanged. Only login and logout know which mode they are in.
+// provider. /desktop-signin trades an email and password (or, on first run,
+// the new owner's details) for a locally minted token, stored in the SAME
+// oidc-client-ts user store — so getUser(), getAccessToken(), authHeaders()
+// and every page keep working unchanged. Only login and logout know which
+// mode they are in.
 import { User, UserManager, WebStorageStateStore, type UserProfile } from 'oidc-client-ts'
 
 export const desktopMode = import.meta.env.VITE_AUTH_MODE === 'desktop'
@@ -33,10 +34,13 @@ export const userManager = new UserManager({
 
 export function login(loginHint?: string): Promise<void> {
   if (desktopMode) {
-    // No provider to redirect to: the sign-in page explains how to open the
-    // books from the tray icon, which mints a fresh one-time code.
-    window.location.assign(DESKTOP_SIGNIN_PATH)
-    return Promise.resolve()
+    // No provider to redirect to: the sign-in page asks for a password. A
+    // stored token the server just refused (this device was signed out from
+    // another one, or the session ran out) goes first — otherwise the sign-in
+    // page would forward straight back to it.
+    return userManager.removeUser().then(() => {
+      window.location.assign(DESKTOP_SIGNIN_PATH)
+    })
   }
   return loginHint
     ? userManager.signinRedirect({ login_hint: loginHint })
@@ -44,6 +48,15 @@ export function login(loginHint?: string): Promise<void> {
 }
 export async function logout(): Promise<void> {
   if (desktopMode) {
+    // End the session on the server too, so this token dies now rather than
+    // at expiry. Best effort: signing out of this browser must never fail.
+    // Imported lazily because client.ts imports this module.
+    try {
+      const { authHeaders } = await import('../api/client')
+      await fetch('/api/desktop/signout', { method: 'POST', headers: await authHeaders() })
+    } catch {
+      // Offline or already ended: the local sign-out below still happens.
+    }
     await userManager.removeUser()
     window.location.assign(`${DESKTOP_SIGNIN_PATH}?signed-out=1`)
     return
