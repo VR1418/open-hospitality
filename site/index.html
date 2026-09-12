@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Hospitality — your night audit reports, turned into books</title>
+<meta name="description" content="Free desktop software for hotel owners. Drop your night audit PDFs in a folder and get a USALI profit and loss, occupancy and rates, and a general ledger. Everything runs on your own computer.">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2">
+<meta property="og:title" content="Open Hospitality">
+<meta property="og:description" content="Your night audit reports, turned into books. Runs entirely on your own computer.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ophosp.com/">
+<style>
+  /* No web fonts, no analytics, no third-party anything. A page that claims
+     your data never leaves your computer should not phone home to render. */
+  :root {
+    --red: #E0453B; --orange: #F7853A; --teal: #0D9B96;
+    --teal-soft: #56BBB7; --pink: #F0568F; --pink-soft: #F4A3C1;
+    --ink: #16181D; --muted: #5B6472; --line: #E3E7EC;
+    --bg: #ffffff; --raised: #F7F9FA;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--teal); }
+  h1, h2, h3 { line-height: 1.2; letter-spacing: -0.02em; }
+  h2 { font-size: 24px; margin: 48px 0 12px; }
+  h3 { font-size: 17px; margin: 28px 0 6px; }
+  p { margin: 0 0 14px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+
+  header { padding: 28px 0 0; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand .word { font-size: 20px; font-weight: 700; letter-spacing: -0.03em; }
+  .brand .word .a { color: var(--red); } .brand .word .b { color: var(--teal); }
+
+  .hero { padding: 40px 0 8px; }
+  .hero h1 { font-size: 40px; margin: 0 0 14px; }
+  .hero .lead { font-size: 19px; color: var(--muted); max-width: 40rem; }
+
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 26px 0 8px; }
+  .btn {
+    display: inline-block; background: var(--teal); color: #fff; text-decoration: none;
+    font-weight: 650; padding: 14px 22px; border-radius: 10px; font-size: 16px;
+  }
+  .btn:hover { background: #0b8a86; }
+  .btn.soon {
+    background: transparent; color: var(--muted); border: 1px solid var(--line);
+    font-weight: 600; cursor: not-allowed;
+  }
+  .meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .meta code { font-size: 12px; word-break: break-all; }
+
+  .grid { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin: 8px 0 0; }
+  .card { background: var(--raised); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
+  .card h3 { margin-top: 0; }
+  .card p:last-child { margin-bottom: 0; }
+
+  ol.steps { padding-left: 0; list-style: none; counter-reset: s; margin: 0; }
+  ol.steps li { counter-increment: s; position: relative; padding: 0 0 20px 46px; }
+  ol.steps li::before {
+    content: counter(s); position: absolute; left: 0; top: 0;
+    width: 30px; height: 30px; border-radius: 50%; background: var(--teal); color: #fff;
+    font-weight: 700; font-size: 14px; display: grid; place-items: center;
+  }
+  ol.steps strong { display: block; }
+
+  .note { border-left: 3px solid var(--orange); background: #FFF8F2; padding: 14px 18px; border-radius: 0 10px 10px 0; margin: 18px 0; }
+  .note strong { color: #9a4a05; }
+
+  ul.plain { padding-left: 20px; margin: 0 0 14px; }
+  ul.plain li { margin-bottom: 7px; }
+
+  footer { margin: 64px 0 48px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  footer a { color: var(--muted); }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --red: #FF675D; --orange: #FFA456; --teal: #27C6C0;
+      --ink: #E8EBEF; --muted: #A7B0BC; --line: #2A2E36;
+      --bg: #16181D; --raised: #1C1F26;
+    }
+    .btn { color: #10221F; }
+    .btn:hover { background: #4fd6d1; }
+    .note { background: #241a10; }
+    .note strong { color: var(--orange); }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 132 132" aria-hidden="true">
+      <circle cx="66" cy="20" r="14" fill="var(--red)"/>
+      <circle cx="106" cy="43" r="14" fill="var(--orange)"/>
+      <circle cx="106" cy="89" r="14" fill="var(--teal)"/>
+      <circle cx="66" cy="112" r="14" fill="var(--teal-soft)"/>
+      <circle cx="26" cy="89" r="14" fill="var(--pink)"/>
+      <circle cx="26" cy="43" r="14" fill="var(--pink-soft)"/>
+    </svg>
+    <span class="word"><span class="a">Open</span> <span class="b">Hospitality</span></span>
+  </div>
+</header>
+
+<section class="hero">
+  <h1>Your night audit reports,<br>turned into books.</h1>
+  <p class="lead">
+    Drop yesterday's PDFs in a folder. Get a USALI profit and loss, occupancy and
+    rates, a general ledger and a close-the-day check — for every hotel you own,
+    on one screen.
+  </p>
+
+  <div class="cta">
+    <a class="btn" href="/download/Open-Hospitality-Windows.zip" download>Download for Windows</a>
+    <span class="btn soon" aria-disabled="true">Mac — coming soon</span>
+  </div>
+  <p class="meta">
+    Windows 10 or 11 · 115&nbsp;MB · about 5&nbsp;GB free disk space · free and open source<br>
+    <span class="small">SHA-256 <code id="sha">bbd5e820b060482eda57ee1a9e28021f45d34e180087ccd512f65d9797ff2b14</code></span>
+  </p>
+</section>
+
+<h2>Everything is in the download</h2>
+<p>
+  There is nothing else to install. No database to set up, no runtime to chase, no
+  account to create with us — the download contains its own database and everything
+  else it needs, and it all runs on your computer.
+</p>
+
+<div class="grid">
+  <div class="card">
+    <h3>It reads your reports</h3>
+    <p>
+      Oracle OPERA, AutoClerk and choiceADVANTAGE, including whole audit packs.
+      On another system, an AI helper you supply can read the report instead —
+      and you confirm what it found.
+    </p>
+  </div>
+  <div class="card">
+    <h3>It keeps real books</h3>
+    <p>
+      A posted general ledger, not a spreadsheet. Corrections are reversals,
+      periods close, and the statement is built from the journal — so the numbers
+      tie, and it tells you when they don't.
+    </p>
+  </div>
+  <div class="card">
+    <h3>Every hotel at once</h3>
+    <p>
+      Last night's revenue, occupancy, ADR and RevPAR across the group, what the
+      night audit turned up, and which charge codes still need a decision.
+    </p>
+  </div>
+</div>
+
+<h2>Installing it</h2>
+<ol class="steps">
+  <li>
+    <strong>Unzip it somewhere with a short path.</strong>
+    <span class="muted"><code>C:\Open Hospitality</code> is ideal. Windows still refuses
+    file names over 260 characters, and unzipping into a deeply nested folder can
+    silently leave a few files behind.</span>
+  </li>
+  <li>
+    <strong>Double-click <code>Open Hospitality.exe</code>.</strong>
+    <span class="muted">Your browser opens by itself, and a ◆ icon appears near the
+    clock. First start takes under a minute while it creates your database.</span>
+  </li>
+  <li>
+    <strong>Create your account and save the recovery code.</strong>
+    <span class="muted">It is shown once. If you forget your password and lose that
+    code, nobody can open your books — not even us. There is no reset email,
+    because there is no email.</span>
+  </li>
+  <li>
+    <strong>Put your night audit PDFs in “Drop reports here”.</strong>
+    <span class="muted">Each is read within a few seconds. Then open Overview.</span>
+  </li>
+</ol>
+
+<div class="note">
+  <p><strong>Windows will warn you the first time.</strong></p>
+  <p class="small" style="margin:0">
+    A blue box saying “Windows protected your PC”. That is expected: the app is not
+    signed yet, because signing means buying a certificate and that has not been done
+    during testing. It is not a virus warning — Windows is saying it does not
+    recognise the publisher. Click <strong>More info</strong>, then <strong>Run
+    anyway</strong>. A black window stays open while the app runs; that is deliberate
+    for now, so you can see what it is doing.
+  </p>
+</div>
+
+<h2>Your figures stay on your computer</h2>
+<ul class="plain">
+  <li>No account with us, no sign-up, no licence check.</li>
+  <li>No telemetry. The app does not report back what you do with it.</li>
+  <li>Your books live in a database on your machine. Backups go to a folder you
+      choose — ideally one your cloud drive already syncs.</li>
+  <li>The only part that can reach the internet is the AI helper, and only if you
+      switch it on and supply your own AI account. It is off to begin with, it has a
+      monthly spending limit, and it is never shown a guest's name, a pay rate, a
+      bank detail or an account number.</li>
+</ul>
+
+<h2>What it does not do yet</h2>
+<ul class="plain">
+  <li><strong>Mac.</strong> Windows only for now.</li>
+  <li><strong>Signing.</strong> Hence the warning above.</li>
+  <li><strong>Reading your email.</strong> Reports go in the folder by hand today.</li>
+  <li><strong>Bank feeds and payroll filing.</strong> Neither exists.</li>
+  <li><strong>Tax.</strong> This is not a tax product and will not advise on tax.</li>
+</ul>
+<p class="small muted">
+  This is early software being tried by a handful of hotels. If something goes
+  wrong, the log it keeps holds no guest names and no money — only what the app
+  did — and sending it is the most useful thing you can do.
+</p>
+
+<footer>
+  <p>
+    <strong>Open Hospitality</strong> — a desktop build of the
+    <a href="https://github.com/csharp36/open-hospitality">open-hospitality</a>
+    project, under the Apache&nbsp;2.0 licence. Not endorsed by, affiliated with or
+    supported by the upstream project or its maintainers.
+  </p>
+  <p class="small">ophosp.com</p>
+</footer>
+
+</div>
+</body>
+</html>
