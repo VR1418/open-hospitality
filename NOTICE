@@ -58,12 +58,14 @@ Modified upstream files:
     frontend/src/pages/SosPage.tsx
     frontend/src/pages/UploadPage.tsx
     src/usali/gl_api.py
+    src/usali/ingestion.py
     src/usali/gl_posting.py
     src/usali/reporting.py
     src/usali/server.py
     src/usali/transform.py
     tests/test_gl_api.py
     tests/test_gl_posting.py
+    tests/test_skytouch_end_to_end.py
 
   The page-title changes are the desktop edition's plain-language names
   (docs/desktop/PRD-desktop-edition.md, appendix A): e.g. "Summary Operating

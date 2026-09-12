@@ -389,3 +389,64 @@ def _record_failure(session: Session, path: Path, exc: Exception) -> None:
     )
     session.add(batch)
     session.commit()
+
+
+def is_pack(session: Session, pdf_path: str | Path) -> bool:
+    """Does this PDF hold several reports rather than one?
+
+    A night-audit "pack" is a single PDF concatenating a dozen reports, and it
+    cannot be read by `process_file`: that reads the header of the document as
+    a whole, which belongs to whichever report the export happens to put
+    first — on a choiceADVANTAGE Standard Audit Pack, the A/R Aging Detail
+    Report, matching no signature at all.
+
+    Answered by asking the file, not the property: an upload names no property
+    until it is read. Split it the way `process_pack` splits it and see whether
+    any section is a report from a PMS that delivers packs. Read-only —
+    nothing is staged or moved — so a wrong "no" still ends in `process_file`'s
+    loud quarantine, never in a guess.
+    """
+    from usali.night_audit import PACK_UPLOAD
+
+    try:
+        registry = load_registry(session)
+        for section in split_pack(extract_pages(Path(pdf_path))):
+            try:
+                det = detect(section.words, registry, section.title)
+            except ValueError:
+                continue  # filler, or a property this install has not registered
+            if det.pms_source.upper() in PACK_UPLOAD:
+                return True
+    except Exception:
+        # Unreadable here means unreadable in `process_file` too, which says so
+        # properly. Never let the question itself become the error.
+        return False
+    return False
+
+
+def process_upload(
+    session: Session,
+    pdf_path: str | Path,
+    *,
+    processed_dir: Path,
+    failed_dir: Path,
+    edition: int = 12,
+) -> list[ProcessResult]:
+    """Ingest a PDF that may be one report or a whole pack.
+
+    For every caller who is handed a file by a person and cannot know which it
+    is — the upload route, the folder watch, the CLI. The night-audit upload
+    decides by the PROPERTY's PMS instead, because there the property is known
+    before the file is read.
+    """
+    if is_pack(session, pdf_path):
+        return process_pack(
+            session, pdf_path, processed_dir=processed_dir,
+            failed_dir=failed_dir, edition=edition,
+        )
+    return [
+        process_file(
+            session, pdf_path, processed_dir=processed_dir,
+            failed_dir=failed_dir, edition=edition,
+        )
+    ]

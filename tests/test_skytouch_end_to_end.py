@@ -149,3 +149,77 @@ def test_pack_section_title_decides_the_signature_not_a_body_column():
         "SKYTOUCH",
         "hotel_statistics",
     )
+
+
+def test_a_pack_is_recognised_as_one_before_anything_is_staged(db_session, tmp_path):
+    """`is_pack` asks the FILE, because an upload names no property until it
+    is read. Read-only: a wrong "no" still ends in process_file's loud
+    quarantine, never in a guess."""
+    seed_schedules(db_session, "mapping/usali_schedules.yaml")
+    load_mappings(db_session, "mapping/skytouch.yaml")
+    seed_properties(db_session, "mapping/properties.yaml")
+    db_session.commit()
+
+    assert ingestion.is_pack(db_session, SAMPLE) is True
+    before = db_session.scalar(select(func.count()).select_from(IngestBatch))
+    ingestion.is_pack(db_session, SAMPLE)
+    assert db_session.scalar(select(func.count()).select_from(IngestBatch)) == before
+
+
+def test_one_report_is_not_mistaken_for_a_pack(db_session, tmp_path):
+    seed_schedules(db_session, "mapping/usali_schedules.yaml")
+    load_mappings(db_session, "mapping/opera.yaml")
+    seed_properties(db_session, "mapping/properties.yaml")
+    db_session.commit()
+
+    single = Path("docs/reference/samples/Trial Balance 07.07.2026 - Opera.pdf")
+    assert ingestion.is_pack(db_session, single) is False
+
+
+def test_an_uploaded_pack_reads_like_a_dropped_one(db_session, tmp_path):
+    """The bug this fixes: the upload route read a pack with `process_file`,
+    which sees the header of the document as a whole rather than any one
+    report's. On a real choiceADVANTAGE Standard Audit Pack that header
+    belongs to the A/R Aging Detail Report and matches no signature, so the
+    owner got "could not detect report type from PDF header" for a file the
+    drop folder reads perfectly well.
+
+    The message depends on which report the export happens to put first, so
+    this asserts only that reading a pack as one report FAILS — on this mock
+    the first section trips the AutoClerk rate-plan signature instead. Both
+    are refusals the owner can do nothing with."""
+    seed_schedules(db_session, "mapping/usali_schedules.yaml")
+    load_mappings(db_session, "mapping/skytouch.yaml")
+    seed_properties(db_session, "mapping/properties.yaml")
+    db_session.commit()
+
+    drop = tmp_path / SAMPLE.name
+    shutil.copy(SAMPLE, drop)
+    with pytest.raises(ProcessingError):
+        ingestion.process_file(
+            db_session, drop, processed_dir=tmp_path / "d", failed_dir=tmp_path / "f"
+        )
+
+    again = tmp_path / ("second_" + SAMPLE.name)
+    shutil.copy(SAMPLE, again)
+    results = ingestion.process_upload(
+        db_session, again, processed_dir=tmp_path / "d2", failed_dir=tmp_path / "f2"
+    )
+    kinds = {(r.pms_source, r.report_type) for r in results}
+    assert ("SKYTOUCH", "hotel_journal") in kinds
+    assert ("SKYTOUCH", "hotel_statistics") in kinds
+
+
+def test_process_upload_still_returns_one_report_for_one_report(db_session, tmp_path):
+    seed_schedules(db_session, "mapping/usali_schedules.yaml")
+    load_mappings(db_session, "mapping/opera.yaml")
+    seed_properties(db_session, "mapping/properties.yaml")
+    db_session.commit()
+
+    single = Path("docs/reference/samples/Trial Balance 07.07.2026 - Opera.pdf")
+    drop = tmp_path / single.name
+    shutil.copy(single, drop)
+    [only] = ingestion.process_upload(
+        db_session, drop, processed_dir=tmp_path / "d", failed_dir=tmp_path / "f"
+    )
+    assert (only.pms_source, only.report_type) == ("OPERA", "trial_balance")

@@ -26,7 +26,7 @@ from usali.crm_api import router as crm_router
 from usali.crm_feed import CrmFeed
 from usali.db import make_engine, make_session_factory
 from usali.detect import detect_report_signature
-from usali.ingestion import ProcessingError, process_file
+from usali.ingestion import ProcessingError, process_upload
 from usali.integrations_api import callback_router as integrations_callback_router
 from usali.integrations_api import qbo_redirect_uri
 from usali.integrations_api import router as integrations_router
@@ -526,7 +526,7 @@ def create_app(
     async def ingest(request: Request, file: UploadFile) -> dict[str, object]:
         # The request's org-bound factory (L3): the upload lands inside
         # the caller's validated active org — require_active_org stashed
-        # the factory, and both walls confine every row process_file
+        # the factory, and both walls confine every row the ingest
         # writes. The session opens BEFORE anything touches the inbox:
         # opening it is what fires the deferred alias -> org_id
         # resolution, and a token whose org has no DB row must refuse
@@ -566,21 +566,33 @@ def create_app(
                     status_code=409, detail="an upload with that filename is pending"
                 ) from exc
             try:
-                r = process_file(
+                # A person hands this route a file; they cannot be expected to
+                # know whether it is one report or a night-audit pack. A pack
+                # read as one report fails on the header of whichever section
+                # the export puts first, which tells them nothing they can act
+                # on (desktop edition).
+                results = process_upload(
                     session, dest, processed_dir=processed, failed_dir=failed
                 )
             except ProcessingError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return {
-            "pms_source": r.pms_source,
-            "report_type": r.report_type,
-            "property_id": r.property_id,
-            "business_date": r.business_date.isoformat(),
-            "staged": r.staged,
-            "mapped": r.mapped,
-            "unmapped": r.unmapped,
-            "skipped": r.skipped,
-        }
+        reports = [
+            {
+                "pms_source": r.pms_source,
+                "report_type": r.report_type,
+                "property_id": r.property_id,
+                "business_date": r.business_date.isoformat(),
+                "staged": r.staged,
+                "mapped": r.mapped,
+                "unmapped": r.unmapped,
+                "skipped": r.skipped,
+            }
+            for r in results
+        ]
+        # The single-report keys stay at the top level, describing the first
+        # section of a pack, so every existing caller keeps working; `reports`
+        # is what a pack is actually read through.
+        return {**reports[0], "reports": reports}
 
     if allow("ingest"):
         app.post("/ingest", dependencies=operator_gates)(ingest)

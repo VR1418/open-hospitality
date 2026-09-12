@@ -19,16 +19,11 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from sqlalchemy.orm import Session
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver
 
-from usali.adaptors.pack import split_pack
-from usali.adaptors.pdf import extract_pages
-from usali.detect import detect, load_registry
-from usali.ingestion import ProcessingError, ProcessResult, process_file, process_pack
-from usali.night_audit import PACK_UPLOAD
+from usali.ingestion import ProcessingError, ProcessResult, process_upload
 from usali.tenancy import SessionFactory
 
 _LOG = logging.getLogger("usali.desktop.intake")
@@ -56,30 +51,6 @@ def _wait_until_written(path: Path, timeout: float = _WRITE_SETTLE_TIMEOUT_SECON
             return True
         last = size
         time.sleep(0.5)
-    return False
-
-
-def _is_pack(session: Session, path: Path) -> bool:
-    """Does this PDF belong on `process_pack` rather than `process_file`?
-
-    Upstream's night-audit upload decides by the PROPERTY's PMS
-    (`night_audit.PACK_UPLOAD`), but a dropped file names no property until it
-    is read. So ask the file the same question: split it the way process_pack
-    splits it, and see whether any section is a report from a PMS that
-    delivers packs. Read-only — nothing is staged or moved here — so a wrong
-    "no" still ends in process_file's loud quarantine, never in a guess.
-    """
-    try:
-        registry = load_registry(session)
-        for section in split_pack(extract_pages(path)):
-            try:
-                det = detect(section.words, registry, section.title)
-            except ValueError:
-                continue  # filler or an unregistered property, as process_pack skips it
-            if det.pms_source.upper() in PACK_UPLOAD:
-                return True
-    except Exception:
-        _LOG.debug("pack check could not read %s; treating it as one report", path.name)
     return False
 
 
@@ -154,15 +125,12 @@ class ReportIntake:
                 continue
             try:
                 with self._factory() as session:
-                    results: list[ProcessResult]
-                    if _is_pack(session, path):
-                        results = process_pack(
-                            session, path, processed_dir=self._read, failed_dir=self._unreadable
-                        )
-                    else:
-                        results = [process_file(
-                            session, path, processed_dir=self._read, failed_dir=self._unreadable
-                        )]
+                    # One report or a whole pack — `process_upload` asks the
+                    # file, and the upload route asks it the same way.
+                    results: list[ProcessResult] = process_upload(
+                        session, path, processed_dir=self._read,
+                        failed_dir=self._unreadable,
+                    )
                 for r in results:
                     _LOG.info(
                         "read %s: %s/%s %s %s mapped=%d unmapped=%d",

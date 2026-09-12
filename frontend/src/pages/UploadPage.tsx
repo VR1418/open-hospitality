@@ -7,7 +7,7 @@
 import { Fragment, useRef, useState } from 'react'
 
 import { postIngest } from '../api/client'
-import type { IngestResult } from '../api/types'
+import type { IngestReport, IngestResult } from '../api/types'
 import { Card, PageHeader } from '../components/ui'
 import { errorMessage } from '../lib/errors'
 
@@ -153,6 +153,28 @@ function ResultCard({ item }: { item: UploadItem }) {
 }
 
 function IngestSummary({ result }: { result: IngestResult }) {
+  // A night-audit pack is one file holding a dozen reports. Showing only the
+  // first section would under-report what was just read.
+  const reports = result.reports ?? [result]
+  if (reports.length > 1) {
+    return (
+      <div className="mt-2 flex flex-col gap-2">
+        <p className="text-sm text-ink-muted">
+          {reports.length} reports were in this file.
+        </p>
+        {reports.map((r) => (
+          <div key={`${r.report_type}-${r.property_id}-${r.business_date}`}>
+            <p className="text-sm font-medium text-ink">{r.report_type}</p>
+            <ReportFields report={r} />
+          </div>
+        ))}
+      </div>
+    )
+  }
+  return <ReportFields report={reports[0] ?? result} />
+}
+
+function ReportFields({ report: result }: { report: IngestReport }) {
   const fields: [string, string | number][] = [
     ['PMS source', result.pms_source],
     ['Report type', result.report_type],

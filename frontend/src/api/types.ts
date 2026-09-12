@@ -300,7 +300,7 @@ export interface UnmappedGlLine {
 
 // --- POST /ingest result (see server.py's ingest handler) --------------------
 
-export interface IngestResult {
+export interface IngestReport {
   pms_source: string
   report_type: string
   property_id: string
@@ -309,6 +309,13 @@ export interface IngestResult {
   mapped: number
   unmapped: number
   skipped: number
+}
+
+/** One upload's outcome. The top-level fields describe the first report —
+ *  for a night-audit pack, its first section — and `reports` lists every
+ *  section that was read. Older servers omit `reports`. */
+export interface IngestResult extends IngestReport {
+  reports?: IngestReport[]
 }
 
 // --- Employees / onboarding (A2.3) ------------------------------------------
