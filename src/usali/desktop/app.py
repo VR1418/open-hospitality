@@ -33,6 +33,7 @@ from fastapi import FastAPI
 from usali.desktop import (
     accounts_api,
     backup_api,
+    codes_api,
     modules_api,
     portfolio_api,
     session_api,
@@ -150,6 +151,11 @@ def build_app(
         inbox_dir=paths.uploads,
         processed_dir=paths.read_folder,
         failed_dir=paths.unreadable_folder,
+        # Given explicitly, not left to the environment: this is the factory
+        # carrying the install's per-hotel code decisions, and without it the
+        # REQUEST path — /ingest, the night-audit upload, the codes page —
+        # would build its own from USALI_DB_URL and never see them.
+        session_factory=sessions,
         # Upstream's verifier over the local key, plus "is this sign-in still live?"
         token_verifier=issuer.verifier(session_is_live=checker),
         # Upstream's onboarding creates and disables LOCAL logins through its
@@ -170,6 +176,7 @@ def build_app(
     modules_api.install(app, enabled=enabled, reload=reload)
     welcome_api.install(app, paths=paths)
     portfolio_api.install(app)
+    codes_api.install(app)
     update_api.install(app)
     backup_api.install(app, paths=paths, store=store or MemoryKeyStore(), sessions=sessions)
     if dist.is_dir():
