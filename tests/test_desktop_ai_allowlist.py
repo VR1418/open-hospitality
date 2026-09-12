@@ -143,3 +143,35 @@ def test_the_question_names_every_field_that_may_leave() -> None:
     }
     # And none of them is a person, a rate, or an account.
     assert not {f for f in CodeQuestion.__dataclass_fields__ if "name" in f} - {"pms_source"}
+
+
+def test_a_guest_name_is_refused_even_though_we_never_stored_it() -> None:
+    """Employee names we can look up. A GUEST's we cannot — the product
+    deliberately never stores one — so for report text the printed SHAPE is
+    all that stands between a guest list and a third party."""
+    with pytest.raises(BlockedContent) as e:
+        check("CHECKED OUT CANTU, MARCUS JAY 204 7/13/26")
+    assert "person's name" in str(e.value)
+    assert "CANTU" not in str(e.value)
+
+
+def test_a_heading_that_looks_like_a_name_errs_towards_holding_it_back() -> None:
+    """"NAME, COMPANY" is a column heading, not a person — but nothing in the
+    text says so. The rule errs towards refusing, because the cost is one page
+    withheld and the cost of the other mistake is a guest list sent to a third
+    party. Measured on a real pack, it costs nothing: the summary pages the
+    figures live on survive it."""
+    with pytest.raises(BlockedContent):
+        check("DATE ACCOUNT ROOM NAME, COMPANY GUEST TAX ID")
+    # Ordinary prose and mixed case are untouched: the shape is ALL CAPS,
+    # which is how a front-desk system prints a guest.
+    check("Description (Transaction Code) Postings, Corrections, Adjustments")
+
+
+def test_a_summary_line_of_codes_and_money_passes() -> None:
+    """What a night-audit summary page actually looks like. If the scan
+    blocked this there would be nothing left to send."""
+    check(
+        "Hotel Journal Summary Business Date: 9/10/2026 Property Code: TXC22 "
+        "RM Room Charge 7,147.07 T1 State Occ Tax 437.42 VI Visa Payment (2,406.13)"
+    )

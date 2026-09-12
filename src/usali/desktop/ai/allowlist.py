@@ -23,6 +23,7 @@ rate is not — "23.17" is indistinguishable from a room charge. That one rests
 on construction alone, which is why construction is the control.
 """
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
@@ -33,6 +34,15 @@ from sqlalchemy.orm import Session
 
 from usali.models import Employee
 from usali.redaction import mask_pans
+
+
+#: How a front-desk system prints a guest: "CANTU, MARCUS JAY". Employee names
+#: we can look up; a GUEST's we cannot, because the product deliberately never
+#: stores one — so for report text this shape is the only thing standing
+#: between a guest list and a third party. Two or more capitalised runs either
+#: side of a comma, which report COLUMN HEADINGS ("NAME, COMPANY") do not
+#: match, because those are single words.
+_GUEST_NAME = re.compile(r"\b[A-Z]{2,}, ?[A-Z]{2,}\b")
 
 
 class BlockedContent(RuntimeError):
@@ -168,6 +178,9 @@ def check(text: str, *, names: Iterable[str] = ()) -> None:
     # nine consecutive digits at these sizes; codes and dates are shorter.
     if any(len(d) >= 9 for d in digits):
         raise BlockedContent("a long run of digits, which could be an account number")
+
+    if _GUEST_NAME.search(text):
+        raise BlockedContent("something shaped like a person's name")
 
     lowered = text.lower()
     # An SSN as printed. The bare-digit rule above catches the unpunctuated form.
