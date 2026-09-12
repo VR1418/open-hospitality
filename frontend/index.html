@@ -2,7 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- ?v= is not decoration. The desktop app always serves from
+         127.0.0.1, so the favicon URL never changes between builds, and a
+         browser caches a favicon far past an ordinary reload — an owner who
+         has run this before keeps seeing the previous icon for ever. Bump
+         it whenever public/favicon.svg changes. -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Open Hospitality</title>
   </head>
