@@ -13,7 +13,12 @@ most of it your own reading.*
 
 ## 1. Install it
 
-1. Unzip the folder you were sent — `C:\Open Hospitality` is a good place.
+1. Unzip the folder you were sent. **Somewhere with a short path** —
+   `C:\Open Hospitality` is ideal. Windows still refuses file names longer
+   than 260 characters, and some of the files inside are long, so unzipping
+   into something deeply nested can silently leave a few behind. If it starts
+   and immediately closes with an error naming a file it can't find, that is
+   what happened: unzip it again somewhere shorter.
 2. Open that folder and double-click **Open Hospitality.exe**.
 
 ## 2. The warning you will see
