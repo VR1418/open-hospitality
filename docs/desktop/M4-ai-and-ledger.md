@@ -1,6 +1,6 @@
 # M4 — the owner's own AI, and the ledger it has to be safe around
 
-**Status:** Phases 1 and 2 built and tested · **PRD:** [PRD-desktop-edition.md](PRD-desktop-edition.md) §6.3, AI-1…AI-8
+**Status:** Phases 1 and 2 built and tested; 3 and 4 designed · **PRD:** [PRD-desktop-edition.md](PRD-desktop-edition.md) §6.3, AI-1…AI-8
 
 Two requests, and they turn out to be one piece of work: *let the owner point their own
 AI at the transactions and have it evaluate the entries*, and *check the ledger build*.
@@ -227,3 +227,75 @@ The PRD budgets M4 at three weeks for **email intake plus AI**. Phase 1 is not i
 line and is roughly a week on its own. It is still the right order: without it an
 accepted AI suggestion has nowhere to be written that another hotel in the group won't
 overwrite, and no record of who accepted it.
+
+
+---
+
+## Phase 3 — reading a report the product has no parser for
+
+*Asked for after a tester hit the wall: a hotel whose front-desk system is not
+one of the three cannot get past the wizard at all. It refuses with "Open
+Hospitality can't read reports from that system yet" and will not create the
+hotel, so nothing else in the app is reachable either.*
+
+### The safety question, settled first
+
+Reading an unknown report means showing a model text we did not write, and a
+night-audit export is full of things that must never leave. The real
+choiceADVANTAGE pack behind this carries guest names, account numbers, guest
+tax IDs and balances.
+
+The decision (owner's call, taken 11 Sep 2026): **the model only ever sees
+pages that pass the outbound scan.** Not the whole report with a consent
+tick — that would make "never a guest name" untrue, and it is currently
+printed in the install guide.
+
+Built already (`desktop/ai/pages.py`): the report is split into pages, each
+page is run through `allowlist.check`, and a page either goes whole or is
+dropped whole with the reason named. Measured on the real pack: 21 of 48 pages
+kept, and **no kept page carries a person's name**. What survives is the
+summary — the only part the books need.
+
+### Still to build
+
+| | |
+|---|---|
+| **Ask** | A second question type in `allowlist`: the kept page text plus the hotel's name, asking for `[{code, description, amount}]` and a business date. This one is FILTERED, not constructed — recorded in ADR-D7 as the single exception, with `pages` as the reason it is acceptable. |
+| **Confirm** | The extracted rows are shown in a table and the owner accepts them. Nothing is staged from a model's word alone (AI-6). |
+| **Stage** | Accepted rows become `PmsDailyFinancialStage` rows under `pms_source="OTHER"`, then upstream's ordinary `transform` → `post_and_record`. Because the shipped dictionary has no OTHER rows, every code lands as a `MappingException` — which is to say, straight into **Codes to confirm**, where Phase 1 already handles it. |
+| **Wizard** | "My system isn't listed" stops being a dead end: the hotel is created, and the screen says plainly that reports will be read with the AI helper's assistance and confirmed by them. |
+
+The thing to notice: Phase 1 and Phase 3 meet without new machinery. An
+AI-read report produces unmapped codes, and unmapped codes already have a
+queue, a money figure and a confirm button.
+
+---
+
+## Phase 4 — reports that arrive by email
+
+*PRD M4's other half (Himalaya), plus what the owner asked for on top: the
+reports differ hotel to hotel, so the AI must read them all, work out which
+hotel each belongs to, and **remember** how — rather than being asked again
+every morning.*
+
+That last word is the design. Asking a model every day is expensive against
+the AI-2 cap, slow, and — worse — non-deterministic: the same email could be
+read two ways on two mornings. So the AI's job is to work out the recipe
+**once**, and the app's job is to replay it.
+
+| | |
+|---|---|
+| **Fetch** | Himalaya, bundled like Postgres, reading one mailbox the owner connects. Attachments land in the drop folder the folder watch already drains, so intake needs no new path. |
+| **Whose hotel** | A learned route: sender address and subject shape → hotel. Proposed by the AI from the SUBJECT and SENDER only — never the body, which needs no scan because it is never read. Confirmed by the owner once, then stored and replayed. |
+| **How to read it** | A recipe keyed by a fingerprint of the layout (the page titles and column headings, which carry no guest data). The first time a shape is seen, Phase 3 asks the model; the owner confirms; the recipe is stored. Every later email of that shape is read by replaying it, with no model call and no cost. |
+| **When it drifts** | A recipe that stops matching — the PMS changed its layout — is not silently re-guessed. The report is set aside, the owner is told the shape changed, and the AI is asked again only on their say-so. |
+
+Two tables, both following the `mapping_decision` pattern already proven in
+Phase 1: keyed naturally, carrying who decided and when, never deleted.
+
+### What this is not
+
+Email is a door into the machine. The mailbox is read-only, attachments are
+only ever PDFs, and nothing in an email's body is executed, followed or shown
+to a model. A sender the owner has not confirmed gets its report set aside
+rather than ingested.
