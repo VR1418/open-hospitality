@@ -1,6 +1,6 @@
 # M4 — the owner's own AI, and the ledger it has to be safe around
 
-**Status:** Phase 1 built and tested · **PRD:** [PRD-desktop-edition.md](PRD-desktop-edition.md) §6.3, AI-1…AI-8
+**Status:** Phases 1 and 2 built and tested · **PRD:** [PRD-desktop-edition.md](PRD-desktop-edition.md) §6.3, AI-1…AI-8
 
 Two requests, and they turn out to be one piece of work: *let the owner point their own
 AI at the transactions and have it evaluate the entries*, and *check the ledger build*.
@@ -160,7 +160,25 @@ plan. Upstream pull request.
 **1e. Filter the plan builder by `pms_source` and `usali_edition`.** Small, and it
 prevents a silent double-count. Upstream pull request.
 
-### Phase 2 — the AI, as a source of suggestions into that queue
+### Phase 2 — the AI, as a source of suggestions into that queue — **built**
+
+| | Where |
+|---|---|
+| Port, two adapters, a mock | `desktop/ai/port.py`, `openai_compatible.py`, `anthropic.py`, `mock.py`, `reply.py` — 15 tests, all offline |
+| AI-1 key in its own keychain entry | `desktop/ai/config.py`, `keystore.install_id` |
+| AI-2/3 cap and visible spend | `desktop/ai/spend.py`, migration `d0004` — 10 tests |
+| AI-4 allow-list | `desktop/ai/allowlist.py` — 12 tests, its own file as the PRD asks |
+| AI-5 audit | `desktop.ai_call` plus an `AuditEvent` per call |
+| AI-6 human confirms | no apply endpoint; acceptance goes through `PUT /api/desktop/codes/{code}` with `origin="ai-accepted"` |
+| AI-7 declining | `Answer.__post_init__` refuses a decline with no reason |
+| AI-8 off by default | a module (ADR-D3); off means the routes are not mounted |
+| Screens | `AiPage.tsx` (12 tests) and the suggest control on `CodesPage.tsx` (6 more) |
+
+Decisions recorded in [ADR-D7](adr/adr-d7-owner-supplied-ai.md).
+
+Suites after: 182 desktop, 609 frontend.
+
+
 
 **What it does, in this order of value:**
 

@@ -32,6 +32,7 @@ from fastapi import FastAPI
 
 from usali.desktop import (
     accounts_api,
+    ai_api,
     backup_api,
     codes_api,
     modules_api,
@@ -177,6 +178,11 @@ def build_app(
     welcome_api.install(app, paths=paths)
     portfolio_api.install(app)
     codes_api.install(app)
+    # ADR-D3 again: with the AI module off, these routes do not exist at all,
+    # which is what makes PRD AI-8 ("with AI disabled, every feature still
+    # works") true by construction rather than by a flag somewhere.
+    if "ai" in enabled:
+        ai_api.install(app, paths=paths, store=store or MemoryKeyStore())
     update_api.install(app)
     backup_api.install(app, paths=paths, store=store or MemoryKeyStore(), sessions=sessions)
     if dist.is_dir():

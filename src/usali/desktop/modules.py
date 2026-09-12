@@ -150,7 +150,49 @@ UTILITIES = Module(
     ),
 )
 
-MODULES: tuple[Module, ...] = (ACCOUNTING, PAYROLL, UTILITIES)
+AI = Module(
+    id="ai",
+    name="AI helper",
+    summary=(
+        "Point your own AI at the charge codes on your reports and have it suggest "
+        "where each one belongs. You bring the account; we never hold it, and we "
+        "never take a cut."
+    ),
+    status="available",
+    required=False,
+    default_on=False,
+    # Its routes are mounted by the desktop's own build_app, not by upstream's
+    # create_app, so it owns no create_app surface (ADR-D3, ADR-D7).
+    surfaces=frozenset(),
+    nav=("/ai",),
+    limitations=(
+        Limitation(
+            "It only suggests. Nothing it says reaches your books until you click "
+            "to accept it, and your name goes on that decision, not the model's.",
+        ),
+        Limitation(
+            "It costs whatever your provider charges. There is a monthly limit, set "
+            "to $10 to begin with, and the app stops when it is reached.",
+            workaround="Raise or lower the limit in AI settings at any time.",
+        ),
+        Limitation(
+            "What it is shown is fixed in code: the charge code, how the report "
+            "describes it, the dates and the amounts. It is never shown a person's "
+            "name, a pay rate, a bank detail or an account number.",
+        ),
+        Limitation(
+            "It refuses tax and capital-versus-expense questions rather than guess, "
+            "because getting those wrong costs more than not asking.",
+            workaround="Ask your accountant, then record the answer yourself.",
+        ),
+        Limitation(
+            "With this off, everything still works. Confirming codes by hand is the "
+            "same screen, without the suggest button.",
+        ),
+    ),
+)
+
+MODULES: tuple[Module, ...] = (ACCOUNTING, PAYROLL, AI, UTILITIES)
 BY_ID: dict[str, Module] = {m.id: m for m in MODULES}
 
 

@@ -536,7 +536,16 @@ export async function getCodeLines(): Promise<CodeLine[]> {
 
 export async function confirmCode(
   code: string,
-  body: { property_id: string; pms_source: string; line: CodeLine; note?: string },
+  body: {
+    property_id: string
+    pms_source: string
+    line: CodeLine
+    note?: string
+    /** 'owner' chose it outright; 'ai-accepted' means they accepted what the
+     * model suggested. Either way a person clicked, and their name is what
+     * the decision records. */
+    origin?: 'owner' | 'ai-accepted'
+  },
 ): Promise<ConfirmResult> {
   const res = await signedIn(`/api/desktop/codes/${encodeURIComponent(code)}`, {
     method: 'PUT',
@@ -544,4 +553,102 @@ export async function confirmCode(
     body: JSON.stringify(body),
   })
   return (await res.json()) as ConfirmResult
+}
+
+// --- The owner's own AI helper (PRD §6.3, ADR-D7) ---------------------------
+// The key is write-only here and read nowhere: the server returns
+// `key_saved`, never the key itself.
+
+export type AiProviderChoice = {
+  id: string
+  name: string
+  needs_address: boolean
+  needs_key: boolean
+}
+
+export type AiSpend = {
+  month_start: string
+  calls: number
+  /** Null when some of the month's calls could not be priced — an honest
+   * "we don't know", never a total that quietly omits them. */
+  estimated_cost: string | null
+  unpriced_calls: number
+  cap: string
+  max_calls: number
+  stopped: boolean
+}
+
+export type AiSettings = {
+  provider: string | null
+  model: string
+  base_url: string | null
+  cap: string
+  max_calls: number
+  price_in: string | null
+  price_out: string | null
+  key_saved: boolean
+  local: boolean
+  spend: AiSpend
+  providers: AiProviderChoice[]
+}
+
+export type AiSettingsIn = {
+  provider: string
+  model: string
+  base_url?: string | null
+  cap: string
+  max_calls: number
+  price_in?: string | null
+  price_out?: string | null
+  /** Only when setting or replacing it. It goes to this computer's password
+   * store and never to the database. */
+  key?: string
+}
+
+export type AiSuggestion = {
+  code: string
+  /** Null when the model declined, which it is required to be able to do on
+   * tax and capitalisation questions. */
+  line: CodeLine | null
+  confidence: string
+  reason: string
+  decline_reason: string | null
+  estimated_cost: string | null
+  model: string
+  spend: AiSpend
+}
+
+/** Null when the AI module is off — its routes are then not mounted at all. */
+export async function getAiSettings(): Promise<AiSettings | null> {
+  const res = await fetch('/api/desktop/ai', { headers: await authHeaders() })
+  if (res.status === 404) return null
+  if (res.status === 401) redirectToLogin()
+  if (!res.ok) throw new Error(await detail(res))
+  return (await res.json()) as AiSettings
+}
+
+export async function saveAiSettings(body: AiSettingsIn): Promise<AiSettings> {
+  const res = await signedIn('/api/desktop/ai', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return (await res.json()) as AiSettings
+}
+
+export async function forgetAiKey(): Promise<void> {
+  await signedIn('/api/desktop/ai/key', { method: 'DELETE' })
+}
+
+export async function suggestCode(body: {
+  property_id: string
+  pms_source: string
+  code: string
+}): Promise<AiSuggestion> {
+  const res = await signedIn('/api/desktop/ai/suggest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return (await res.json()) as AiSuggestion
 }

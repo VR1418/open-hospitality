@@ -12,8 +12,11 @@ import { Fragment, useState } from 'react'
 
 import {
   confirmCode,
+  getAiSettings,
   getCodeLines,
   getCodes,
+  suggestCode,
+  type AiSuggestion,
   type CodeItem,
   type CodeLine,
   type ConfirmResult,
@@ -71,17 +74,37 @@ function Editor({
   item,
   lines,
   busy,
+  aiOn,
+  asking,
+  askError,
+  suggestion,
+  onAsk,
   onCancel,
   onConfirm,
 }: {
   item: CodeItem
   lines: CodeLine[]
   busy: boolean
+  aiOn: boolean
+  asking: boolean
+  askError: string | null
+  suggestion: AiSuggestion | null
+  onAsk: () => void
   onCancel: () => void
-  onConfirm: (line: CodeLine, note: string) => void
+  onConfirm: (line: CodeLine, note: string, origin: 'owner' | 'ai-accepted') => void
 }) {
   const startsAt = item.current === null ? -1 : lines.findIndex((l) => sameLine(l, item.current!))
-  const [chosen, setChosen] = useState<number>(startsAt)
+  // Derived, not set from an effect: a suggestion that arrives moves the
+  // picker, and anything the person picks themselves wins from then on.
+  const [picked, setPicked] = useState<number | null>(null)
+  const suggested =
+    suggestion?.line == null ? -1 : lines.findIndex((l) => sameLine(l, suggestion.line!))
+  const chosen = picked ?? (suggested >= 0 ? suggested : startsAt)
+  const setChosen = (i: number) => setPicked(i)
+  // Accepting what it said is recorded as that; choosing something else is
+  // the owner's own decision, and says so.
+  const origin: 'owner' | 'ai-accepted' =
+    suggested >= 0 && chosen === suggested ? 'ai-accepted' : 'owner'
   const [note, setNote] = useState('')
   const selectId = `line-for-${item.code}`
   const noteId = `note-for-${item.code}`
@@ -121,6 +144,47 @@ function Editor({
               onChange={(e) => setNote(e.target.value)}
             />
           </label>
+          {aiOn && (
+            <div className="flex flex-col gap-2 rounded-lg border border-line p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className={buttonClass}
+                  disabled={asking || busy}
+                  onClick={onAsk}
+                >
+                  {asking ? 'Asking…' : `Ask the AI about ${item.code}`}
+                </button>
+                {suggestion !== null && (
+                  <span className="text-xs text-ink-muted">
+                    {suggestion.model}
+                    {suggestion.estimated_cost !== null &&
+                      ` · about $${suggestion.estimated_cost}`}
+                  </span>
+                )}
+              </div>
+              {askError !== null && (
+                <p role="alert" className="text-sm text-danger-red">
+                  {askError}
+                </p>
+              )}
+              {suggestion !== null && suggestion.line === null && (
+                <p className="text-sm text-ink">
+                  It wouldn’t guess: {suggestion.decline_reason}
+                </p>
+              )}
+              {suggestion !== null && suggestion.line !== null && (
+                <p className="text-sm text-ink">
+                  It suggests <span className="font-medium">{lineLabel(suggestion.line)}</span>{' '}
+                  ({suggestion.confidence} confidence). {suggestion.reason}
+                </p>
+              )}
+              <p className="text-xs text-ink-muted">
+                A suggestion only. Nothing changes until you press Confirm, and the decision
+                is recorded in your name.
+              </p>
+            </div>
+          )}
           <p className="text-xs text-ink-muted">
             Every day this code appears on will be worked out again and your books reposted.
             Days in a month you have already closed are left alone.
@@ -130,7 +194,7 @@ function Editor({
               type="button"
               className={primaryButtonClass}
               disabled={busy || chosen < 0}
-              onClick={() => onConfirm(lines[chosen], note)}
+              onClick={() => onConfirm(lines[chosen], note, origin)}
             >
               {busy ? 'Working…' : 'Confirm'}
             </button>
@@ -157,17 +221,42 @@ export default function CodesPage() {
     retry: false,
   })
   const lines = useQuery({ queryKey: ['code-lines'], queryFn: getCodeLines, retry: false })
+  // Null when the AI module is off — its routes are not mounted at all, so
+  // the button simply isn't there and the manual path is unchanged (AI-8).
+  const ai = useQuery({ queryKey: ['ai'], queryFn: getAiSettings, retry: false })
+
+  const ask = useMutation({
+    mutationFn: (item: CodeItem) =>
+      suggestCode({
+        property_id: property!,
+        pms_source: item.pms_source,
+        code: item.code,
+      }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['ai'] }),
+  })
 
   const confirm = useMutation({
-    mutationFn: ({ item, line, note }: { item: CodeItem; line: CodeLine; note: string }) =>
+    mutationFn: ({
+      item,
+      line,
+      note,
+      origin,
+    }: {
+      item: CodeItem
+      line: CodeLine
+      note: string
+      origin: 'owner' | 'ai-accepted'
+    }) =>
       confirmCode(item.code, {
         property_id: property!,
         pms_source: item.pms_source,
         line,
         note: note.trim() === '' ? undefined : note.trim(),
+        origin,
       }),
     onSuccess: (result) => {
       setEditing(null)
+      ask.reset()
       setDone(result)
       void queryClient.invalidateQueries({ queryKey: ['codes', property] })
     },
@@ -312,6 +401,7 @@ export default function CodesPage() {
                           className={buttonClass}
                           onClick={() => {
                             setDone(null)
+                            ask.reset()
                             setEditing(editing === item.code ? null : item.code)
                           }}
                         >
@@ -324,8 +414,18 @@ export default function CodesPage() {
                         item={item}
                         lines={lines.data}
                         busy={confirm.isPending}
-                        onCancel={() => setEditing(null)}
-                        onConfirm={(line, note) => confirm.mutate({ item, line, note })}
+                        aiOn={ai.data != null && ai.data.provider !== null}
+                        asking={ask.isPending}
+                        askError={ask.isError ? errorMessage(ask.error) : null}
+                        suggestion={ask.data ?? null}
+                        onAsk={() => ask.mutate(item)}
+                        onCancel={() => {
+                          ask.reset()
+                          setEditing(null)
+                        }}
+                        onConfirm={(line, note, origin) =>
+                          confirm.mutate({ item, line, note, origin })
+                        }
                       />
                     )}
                   </Fragment>

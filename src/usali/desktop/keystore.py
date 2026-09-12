@@ -123,6 +123,21 @@ def entry_name(install_id: str) -> str:
     return f"master-key:{install_id}"
 
 
+def install_id(sealed: Path) -> str | None:
+    """This install's id, for naming other per-install keychain entries —
+    the AI provider key (ADR-D7) is the first. Reading the id needs no master
+    key: it is the one field of the sealed file kept in the clear, because it
+    is what names the entry that unlocks the rest."""
+    if not sealed.is_file():
+        return None
+    try:
+        doc = json.loads(sealed.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    got = str(doc.get("install_id", ""))
+    return got or None
+
+
 def _b64(data: bytes) -> str:
     return base64.b64encode(data).decode()
 

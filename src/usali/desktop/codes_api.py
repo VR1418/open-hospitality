@@ -146,7 +146,7 @@ class ConfirmOut(BaseModel):
     ledger_refused: dict[str, str]
 
 
-def _known_lines(session: object, edition: int) -> list[Line]:
+def known_lines(session: object, edition: int) -> list[Line]:
     """The classifications this product already knows about.
 
     A code may be moved to any of these and to nothing else. Free text would
@@ -176,7 +176,7 @@ def _known_lines(session: object, edition: int) -> list[Line]:
     ]
 
 
-def _require_property(session: object, property_id: str) -> None:
+def require_property(session: object, property_id: str) -> None:
     found = session.scalar(  # type: ignore[attr-defined]
         select(Property.property_id).where(Property.property_id == property_id)
     )
@@ -194,7 +194,7 @@ def codes(
     """Every transaction code this hotel's reports have used, and who — if
     anyone — has said what it means."""
     with request_session_factory(request)() as session:
-        _require_property(session, property_id)
+        require_property(session, property_id)
 
         seen = session.execute(
             select(
@@ -270,7 +270,7 @@ def choices(
     _: Principal = Depends(_owner),
 ) -> ChoicesOut:
     with request_session_factory(request)() as session:
-        return ChoicesOut(lines=_known_lines(session, edition))
+        return ChoicesOut(lines=known_lines(session, edition))
 
 
 @router.put("/api/desktop/codes/{code}")
@@ -279,8 +279,8 @@ def confirm(
 ) -> ConfirmOut:
     """Say what a code means here, and restate every day it appears on."""
     with request_session_factory(request)() as session:
-        _require_property(session, body.property_id)
-        if body.line not in _known_lines(session, body.edition):
+        require_property(session, body.property_id)
+        if body.line not in known_lines(session, body.edition):
             raise HTTPException(
                 status_code=422,
                 detail="That isn't a line this product knows about. Pick one from the list.",

@@ -91,9 +91,14 @@ they are. Starting it again picks up exactly where you left off.
 ## What it doesn't do yet
 
 - **Mac.** Windows only for now.
-- **Reading your email.** Reports go in the folder by hand today.
-- **Anything involving the internet** — no AI, no bank feeds, no updates
-  that install themselves.
+- **Bank feeds, and updates that install themselves.** Neither exists yet.
+- **Email.** Reports go in the folder by hand.
+
+The one thing that can reach the internet is the AI helper, and only if you
+switch it on and give it your own AI account. It is off to begin with, it has
+a monthly limit set to $10, and it only ever suggests — nothing it says
+reaches your books until you click. If you would rather it never ran, leave it
+off: every screen works the same without it.
 - **Front-desk systems:** Oracle OPERA, AutoClerk and choiceADVANTAGE. If
   yours isn't one of those, the app can't read its reports yet.
 

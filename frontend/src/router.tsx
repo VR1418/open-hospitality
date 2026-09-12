@@ -39,6 +39,7 @@ import AccountPage from './pages/AccountPage'
 import WelcomePage from './pages/WelcomePage'
 import OverviewPage from './pages/OverviewPage'
 import BackupsPage from './pages/BackupsPage'
+import AiPage from './pages/AiPage'
 import CodesPage from './pages/CodesPage'
 import UpdatesPage from './pages/UpdatesPage'
 import RouteErrorCard from './components/RouteErrorCard'
@@ -354,6 +355,13 @@ const updatesRoute = createRoute({
   component: UpdatesPage,
 })
 
+/** Desktop edition: the owner's own AI helper (ADR-D7). */
+const aiRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ai',
+  component: AiPage,
+})
+
 /** Desktop edition: what this hotel's transaction codes mean (PRD M4). */
 const codesRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -377,6 +385,7 @@ const childRoutes = [
   overviewRoute,
   backupsRoute,
   codesRoute,
+  aiRoute,
   updatesRoute,
   entryRoute,
   dashboardRoute,

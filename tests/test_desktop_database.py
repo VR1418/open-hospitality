@@ -171,7 +171,7 @@ def test_the_modules_api_saves_the_owners_choice_and_asks_for_a_reload(
         listed = client.get("/api/me/modules", headers=owner)
         assert listed.status_code == 200
         state = {m["id"]: m["enabled"] for m in listed.json()["modules"]}
-        assert state == {"accounting": True, "payroll": False, "utilities": False}
+        assert state == {"accounting": True, "ai": False, "payroll": False, "utilities": False}
 
         saved = client.put("/api/desktop/modules", headers=owner,
                            json={"enabled": ["accounting", "payroll"]})

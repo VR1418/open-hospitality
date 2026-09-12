@@ -12,10 +12,22 @@ vi.mock('../api/desktop', async (importOriginal) => ({
   getCodes: vi.fn(),
   getCodeLines: vi.fn(),
   confirmCode: vi.fn(),
+  getAiSettings: vi.fn(),
+  suggestCode: vi.fn(),
 }))
 
 import { getProperties } from '../api/client'
-import { confirmCode, getCodeLines, getCodes, type CodeLine, type CodesState } from '../api/desktop'
+import {
+  confirmCode,
+  getAiSettings,
+  getCodeLines,
+  getCodes,
+  suggestCode,
+  type AiSettings,
+  type AiSuggestion,
+  type CodeLine,
+  type CodesState,
+} from '../api/desktop'
 import CodesPage from './CodesPage'
 
 const ROOMS: CodeLine = {
@@ -51,6 +63,23 @@ const STATE: CodesState = {
   ],
 }
 
+const AI_ON: AiSettings = {
+  provider: 'mock', model: 'practice', base_url: null, cap: '10.00', max_calls: 500,
+  price_in: null, price_out: null, key_saved: false, local: false,
+  spend: {
+    month_start: '2026-04-01', calls: 3, estimated_cost: '0.02', unpriced_calls: 0,
+    cap: '10.00', max_calls: 500, stopped: false,
+  },
+  providers: [],
+}
+
+const SUGGESTED: AiSuggestion = {
+  code: 'ZZQ', line: OTHER, confidence: 'high',
+  reason: 'A cabana is a rooms extra, not a separate department.',
+  decline_reason: null, estimated_cost: '0.004', model: 'practice',
+  spend: AI_ON.spend,
+}
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   render(
@@ -71,6 +100,10 @@ describe('CodesPage', () => {
       code: 'ZZQ', days_restated: ['2026-04-01', '2026-04-02'], facts_written: 2,
       ledger_refused: {},
     })
+    // Off unless a test turns it on: with the module off the route is not
+    // mounted at all, which is what the client's null stands for.
+    vi.mocked(getAiSettings).mockReset().mockResolvedValue(null)
+    vi.mocked(suggestCode).mockReset().mockResolvedValue(SUGGESTED)
   })
 
   it('leads with the money that is not on the profit and loss', async () => {
@@ -110,6 +143,8 @@ describe('CodesPage', () => {
         pms_source: 'SKYTOUCH',
         line: OTHER,
         note: 'Cabanas are a rooms extra here.',
+        // A person picked it themselves, so the decision is theirs.
+        origin: 'owner',
       }),
     )
     const changed = await screen.findByRole('region', { name: 'What changed' })
@@ -158,5 +193,101 @@ describe('CodesPage', () => {
     vi.mocked(getCodes).mockResolvedValue(null)
     renderPage()
     expect(await screen.findByText(/part of the desktop edition/)).toBeInTheDocument()
+  })
+})
+
+describe('CodesPage with the AI helper', () => {
+  beforeEach(() => {
+    vi.mocked(getProperties).mockResolvedValue([
+      { property_id: 'HISJ', name: 'Holiday Inn San Jose' },
+    ] as Awaited<ReturnType<typeof getProperties>>)
+    vi.mocked(getCodes).mockReset().mockResolvedValue(STATE)
+    vi.mocked(getCodeLines).mockReset().mockResolvedValue([ROOMS, OTHER])
+    vi.mocked(confirmCode).mockReset().mockResolvedValue({
+      code: 'ZZQ', days_restated: ['2026-04-01'], facts_written: 1, ledger_refused: {},
+    })
+    vi.mocked(getAiSettings).mockReset().mockResolvedValue(AI_ON)
+    vi.mocked(suggestCode).mockReset().mockResolvedValue(SUGGESTED)
+  })
+
+  it('with the helper off there is nothing to press (AI-8)', async () => {
+    vi.mocked(getAiSettings).mockResolvedValue(null)
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm ZZQ' }))
+    await screen.findByLabelText('Where should ZZQ go?')
+    expect(screen.queryByRole('button', { name: /Ask the AI/ })).toBeNull()
+  })
+
+  it('asks, shows what it said, and says the decision is still yours', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm ZZQ' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Ask the AI about ZZQ' }))
+
+    await waitFor(() =>
+      expect(suggestCode).toHaveBeenCalledWith({
+        property_id: 'HISJ', pms_source: 'SKYTOUCH', code: 'ZZQ',
+      }),
+    )
+    expect(await screen.findByText(/A cabana is a rooms extra/)).toBeInTheDocument()
+    expect(screen.getByText(/Nothing changes until you press Confirm/)).toBeInTheDocument()
+    // What it cost, where the owner can see it (AI-3).
+    expect(screen.getByText(/about \$0.004/)).toBeInTheDocument()
+  })
+
+  it('accepting what it said records that a person accepted it (AI-6)', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm ZZQ' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Ask the AI about ZZQ' }))
+    await screen.findByText(/A cabana is a rooms extra/)
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() =>
+      expect(confirmCode).toHaveBeenCalledWith('ZZQ', expect.objectContaining({
+        line: OTHER,
+        origin: 'ai-accepted',
+      })),
+    )
+  })
+
+  it('choosing something else instead is the owner’s own decision', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm ZZQ' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Ask the AI about ZZQ' }))
+    await screen.findByText(/A cabana is a rooms extra/)
+    // The model said line 1; the owner picks line 0 instead.
+    await userEvent.selectOptions(screen.getByLabelText('Where should ZZQ go?'), '0')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() =>
+      expect(confirmCode).toHaveBeenCalledWith('ZZQ', expect.objectContaining({
+        line: ROOMS,
+        origin: 'owner',
+      })),
+    )
+  })
+
+  it('shows a refusal to guess as an answer, not an error (AI-7)', async () => {
+    vi.mocked(suggestCode).mockResolvedValue({
+      ...SUGGESTED, line: null, confidence: 'low', reason: '',
+      decline_reason: 'This turns on your hotel’s tax treatment. Ask your accountant.',
+    })
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm ZZQ' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Ask the AI about ZZQ' }))
+
+    expect(await screen.findByText(/It wouldn’t guess/)).toBeInTheDocument()
+    expect(screen.getByText(/Ask your accountant/)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('shows the cap’s refusal in the owner’s words', async () => {
+    vi.mocked(suggestCode).mockRejectedValue(
+      new Error("You've used all 500 AI checks for this month."),
+    )
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm ZZQ' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Ask the AI about ZZQ' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/all 500 AI checks/)
   })
 })
