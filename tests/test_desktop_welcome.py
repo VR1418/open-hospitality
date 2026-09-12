@@ -120,6 +120,8 @@ def test_a_new_install_starts_the_wizard(world: World) -> None:
     assert body["finished"] is False
     assert body["group_named"] is False
     assert body["properties"] == []
+    # PRD I-6: the wizard asks where backups go, so it has to know.
+    assert body["backup_folder_set"] is False
 
 
 def test_nobody_signed_out_can_read_or_change_it(world: World) -> None:

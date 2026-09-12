@@ -251,6 +251,8 @@ export type WelcomeState = {
   group_name: string
   /** False while the hotel group still has the name a fresh install gives it. */
   group_named: boolean
+  /** False until the owner has chosen where backups go (PRD I-6). */
+  backup_folder_set: boolean
   properties: WelcomeProperty[]
   pms_choices: PmsChoice[]
 }

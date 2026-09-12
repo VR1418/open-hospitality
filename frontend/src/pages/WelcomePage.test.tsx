@@ -3,7 +3,13 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { DesktopModule, ModulesResponse, NewHotel, WelcomeState } from '../api/desktop'
+import type {
+  BackupStatus,
+  DesktopModule,
+  ModulesResponse,
+  NewHotel,
+  WelcomeState,
+} from '../api/desktop'
 import WelcomePage from './WelcomePage'
 
 const getWelcome = vi.fn<() => Promise<WelcomeState | null>>()
@@ -13,6 +19,8 @@ const finishWelcome = vi.fn<() => Promise<void>>()
 const getModules = vi.fn<() => Promise<ModulesResponse | null>>()
 const saveModules = vi.fn<(enabled: string[]) => Promise<ModulesResponse>>()
 const waitForModules = vi.fn<(enabled: string[]) => Promise<void>>()
+const getBackupStatus = vi.fn<() => Promise<BackupStatus | null>>()
+const setBackupFolder = vi.fn<(folder: string) => Promise<BackupStatus>>()
 
 vi.mock('../api/desktop', () => ({
   getWelcome: () => getWelcome(),
@@ -22,10 +30,18 @@ vi.mock('../api/desktop', () => ({
   getModules: () => getModules(),
   saveModules: (enabled: string[]) => saveModules(enabled),
   waitForModules: (enabled: string[]) => waitForModules(enabled),
+  getBackupStatus: () => getBackupStatus(),
+  setBackupFolder: (folder: string) => setBackupFolder(folder),
 }))
+
+const NO_BACKUPS: BackupStatus = {
+  folder: null, suggested_folder: 'C:\\Docs\\Backups',
+  last_backup_at: null, last_file: null, armed: true, due: false, keep: 7, files: [],
+}
 
 const FRESH: WelcomeState = {
   finished: false,
+  backup_folder_set: false,
   group_name: 'Pilot Hotel Group',
   group_named: false,
   properties: [],
@@ -71,13 +87,15 @@ describe('WelcomePage', () => {
     getModules.mockReset().mockResolvedValue({ modules: MODULES, reloading: false })
     saveModules.mockReset().mockResolvedValue({ modules: MODULES, reloading: true })
     waitForModules.mockReset().mockResolvedValue(undefined)
+    getBackupStatus.mockReset().mockResolvedValue(NO_BACKUPS)
+    setBackupFolder.mockReset().mockResolvedValue({ ...NO_BACKUPS, folder: 'D:\\Sync' })
   })
 
   it('walks a new owner from hotel group to modules', async () => {
     renderPage()
 
     // 1. Hotel group.
-    expect(await screen.findByText('Step 1 of 4')).toBeInTheDocument()
+    expect(await screen.findByText('Step 1 of 5')).toBeInTheDocument()
     // The founding placeholder name is never offered as the owner's.
     expect(screen.getByLabelText('Your hotel group’s name')).toHaveValue('')
     await type('Your hotel group’s name', 'Redstone Hotels')
@@ -85,7 +103,7 @@ describe('WelcomePage', () => {
     expect(nameGroup).toHaveBeenCalledWith('Redstone Hotels')
 
     // 2. The hotel. Nothing is saved yet: it goes with its fiscal year.
-    expect(await screen.findByText('Step 2 of 4')).toBeInTheDocument()
+    expect(await screen.findByText('Step 2 of 5')).toBeInTheDocument()
     await type('Hotel name', 'Redstone Inn')
     await userEvent.selectOptions(screen.getByLabelText('Front-desk system (PMS)'), 'SKYTOUCH')
     await type('Rooms you can sell', '60')
@@ -109,8 +127,19 @@ describe('WelcomePage', () => {
       }),
     )
 
-    // 4. Modules: the core is always on, the unbuilt can't be chosen.
-    expect(await screen.findByText('Step 4 of 4')).toBeInTheDocument()
+    // 4. Where the backup goes — asked during setup, not left to settings.
+    expect(
+      await screen.findByRole('heading', { name: 'Keep a copy of your books' }),
+    ).toBeInTheDocument()
+    const folder = screen.getByLabelText('Backup folder')
+    expect(folder).toHaveValue('C:\\Docs\\Backups') // the suggestion, ready to accept
+    await userEvent.clear(folder)
+    await userEvent.type(folder, 'D:\\OneDrive\\Books')
+    await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }))
+    expect(setBackupFolder).toHaveBeenCalledWith('D:\\OneDrive\\Books')
+
+    // 5. Modules: the core is always on, the unbuilt can't be chosen.
+    expect(await screen.findByText('Step 5 of 5')).toBeInTheDocument()
     const accounting = screen.getByRole('group', { name: 'Accounting & Reporting' })
     expect(within(accounting).getByRole('checkbox')).toBeDisabled()
     expect(
@@ -131,7 +160,7 @@ describe('WelcomePage', () => {
     getWelcome.mockResolvedValue({ ...FRESH, group_named: true, group_name: 'Redstone Hotels' })
     renderPage()
 
-    expect(await screen.findByText('Step 2 of 4')).toBeInTheDocument()
+    expect(await screen.findByText('Step 2 of 5')).toBeInTheDocument()
     await type('Hotel name', 'Redstone Inn')
     await type('Rooms you can sell', '60')
     await userEvent.selectOptions(screen.getByLabelText('Front-desk system (PMS)'), 'other')
@@ -145,16 +174,38 @@ describe('WelcomePage', () => {
     addHotel.mockRejectedValue(new Error('Reports that say “REDSTONE” already belong to RI.'))
     renderPage()
 
-    await screen.findByText('Step 2 of 4')
+    await screen.findByText('Step 2 of 5')
     await type('Hotel name', 'Redstone Inn')
     await type('Rooms you can sell', '60')
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Save and continue' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('already belong to RI')
-    expect(screen.getByText('Step 3 of 4')).toBeInTheDocument()
+    expect(screen.getByText('Step 3 of 5')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByLabelText('Hotel name')).toHaveValue('Redstone Inn')
+  })
+
+  it('an owner with a hotel but no backup folder is asked for one', async () => {
+    getWelcome.mockResolvedValue({
+      ...FRESH,
+      group_named: true,
+      group_name: 'Redstone Hotels',
+      backup_folder_set: false,
+      properties: [
+        { property_id: 'RI', name: 'Redstone Inn', pms_source: 'SKYTOUCH',
+          has_fiscal_calendar: true, has_rooms: true },
+      ],
+    })
+    renderPage()
+
+    expect(
+      await screen.findByRole('heading', { name: 'Keep a copy of your books' }),
+    ).toBeInTheDocument()
+    // Skipping is allowed — nagging is the Overview's job, not a locked door.
+    await userEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
+    expect(await screen.findByText('Step 5 of 5')).toBeInTheDocument()
+    expect(setBackupFolder).not.toHaveBeenCalled()
   })
 
   it('“Add a hotel” reopens just the hotel steps on a finished install', async () => {
@@ -174,7 +225,7 @@ describe('WelcomePage', () => {
 
       // Straight to the form: no "you already have" list, no step numbers.
       expect(await screen.findByRole('heading', { name: 'Add a hotel' })).toBeInTheDocument()
-      expect(screen.queryByText(/Step \d of 4/)).toBeNull()
+      expect(screen.queryByText(/Step \d of 5/)).toBeNull()
       expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/overview')
       await type('Hotel name', 'Harbour View')
       await userEvent.selectOptions(screen.getByLabelText('Front-desk system (PMS)'), 'OPERA')
@@ -197,6 +248,7 @@ describe('WelcomePage', () => {
       ...FRESH,
       group_named: true,
       group_name: 'Redstone Hotels',
+      backup_folder_set: true,
       properties: [
         { property_id: 'RI', name: 'Redstone Inn', pms_source: 'SKYTOUCH',
           has_fiscal_calendar: true, has_rooms: true },
@@ -204,7 +256,7 @@ describe('WelcomePage', () => {
     })
     renderPage()
 
-    expect(await screen.findByText('Step 4 of 4')).toBeInTheDocument()
+    expect(await screen.findByText('Step 5 of 5')).toBeInTheDocument()
     expect(nameGroup).not.toHaveBeenCalled()
   })
 })

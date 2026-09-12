@@ -19,11 +19,19 @@ vi.mock('../api/desktop', async (importOriginal) => ({
   getPortfolio: vi.fn(),
   getModules: vi.fn(),
   getWelcome: vi.fn(),
+  getBackupStatus: vi.fn(),
 }))
 
 import { getMe, getProperties } from '../api/client'
 import { getChecklist } from '../api/checklist'
-import { getModules, getPortfolio, getWelcome, type Portfolio } from '../api/desktop'
+import {
+  getBackupStatus,
+  getModules,
+  getPortfolio,
+  getWelcome,
+  type BackupStatus,
+  type Portfolio,
+} from '../api/desktop'
 import { AuthContext } from '../auth/authContext'
 import { createAppRouter } from '../router'
 import { AUTHED_CONTEXT } from '../test/fixtures'
@@ -91,9 +99,14 @@ describe('OverviewPage', () => {
     })
     vi.mocked(getModules).mockResolvedValue({ modules: [], reloading: false })
     vi.mocked(getWelcome).mockResolvedValue({
-      finished: true, group_name: 'G', group_named: true, properties: [], pms_choices: [],
+      finished: true, backup_folder_set: true, group_name: 'G', group_named: true,
+      properties: [], pms_choices: [],
     })
     vi.mocked(getPortfolio).mockReset().mockResolvedValue(PORTFOLIO)
+    vi.mocked(getBackupStatus).mockReset().mockResolvedValue({
+      folder: 'D:\Sync', suggested_folder: 'D:\Sync', last_backup_at: new Date().toISOString(),
+      last_file: 'x.ohbackup', armed: true, due: false, keep: 7, files: [],
+    } as BackupStatus)
   })
   afterEach(() => localStorage.clear())
 
@@ -190,6 +203,26 @@ describe('OverviewPage', () => {
       'href',
       '/welcome?add=hotel',
     )
+  })
+
+  it('keeps asking when the books are not being backed up', async () => {
+    vi.mocked(getBackupStatus).mockResolvedValue({
+      folder: null, suggested_folder: 'D:\Sync', last_backup_at: null, last_file: null,
+      armed: false, due: false, keep: 7, files: [],
+    } as BackupStatus)
+    renderAt()
+    const nag = await screen.findByRole('region', { name: 'Backups' })
+    expect(within(nag).getByText(/aren’t being backed up/)).toBeInTheDocument()
+    expect(within(nag).getByRole('link', { name: 'Set up backups' })).toHaveAttribute(
+      'href',
+      '/backups',
+    )
+  })
+
+  it('says nothing about backups when one was taken today', async () => {
+    renderAt()
+    await screen.findByRole('region', { name: 'Hotels' })
+    expect(screen.queryByRole('region', { name: 'Backups' })).toBeNull()
   })
 
   it('on a hosted deployment, points at the hotel dashboard instead', async () => {

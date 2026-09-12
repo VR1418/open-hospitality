@@ -9,7 +9,14 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { useState, type ReactNode } from 'react'
 
 import { getMe } from '../api/client'
-import { getPortfolio, type Finding, type PortfolioHotel, type TrendPoint } from '../api/desktop'
+import {
+  getBackupStatus,
+  getPortfolio,
+  type BackupStatus,
+  type Finding,
+  type PortfolioHotel,
+  type TrendPoint,
+} from '../api/desktop'
 import { barRampCss } from '../lib/chartBars'
 import {
   Badge,
@@ -120,6 +127,20 @@ function FindingRow({ finding }: { finding: Finding }) {
   )
 }
 
+/** PRD's risks table: "Backup is in the setup flow, not settings. Nag until
+ * configured." The wizard asks; this is what keeps asking. */
+function backupNag(status: BackupStatus | null | undefined): string | null {
+  if (status === null || status === undefined) return null
+  if (status.folder === null) {
+    return 'Your books aren’t being backed up. If this computer goes, so do they.'
+  }
+  if (status.last_backup_at === null) return 'No backup has been taken yet.'
+  const days = Math.floor(
+    (Date.now() - new Date(status.last_backup_at).getTime()) / (24 * 60 * 60 * 1000),
+  )
+  return days >= 2 ? `The last backup was ${days} days ago.` : null
+}
+
 function ReportsBadge({ hotel }: { hotel: PortfolioHotel }) {
   if (hotel.status === 'in') return <Badge tone="ok">In</Badge>
   if (hotel.status === 'error') return <Badge tone="danger">Needs a look</Badge>
@@ -134,6 +155,13 @@ export default function OverviewPage() {
     retry: false,
   })
   const me = useQuery({ queryKey: ['me'], queryFn: getMe })
+  // Owner only: the endpoint is theirs, and so is the decision.
+  const backup = useQuery({
+    queryKey: ['backup'],
+    queryFn: getBackupStatus,
+    enabled: hasRole(me.data, 'org_admin'),
+    retry: false,
+  })
   const { setProperty } = useGlobalProperty()
   const navigate = useNavigate()
 
@@ -177,6 +205,7 @@ export default function OverviewPage() {
 
   const { totals, hotels } = data
   const canAdd = hasRole(me.data, 'org_admin')
+  const nag = backupNag(backup.data)
   const day = date ?? data.business_date ?? undefined
 
   return (
@@ -213,6 +242,17 @@ export default function OverviewPage() {
           </>
         }
       />
+
+      {nag !== null && (
+        <Card role="region" aria-label="Backups">
+          <p className="text-sm text-ink">
+            <Badge tone="warn">Backups</Badge> {nag}{' '}
+            <Link to="/backups" className="underline">
+              Set up backups
+            </Link>
+          </p>
+        </Card>
+      )}
 
       <section aria-label="Totals" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Metric

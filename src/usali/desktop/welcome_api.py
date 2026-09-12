@@ -40,6 +40,8 @@ from usali.auth import (
     require_grants,
     require_operator,
 )
+from usali.desktop.backup import BackupConfig
+from usali.desktop.paths import DesktopPaths
 from usali.desktop.settings import read_setting, write_setting
 from usali.detect import supported_pms_sources
 from usali.mapping.property_registry import _DEFAULT_ORG
@@ -94,6 +96,9 @@ class WelcomeProperty(BaseModel):
 
 class WelcomeOut(BaseModel):
     finished: bool
+    # PRD I-6: backups are set up DURING setup, not afterwards in a
+    # settings page nobody opens.
+    backup_folder_set: bool
     group_name: str
     group_named: bool
     properties: list[WelcomeProperty]
@@ -112,8 +117,10 @@ def progress(request: Request, _: Principal = Depends(_owner)) -> WelcomeOut:
         with_calendar = set(session.scalars(select(FiscalCalendar.property_id)))
         with_rooms = set(session.scalars(select(RoomInventory.property_id)))
         finished = read_setting(session, FINISHED_KEY) is True
+    paths: DesktopPaths = request.app.state.desktop_welcome_paths
     return WelcomeOut(
         finished=finished,
+        backup_folder_set=BackupConfig.load(paths.backup_config_file).folder is not None,
         group_name=group_name,
         # A fresh install's group carries upstream's founding name until the
         # owner gives it theirs.
@@ -288,5 +295,6 @@ def finish(request: Request, _: Principal = Depends(_owner)) -> FinishOut:
     return FinishOut(finished=True)
 
 
-def install(app: FastAPI) -> None:
+def install(app: FastAPI, *, paths: DesktopPaths) -> None:
+    app.state.desktop_welcome_paths = paths
     app.include_router(router)

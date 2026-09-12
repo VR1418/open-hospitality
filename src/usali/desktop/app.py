@@ -168,7 +168,7 @@ def build_app(
         paths=paths, store=store or MemoryKeyStore(),
     )
     modules_api.install(app, enabled=enabled, reload=reload)
-    welcome_api.install(app)
+    welcome_api.install(app, paths=paths)
     portfolio_api.install(app)
     update_api.install(app)
     backup_api.install(app, paths=paths, store=store or MemoryKeyStore(), sessions=sessions)

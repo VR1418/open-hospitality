@@ -1,5 +1,5 @@
 // Desktop edition first-run wizard (PRD M2): hotel group → first hotel →
-// fiscal year → modules. The owner is sent here after their first sign-in,
+// fiscal year → where backups go (PRD I-6) → modules. The owner is sent here after their first sign-in,
 // and after every launch until it is finished (Layout does the sending).
 //
 // What a real owner needs before their first report can become a statement:
@@ -14,9 +14,11 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import {
   addHotel,
   finishWelcome,
+  getBackupStatus,
   getModules,
   getWelcome,
   nameGroup,
+  setBackupFolder,
   saveModules,
   waitForModules,
   type DesktopModule,
@@ -26,12 +28,13 @@ import {
 import { Card, controlLargeClass, sectionHeadClass } from '../components/ui'
 import { errorMessage } from '../lib/errors'
 
-type Step = 'group' | 'hotel' | 'fiscal' | 'modules' | 'done'
+type Step = 'group' | 'hotel' | 'fiscal' | 'backup' | 'modules' | 'done'
 const STEP_NUMBER: Record<Exclude<Step, 'done'>, number> = {
   group: 1,
   hotel: 2,
   fiscal: 3,
-  modules: 4,
+  backup: 4,
+  modules: 5,
 }
 
 type HotelDraft = { name: string; report_name: string; pms_source: string; total_rooms: number }
@@ -55,6 +58,8 @@ const secondaryButtonClass =
 function firstStep(w: WelcomeState): Step {
   if (!w.group_named) return 'group'
   if (w.properties.length === 0) return 'hotel'
+  // PRD I-6: a copy of the books is part of setting up, not a settings page.
+  if (!w.backup_folder_set) return 'backup'
   return 'modules'
 }
 
@@ -116,7 +121,15 @@ export default function WelcomePage() {
       return (
         <GroupStep
           initial={state.group_named ? state.group_name : ''}
-          onDone={() => setStep(state.properties.length === 0 ? 'hotel' : 'modules')}
+          onDone={() =>
+            setStep(
+              state.properties.length === 0
+                ? 'hotel'
+                : state.backup_folder_set
+                  ? 'modules'
+                  : 'backup',
+            )
+          }
         />
       )
     case 'hotel':
@@ -129,7 +142,7 @@ export default function WelcomePage() {
             setDraft(d)
             setStep('fiscal')
           }}
-          onSkip={() => setStep('modules')}
+          onSkip={() => setStep(state.backup_folder_set ? 'modules' : 'backup')}
         />
       )
     case 'fiscal':
@@ -138,9 +151,11 @@ export default function WelcomePage() {
           draft={draft as HotelDraft}
           addMode={addMode}
           onBack={() => setStep('hotel')}
-          onDone={() => (addMode ? window.location.assign('/overview') : setStep('modules'))}
+          onDone={() => (addMode ? window.location.assign('/overview') : setStep('backup'))}
         />
       )
+    case 'backup':
+      return <BackupStep onDone={() => setStep('modules')} />
     case 'modules':
       return <ModulesStep onDone={() => setStep('done')} />
     case 'done':
@@ -161,7 +176,7 @@ function Shell({ step, title, children }: { step?: Step; title?: string; childre
         <span className="text-accent">Open</span> Hospitality
       </p>
       <Card>
-        {number !== null && <p className={sectionHeadClass}>Step {number} of 4</p>}
+        {number !== null && <p className={sectionHeadClass}>Step {number} of 5</p>}
         {title !== undefined && <h1 className="mb-3 mt-1 text-xl font-semibold text-ink">{title}</h1>}
         {children}
       </Card>
@@ -195,7 +210,7 @@ function GroupStep({ initial, onDone }: { initial: string; onDone: () => void })
   return (
     <Shell step="group" title="Welcome — let’s set up your books">
       <p className="mb-5 text-sm text-ink-muted">
-        Four short questions. You can change every answer later.
+        Five short questions. You can change every answer later.
       </p>
       <form
         className="flex flex-col gap-4"
@@ -478,6 +493,63 @@ function FiscalStep({
           </button>
         </div>
       </form>
+    </Shell>
+  )
+}
+
+/** PRD I-6 and the risks table's severe row: the folder is chosen HERE, while
+ * the owner is setting up, not in a settings page they never open. The
+ * recovery code was wrapped when their account was made, so this step only
+ * needs somewhere to put the file. */
+function BackupStep({ onDone }: { onDone: () => void }) {
+  const status = useQuery({ queryKey: ['backup'], queryFn: getBackupStatus, retry: false })
+  const [folder, setFolder] = useState<string | null>(null)
+  const save = useMutation({
+    mutationFn: (value: string) => setBackupFolder(value),
+    onSuccess: onDone,
+  })
+  const typed = folder ?? status.data?.folder ?? status.data?.suggested_folder ?? ''
+
+  return (
+    <Shell step="backup" title="Keep a copy of your books">
+      <p className="mb-5 text-sm text-ink-muted">
+        If this computer is lost, stolen or replaced, a backup is what brings your books back.
+        Choose a folder your cloud drive already syncs — OneDrive, iCloud, Dropbox — and Open
+        Hospitality writes a copy there each day. Your recovery code opens it on a new computer.
+      </p>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(e: FormEvent) => {
+          e.preventDefault()
+          save.mutate(typed.trim())
+        }}
+      >
+        <Label text="Backup folder" hint="It's created for you if it isn't there yet.">
+          <input
+            aria-label="Backup folder"
+            className={controlLargeClass}
+            spellCheck={false}
+            value={typed}
+            onChange={(e) => setFolder(e.target.value)}
+          />
+        </Label>
+        <Refusal error={save.error} />
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="submit"
+            className={primaryButtonClass}
+            disabled={save.isPending || typed.trim() === ''}
+          >
+            {save.isPending ? 'Saving…' : 'Save and continue'}
+          </button>
+          <button type="button" className={secondaryButtonClass} onClick={onDone}>
+            Skip for now
+          </button>
+        </div>
+      </form>
+      <p className="mt-3 text-xs text-ink-muted">
+        Skip it and your books live on this computer alone. The Overview will keep reminding you.
+      </p>
     </Shell>
   )
 }
