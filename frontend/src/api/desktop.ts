@@ -351,7 +351,12 @@ export type TrendPoint = {
 export type Finding = {
   property_id: string
   hotel: string
-  kind: 'no_reports' | 'missing_report' | 'check_failed' | 'not_in_books'
+  kind:
+    | 'no_reports'
+    | 'missing_report'
+    | 'check_failed'
+    | 'not_in_books'
+    | 'codes_to_confirm'
   label: string
   detail: string
   delta: string | null

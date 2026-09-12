@@ -114,6 +114,7 @@ function FindingRow({ finding }: { finding: Finding }) {
     missing_report: 'warn',
     check_failed: 'danger',
     not_in_books: 'danger',
+    codes_to_confirm: 'danger',
   }
   return (
     <li className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-line py-2 text-sm">

@@ -36,7 +36,15 @@ from usali.assignments import (
 )
 from usali.auth import Principal, request_session_factory, require_active_org, require_operator
 from usali.inventory import InventoryInconsistent, InventoryNotConfigured, rooms_available
-from usali.models import Employee, KioskDevice, Property, Punch, Timecard
+from usali.models import (
+    Employee,
+    KioskDevice,
+    MappingException,
+    PmsDailyFinancialStage,
+    Property,
+    Punch,
+    Timecard,
+)
 from usali.night_audit import ledger_checks, slot_status
 from usali.timecards import punch_states
 from usali.workforce import resolve_scope
@@ -101,7 +109,9 @@ class TrendPoint(BaseModel):
 class FindingOut(BaseModel):
     property_id: str
     hotel: str
-    kind: Literal["no_reports", "missing_report", "check_failed", "not_in_books"]
+    kind: Literal[
+        "no_reports", "missing_report", "check_failed", "not_in_books", "codes_to_confirm"
+    ]
     label: str
     detail: str
     delta: str | None
@@ -272,6 +282,26 @@ def _trend(session: Session, property_ids: list[str], day: date | None) -> list[
     return [TrendPoint(business_date=d, revenue=_money(totals.get(d))) for d in days]
 
 
+def _unknown_codes(session: Session, property_id: str) -> tuple[int, Decimal]:
+    """How many transaction codes this hotel uses that nothing can classify,
+    and what they add up to.
+
+    Standing, not nightly: the money accumulates until somebody says what the
+    codes mean. Nothing else in the product mentions it — the journal balances
+    by sweeping the difference into the clearing account, which
+    `reporting._journal_nets` excludes, so `sos_journal_parity` reports parity
+    over a profit and loss that is short.
+    """
+    rows = session.execute(
+        select(MappingException.pms_trx_code, MappingException.raw_amount)
+        .join(PmsDailyFinancialStage,
+              PmsDailyFinancialStage.stage_id == MappingException.stage_id)
+        .where(PmsDailyFinancialStage.property_id == property_id)
+    ).all()
+    codes = {r[0] for r in rows}
+    return len(codes), sum((Decimal(r[1]) for r in rows), Decimal("0"))
+
+
 def _findings(
     session: Session, hotels: list[Property], days: dict[str, "_Day"], day: date | None,
 ) -> list[FindingOut]:
@@ -281,9 +311,21 @@ def _findings(
     `GET /night-audit` creates and commits a state row as a side effect of
     reading, which is right for one hotel's page and wrong for a home screen
     that touches every hotel."""
-    if day is None:
-        return []
     out: list[FindingOut] = []
+    # Before the day guard: this one is true whatever day is on screen.
+    for prop in hotels:
+        count, money = _unknown_codes(session, prop.property_id)
+        if count:
+            out.append(FindingOut(
+                property_id=prop.property_id, hotel=prop.name, kind="codes_to_confirm",
+                label="Codes to confirm",
+                detail=f"{count} code{'' if count == 1 else 's'} on your reports "
+                       f"{'is' if count == 1 else 'are'} holding ${money:,.2f} out of your "
+                       f"books. Nothing here knows what they are.",
+                delta=None,
+            ))
+    if day is None:
+        return out
     for prop in hotels:
         entry = days[prop.property_id]
         common = {"property_id": prop.property_id, "hotel": prop.name}

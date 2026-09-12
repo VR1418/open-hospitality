@@ -34,6 +34,7 @@ Modified upstream files:
     pyproject.toml
     frontend/package.json
     frontend/src/App.test.tsx
+    frontend/src/api/types.ts
     frontend/src/auth/oidc.ts
     frontend/src/Layout.tsx
     frontend/src/lib/lastRoute.ts
@@ -56,10 +57,12 @@ Modified upstream files:
     frontend/src/pages/SosPage.tsx
     frontend/src/pages/UploadPage.tsx
     src/usali/gl_api.py
+    src/usali/gl_posting.py
     src/usali/reporting.py
     src/usali/server.py
     src/usali/transform.py
     tests/test_gl_api.py
+    tests/test_gl_posting.py
 
   The page-title changes are the desktop edition's plain-language names
   (docs/desktop/PRD-desktop-edition.md, appendix A): e.g. "Summary Operating

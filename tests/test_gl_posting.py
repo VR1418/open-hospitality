@@ -405,3 +405,73 @@ def test_an_emptied_grain_in_a_closed_period_records_a_refusal(
     assert len(db_session.scalars(select(JournalEntry)).all()) == 1
     ledger = db_session.scalar(select(GlPostingLedger))
     assert ledger.entry_id is not None and ledger.message is not None
+
+
+def test_a_grain_whose_repost_was_refused_is_named_stale(
+    db_session, founding_org, seed_six_pdfs
+):
+    """The hole `_fail` leaves. A refusal on top of a STANDING entry keeps
+    `status="posted"` (the status only goes to failed when there is no
+    entry), and `period_gaps` reads status alone — so the day appeared in
+    neither direction and the period closed clean over a journal that no
+    longer matched its facts. It is now named."""
+    gl_chart.seed_chart(db_session, org_id=1)
+    prop, day = _first_grain(db_session)
+    _seed_calendar(db_session, prop)
+    assert _post(db_session, prop, day).status == "posted"
+
+    period = gl_posting.period_key_for(db_session, prop, day)
+    gl_posting.close_period(db_session, property_id=prop, period_key=period, actor="admin")
+
+    fact = db_session.scalars(
+        select(UsaliFinancialFact).where(
+            UsaliFinancialFact.property_id == prop,
+            UsaliFinancialFact.business_date == day,
+        )
+    ).first()
+    fact.amount = Decimal(str(fact.amount)) + Decimal("10.0000")
+    db_session.flush()
+
+    out = _post(db_session, prop, day)
+    assert out.status == "failed" and "closed" in (out.message or "")
+    row = db_session.scalars(
+        select(GlPostingLedger).where(GlPostingLedger.business_date == day)
+    ).first()
+    # Still "posted", which is exactly why status alone could not see it.
+    assert row.status == "posted" and row.entry_id is not None
+
+    gaps = gl_posting.period_gaps(db_session, property_id=prop, period_key=period)
+    assert day in gaps.stale
+    assert day not in gaps.unposted and day not in gaps.orphaned
+
+
+def test_two_pms_sources_on_one_day_refuse_rather_than_double(
+    db_session, founding_org, seed_six_pdfs
+):
+    """One property-day's facts from two sources have no one right entry —
+    `night_audit._balances` guards the same scenario and says why it is
+    real. Summing them was silent, and `sos_journal_parity` sums facts the
+    same unfiltered way, so it would have agreed with the doubled entry."""
+    gl_chart.seed_chart(db_session, org_id=1)
+    prop, day = _first_grain(db_session)
+    _seed_calendar(db_session, prop)
+    assert _post(db_session, prop, day).status == "posted"
+
+    facts = db_session.scalars(
+        select(UsaliFinancialFact).where(
+            UsaliFinancialFact.property_id == prop,
+            UsaliFinancialFact.business_date == day,
+        )
+    ).all()
+    assert len(facts) > 1, "need two facts to split across two sources"
+    facts[0].pms_source = "OPERA" if facts[0].pms_source != "OPERA" else "AUTOCLERK"
+    db_session.flush()
+
+    out = _post(db_session, prop, day)
+    assert out.status == "failed"
+    assert "PMS source" in (out.message or "")
+    # And close now names the day, rather than passing over a stale entry.
+    period = gl_posting.period_key_for(db_session, prop, day)
+    assert day in gl_posting.period_gaps(
+        db_session, property_id=prop, period_key=period
+    ).stale

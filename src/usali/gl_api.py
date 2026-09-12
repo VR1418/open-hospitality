@@ -103,7 +103,10 @@ class PeriodModel(BaseModel):
     accrual is the ordinary no-chart/no-cost case, not a gap);
     `orphaned_dates` — dates with a current entry whose fact side is
     empty, covering BOTH sources (`usali_financial_fact` for `pms_daily`,
-    `usali_labor_fact` for `payroll_accrual`). `date_from`/`date_to` are
+    `usali_labor_fact` for `payroll_accrual`); `stale_dates` — dates whose
+    standing entry no longer matches what its facts would produce now, the
+    direction `status` alone cannot see (a re-post refused on top of an
+    existing entry leaves it "posted"). `date_from`/`date_to` are
     the period's inclusive calendar bounds — `get_periods` fills them from
     the same `fiscal.periods_in_year` tuple it iterates for the keys."""
 
@@ -115,13 +118,14 @@ class PeriodModel(BaseModel):
     date_to: date
     unposted_dates: list[date]
     orphaned_dates: list[date]
+    stale_dates: list[date]
 
 
 class CloseResponse(BaseModel):
     """The close's answer: the period's state after the event, and the
-    gaps as they stand — same two directions and the same scoping as
+    gaps as they stand — the same three directions and the same scoping as
     `PeriodModel` (see its docstring / `gl_posting.CloseGaps`), so
-    closing over either kind of gap is a visible choice."""
+    closing over any kind of gap is a visible choice."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -129,6 +133,7 @@ class CloseResponse(BaseModel):
     state: str
     unposted_dates: list[date]
     orphaned_dates: list[date]
+    stale_dates: list[date]
 
 
 class ReopenBody(BaseModel):
@@ -340,6 +345,7 @@ def get_periods(
                         date_to=end,
                         unposted_dates=gaps.unposted,
                         orphaned_dates=gaps.orphaned,
+                        stale_dates=gaps.stale,
                     )
                 )
             return out
@@ -372,6 +378,7 @@ def close_period(
         state=state,
         unposted_dates=gaps.unposted,
         orphaned_dates=gaps.orphaned,
+        stale_dates=gaps.stale,
     )
 
 

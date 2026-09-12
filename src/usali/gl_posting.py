@@ -36,7 +36,7 @@ is the standing proof, posting every seeded grain and asserting zero
 """
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Callable, Literal
@@ -96,6 +96,34 @@ class SystemRoleMissingError(Exception):
         super().__init__(
             f"the chart of accounts has no active account with system role "
             f"{role!r} — seed or edit the chart (usali gl-seed-chart)"
+        )
+
+
+class AmbiguousFactsError(Exception):
+    """One property-day's facts come from more than one PMS source, or more
+    than one USALI edition, so there is no one right journal entry.
+
+    The desktop edition's addition. `night_audit._balances` guards the same
+    scenario and says why it is real: "one property-day may legitimately hold
+    two AR_LEDGER rows from different sources — a property that migrated PMS,
+    or a backfill through the unrestricted /ingest path", and
+    `reporting._financial_coverage` guards the edition half, because "an
+    edition-blind query would double-count codes once a second edition's rows
+    coexist". This builder was blind to both and would have summed them into
+    one entry — and `sos_journal_parity`, which sums facts the same unfiltered
+    way, would have agreed with itself.
+
+    Typed so `post_and_record` records it as a failed ledger row naming what
+    it found, rather than posting a doubled entry nothing would catch.
+    """
+
+    def __init__(self, property_id: str, business_date: date, field: str, found: list[str]) -> None:
+        self.field = field
+        self.found = found
+        super().__init__(
+            f"{property_id} {business_date} has facts from {len(found)} {field}s "
+            f"({', '.join(found)}); one property-day posts one journal entry, so "
+            f"remove the ones that do not belong before posting"
         )
 
 
@@ -246,6 +274,12 @@ def build_pms_daily_plan(
     ).all()
     if not facts:
         return None
+    for what, values in (
+        ("PMS source", {f.pms_source for f in facts}),
+        ("USALI edition", {str(f.usali_edition) for f in facts}),
+    ):
+        if len(values) > 1:
+            raise AmbiguousFactsError(property_id, business_date, what, sorted(values))
     unmapped = sorted(
         {
             (f.usali_major_category, f.usali_sub_category, f.usali_line_item)
@@ -631,6 +665,7 @@ def post_and_record(
         UnmappedGlError,
         SystemRoleMissingError,
         PeriodClosedError,
+        AmbiguousFactsError,
         ChartAccountMissingError,
         fiscal.FiscalCalendarNotConfigured,
     ) as exc:
@@ -657,10 +692,23 @@ class CloseGaps:
     `usali_labor_fact` for `payroll_accrual` — a grain emptied after
     posting and never re-posted (a re-post reverses the entry via
     `post_and_record`'s plan-is-None branch, which removes the date from
-    both directions)."""
+    both directions).
+
+    `stale` names dates whose standing entry no longer matches what its
+    facts would produce now — the hole `_fail` leaves: a re-post refused on
+    top of an existing entry keeps `status="posted"` (the status is only
+    set to failed when there is no entry), so a day whose facts changed and
+    whose re-post was refused appeared in NEITHER direction, and the period
+    closed clean over a journal that had drifted. A day whose plan cannot be
+    built at all is stale too: an entry that cannot be re-derived cannot be
+    vouched for.
+    """
 
     unposted: list[date]
     orphaned: list[date]
+    # Defaulted so callers built before this direction existed still
+    # construct, and read the old meaning: nothing known to have drifted.
+    stale: list[date] = field(default_factory=list)
 
 
 def period_gaps(session: "Session", *, property_id: str, period_key: str) -> CloseGaps:
@@ -707,6 +755,25 @@ def period_gaps(session: "Session", *, property_id: str, period_key: str) -> Clo
     # The fact side an entry must still be justified by, per source
     # (see CloseGaps).
     fact_side = {"pms_daily": fact_dates, "payroll_accrual": labor_dates}
+    drifted: set[date] = set()
+    for row in ledger_rows:
+        # An emptied grain is `orphaned`, not stale: one name per condition.
+        if row.entry_id is None or row.business_date not in fact_side[row.source_type]:
+            continue
+        try:
+            plan = _SOURCES[row.source_type].build_plan(
+                session, property_id, row.business_date
+            )
+        except (
+            UnmappedGlError,
+            SystemRoleMissingError,
+            ChartAccountMissingError,
+            AmbiguousFactsError,
+        ):
+            drifted.add(row.business_date)
+            continue
+        if plan is not None and plan.request_hash != row.source_hash:
+            drifted.add(row.business_date)
     return CloseGaps(
         unposted=sorted(fact_dates - posted_dates),
         orphaned=sorted({
@@ -715,6 +782,7 @@ def period_gaps(session: "Session", *, property_id: str, period_key: str) -> Clo
             if row.entry_id is not None
             and row.business_date not in fact_side[row.source_type]
         }),
+        stale=sorted(drifted),
     )
 
 

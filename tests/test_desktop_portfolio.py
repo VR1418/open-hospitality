@@ -41,8 +41,11 @@ from usali.desktop.session_api import LaunchCodes
 from usali.models import (
     Employee,
     EmployeeAssignment,
+    IngestBatch,
     KioskDevice,
+    MappingException,
     NightAuditState,
+    PmsDailyFinancialStage,
     Punch,
     RoleAssignment,
     Timecard,
@@ -273,7 +276,7 @@ def test_the_findings_are_what_last_nights_audit_turned_up(world: World) -> None
     # Every finding names its hotel and says something in plain words.
     assert all(f["hotel"] and f["detail"] for f in findings)
     assert {f["kind"] for f in findings} <= {
-        "no_reports", "missing_report", "check_failed", "not_in_books",
+        "no_reports", "missing_report", "check_failed", "not_in_books", "codes_to_confirm",
     }
     # Reading them changed nothing: upstream's own GET creates a state row,
     # and the Overview must not.
@@ -309,3 +312,40 @@ def test_with_payroll_off_no_staff_figures_are_given(world: World) -> None:
 
 def test_nobody_signed_out_gets_the_overview(world: World) -> None:
     assert world.payroll.get("/api/desktop/portfolio").status_code == 401
+
+
+def test_the_overview_says_when_codes_are_holding_money_out_of_the_books(world: World) -> None:
+    """The one place this ever reaches the owner unprompted. The journal
+    balances by sweeping an unrecognised code's money into the clearing
+    account, which `_journal_nets` excludes — so parity is clean, every other
+    check is quiet, and the profit and loss is short by exactly this."""
+    day = date(2026, 4, 1)
+    with world.org_sessions() as s:
+        batch = IngestBatch(
+            pms_source="SKYTOUCH", report_type="hotel_journal", source_file="cabana.pdf",
+            file_hash="hash-cabana", status="transformed", row_count=1,
+        )
+        s.add(batch)
+        s.flush()
+        stage = PmsDailyFinancialStage(
+            property_id="STDEMO", pms_source="SKYTOUCH", report_type="hotel_journal",
+            business_date=day, pms_trx_code="ZZQ", pms_trx_desc="Cabana Rental",
+            raw_amount="250.0000", room_count=0, source_file="cabana.pdf",
+            ingest_batch_id=batch.batch_id, row_hash="cabana-1",
+        )
+        s.add(stage)
+        s.flush()
+        s.add(MappingException(
+            pms_source="SKYTOUCH", pms_trx_code="ZZQ", pms_trx_desc="Cabana Rental",
+            stage_id=stage.stage_id, raw_amount="250.0000", business_date=day,
+            ingest_batch_id=batch.batch_id,
+        ))
+        s.commit()
+
+    [found] = [f for f in world.portfolio(world.owner)["findings"]
+               if f["kind"] == "codes_to_confirm"]
+    assert found["property_id"] == "STDEMO"
+    assert "1 code" in found["detail"] and "$250.00" in found["detail"]
+    # Standing, not nightly: it is true whichever day is on screen.
+    assert any(f["kind"] == "codes_to_confirm"
+               for f in world.portfolio(world.owner, day="2026-01-02")["findings"])

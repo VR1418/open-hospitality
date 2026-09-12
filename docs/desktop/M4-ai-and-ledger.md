@@ -1,6 +1,6 @@
 # M4 — the owner's own AI, and the ledger it has to be safe around
 
-**Status:** plan, nothing built · **PRD:** [PRD-desktop-edition.md](PRD-desktop-edition.md) §6.3, AI-1…AI-8
+**Status:** Phase 1 built and tested · **PRD:** [PRD-desktop-edition.md](PRD-desktop-edition.md) §6.3, AI-1…AI-8
 
 Two requests, and they turn out to be one piece of work: *let the owner point their own
 AI at the transactions and have it evaluate the entries*, and *check the ledger build*.
@@ -96,20 +96,28 @@ backfill through `/ingest`, legitimately holds two rows for one property-day. Th
 builder would sum both into one entry. `sos_journal_parity` sums facts the same
 unfiltered way, so it would agree with itself and report parity.
 
-### 1.5 Ledger reads were not confined to the caller's hotels (fix written, not committed)
+### 1.5 Ledger reads were not confined to the caller's hotels
 
-Sitting uncommitted in the working tree: `gl_api.py` and `tests/test_gl_api.py`
-(171 insertions). It confines `/api/gl/periods`, `/trial-balance` and `/entries` with
+`gl_api.py` confines `/api/gl/periods`, `/trial-balance` and `/entries` with
 `_require_readable_property`, matching the `property_config_api` read gate, so an
-out-of-scope or another org's property is the same 403 everywhere. Ruff and mypy pass.
-Before it lands it needs `src/usali/gl_api.py` and `tests/test_gl_api.py` added to
-`NOTICE` (Apache §4(b)), and its tests run — they need Docker.
+out-of-scope or another org's property is the same 403 everywhere. Both files are in
+`NOTICE` (Apache §4(b)).
 
 ---
 
 ## Part 2 — the plan
 
-### Phase 1 — somewhere to put an answer (no AI involved)
+### Phase 1 — somewhere to put an answer (no AI involved) — **built**
+
+| | Where |
+|---|---|
+| 1a Ledger reads confined to the caller's hotels | `gl_api.py`, 29 tests |
+| 1b Per-hotel code decisions | `desktop/mapping_decisions.py`, migration `d0003`, the `transform` resolver seam, 7 tests |
+| 1c Codes to confirm | `desktop/codes_api.py` + `CodesPage.tsx`, 9 + 7 tests; the standing Overview finding, 1 test |
+| 1d A stale journal no longer passes close | `gl_posting.CloseGaps.stale`, surfaced as `stale_dates`, 1 test |
+| 1e Source- and edition-blind journal builder | `AmbiguousFactsError`, 1 test |
+
+Suites after: 130 desktop, 222 GL/parity/night-audit/reporting, 591 frontend.
 
 This is worth building on its own merits, and PRD **AI-8** requires it anyway: with AI
 off, every feature still works, sorting is manual, nothing is gated behind a paid
@@ -120,8 +128,10 @@ Docker, commit.
 
 **1b. A per-hotel mapping decision, org-scoped and attributable.** New desktop-owned
 table (`desktop` schema, migration `d0003`), keyed
-`(org_id, property_id, pms_source, pms_trx_code, usali_edition)`, carrying the same five
-classification columns plus `review_state`, `decided_by`, `decided_at`, `origin`
+`(property_id, pms_source, pms_trx_code, usali_edition)` — no `org_id`, because the
+`desktop` schema describes the install, one owner's machine, as `desktop.setting` and
+`desktop.account` already do — carrying the same five
+classification columns plus `decided_by`, `decided_at`, `origin`
 (`owner` / `ai-accepted`) and a note. Resolution order in `transform` becomes:
 **this hotel's decision → the shipped dictionary → `MappingException`.**
 

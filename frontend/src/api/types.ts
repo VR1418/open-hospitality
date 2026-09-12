@@ -1269,7 +1269,9 @@ export type AuthorizeUrl = {
 
 /** One fiscal period with its derived state and both gap directions:
  *  `unposted_dates` — fact dates with no current posted pms_daily entry;
- *  `orphaned_dates` — dates with a current entry whose fact side is empty.
+ *  `orphaned_dates` — dates with a current entry whose fact side is empty;
+ *  `stale_dates` — dates whose entry no longer matches what its facts would
+ *  produce now (a re-post refused over an existing entry leaves it "posted").
  *  `state` narrows the model's plain str to the pair
  *  `gl_posting.period_state` derives ("closed" iff the last event closed). */
 export interface GlPeriod {
@@ -1279,6 +1281,7 @@ export interface GlPeriod {
   date_to: string
   unposted_dates: string[]
   orphaned_dates: string[]
+  stale_dates: string[]
 }
 
 /** The close's answer: state after the event plus the gaps as they stand —
@@ -1288,6 +1291,7 @@ export interface GlCloseResponse {
   state: 'open' | 'closed'
   unposted_dates: string[]
   orphaned_dates: string[]
+  stale_dates: string[]
 }
 
 /** The set ck_gl_account_type (models.py) walls in on the chart column. */
