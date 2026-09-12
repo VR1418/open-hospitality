@@ -1,28 +1,24 @@
-// The product's mark and wordmark.
+// The product's mark and wordmark, from the supplied logo kit.
 //
-// The mark is a loose cluster of dots — rooms on a board, people in a
-// building, whichever you like — in the two brand colours. It is drawn as SVG
-// so it stays crisp at 16px in a browser tab and at 40px in the sidebar.
+// The mark is six equal circles on a ring — the kit's own geometry, kept in
+// `lib/brand` so this component, the browser tab and the desktop tray icon are
+// drawn from one set of numbers.
 //
-// The WORDMARK is deliberately HTML text, not SVG text: an SVG <text> needs
-// the font to exist wherever it is rendered, and this one has to sit beside
-// the app's own type at whatever size the shell gives it. Two spans coloured
-// by brand tokens do that, and stay selectable and translatable.
+// The WORDMARK is HTML text, not SVG text. Two reasons, and the second is the
+// kit's own lesson: an SVG <text> needs the font to exist wherever it renders,
+// and the kit's lockup SVGs set no font-family at all — which is why the PNGs
+// shipped with them came out in a serif rather than the Space Grotesk their
+// brand-colors.json names. Text in the app's own typeface cannot go wrong that
+// way, and stays selectable, translatable and crisp at any size.
 
-import { BRAND } from '../lib/brand'
+import { BRAND, MARK_DOTS, MARK_RADIUS, MARK_VIEWBOX } from '../lib/brand'
 
-export function LogoMark({
-  size = 28,
-  title,
-}: {
-  size?: number
-  title?: string
-}) {
+export function LogoMark({ size = 28, title }: { size?: number; title?: string }) {
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 48 48"
+      viewBox={`0 0 ${MARK_VIEWBOX} ${MARK_VIEWBOX}`}
       xmlns="http://www.w3.org/2000/svg"
       role={title === undefined ? 'presentation' : 'img'}
       aria-hidden={title === undefined ? true : undefined}
@@ -30,14 +26,15 @@ export function LogoMark({
       className="shrink-0"
     >
       {title !== undefined && <title>{title}</title>}
-      <circle cx="13.9" cy="12.8" r="3.8" fill={BRAND.coral} />
-      <circle cx="25.9" cy="10.3" r="3.8" fill={BRAND.salmon} />
-      <circle cx="36.4" cy="13.8" r="3.8" fill={BRAND.teal} />
-      <circle cx="10.9" cy="24.8" r="3.8" fill={BRAND.salmon} />
-      <circle cx="23.4" cy="24.3" r="3.8" fill={BRAND.coral} />
-      <circle cx="36.9" cy="26.3" r="3.8" fill={BRAND.teal} />
-      <circle cx="14.9" cy="36.3" r="3.8" fill={BRAND.teal} />
-      <circle cx="27.9" cy="37.3" r="3.8" fill={BRAND.salmon} />
+      {MARK_DOTS.map((dot) => (
+        <circle
+          key={`${dot.cx}-${dot.cy}`}
+          cx={dot.cx}
+          cy={dot.cy}
+          r={MARK_RADIUS}
+          fill={dot.fill}
+        />
+      ))}
     </svg>
   )
 }
@@ -49,8 +46,12 @@ export function Logo({ size = 28, compact = false }: { size?: number; compact?: 
     <span className="flex items-center gap-2">
       <LogoMark size={size} />
       {!compact && (
-        <span className="text-lg font-bold leading-none tracking-tight">
-          <span style={{ color: BRAND.coral }}>Open</span>{' '}
+        <span
+          className="text-lg font-bold leading-none"
+          // The kit's wordmark tracking. Tight, so the two words read as one.
+          style={{ letterSpacing: '-0.03em' }}
+        >
+          <span style={{ color: BRAND.red }}>Open</span>{' '}
           <span style={{ color: BRAND.teal }}>Hospitality</span>
         </span>
       )}

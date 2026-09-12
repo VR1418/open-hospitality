@@ -38,6 +38,7 @@ Modified upstream files:
     frontend/src/auth/oidc.ts
     frontend/public/favicon.svg
     frontend/src/Layout.tsx
+    frontend/src/index.css
     frontend/src/lib/format.ts
     frontend/src/lib/lastRoute.ts
     frontend/src/RootShell.tsx

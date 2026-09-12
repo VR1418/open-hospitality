@@ -272,39 +272,41 @@ def _reveal(folder: Path) -> None:
 
 
 def _icon_image() -> Any:
-    """The tray icon: the product's mark, the same cluster of dots as the
-    browser tab and the sidebar (frontend/src/components/Logo.tsx).
+    """The tray icon: the kit's app-icon — six equal dots on a dark rounded
+    square, in the kit's ON-DARK palette, because a tray sits on whatever the
+    desktop's own chrome is and the light reds go muddy there.
 
     Drawn rather than loaded so the packaged app carries no image file to lose,
-    and supersampled 4x then reduced, because Pillow's ellipse has no
-    anti-aliasing and a 64px circle drawn directly has visibly ragged edges.
+    and supersampled 8x then reduced: Pillow's ellipse and rounded_rectangle
+    have no anti-aliasing, and a 64px circle drawn directly has visibly ragged
+    edges.
     """
     from PIL import Image, ImageDraw
 
-    CORAL = (240, 78, 55, 255)
-    SALMON = (244, 137, 122, 255)
-    TEAL = (22, 166, 160, 255)
-    # (centre x, centre y, radius, colour) on a 48-unit grid — the viewBox the
-    # favicon uses, so the two cannot drift apart.
-    R = 3.8  # every dot the same size
+    # docs/brand/logo/app-icon.svg, on a 132-unit box.
+    BACKGROUND = (22, 24, 29, 255)
+    RADIUS, DOT = 32, 11
     dots = (
-        (13.9, 12.8, R, CORAL),
-        (25.9, 10.3, R, SALMON),
-        (36.4, 13.8, R, TEAL),
-        (10.9, 24.8, R, SALMON),
-        (23.4, 24.3, R, CORAL),
-        (36.9, 26.3, R, TEAL),
-        (14.9, 36.3, R, TEAL),
-        (27.9, 37.3, R, SALMON),
+        (66, 28, (255, 103, 93, 255)),    # red
+        (97, 47, (255, 164, 86, 255)),    # orange
+        (97, 85, (39, 198, 192, 255)),    # teal
+        (66, 104, (103, 215, 210, 255)),  # teal soft
+        (35, 85, (255, 110, 167, 255)),   # pink
+        (35, 47, (255, 177, 207, 255)),   # pink soft
     )
 
-    size, scale = 64, 4
+    size, scale = 64, 8
     big = Image.new("RGBA", (size * scale, size * scale), (0, 0, 0, 0))
     draw = ImageDraw.Draw(big)
-    unit = size * scale / 48
-    for cx, cy, r, colour in dots:
+    unit = size * scale / 132
+    draw.rounded_rectangle(
+        (0, 0, size * scale - 1, size * scale - 1),
+        radius=RADIUS * unit,
+        fill=BACKGROUND,
+    )
+    for cx, cy, colour in dots:
         draw.ellipse(
-            ((cx - r) * unit, (cy - r) * unit, (cx + r) * unit, (cy + r) * unit),
+            ((cx - DOT) * unit, (cy - DOT) * unit, (cx + DOT) * unit, (cy + DOT) * unit),
             fill=colour,
         )
     # Pillow moved the filters under `Image.Resampling` in 9.1.

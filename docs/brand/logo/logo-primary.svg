@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="120" viewBox="0 0 760 120" fill="none" role="img" aria-label="ophosp || Open Hospitality">
+  <title>ophosp || Open Hospitality</title>
+  <defs>
+    
+  </defs>
+  
+  <g transform="translate(18 18) scale(0.62)">
+    <circle cx="66" cy="20" r="14" fill="#E0453B"></circle>
+    <circle cx="106" cy="43" r="14" fill="#F7853A"></circle>
+    <circle cx="106" cy="89" r="14" fill="#0D9B96"></circle>
+    <circle cx="66" cy="112" r="14" fill="#56BBB7"></circle>
+    <circle cx="26" cy="89" r="14" fill="#F0568F"></circle>
+    <circle cx="26" cy="43" r="14" fill="#F4A3C1"></circle>
+  </g>
+  <text class="wm" x="126" y="69" font-size="56" fill="#E0453B">op<tspan fill="#0D9B96">hosp</tspan></text>
+  <line class="divider" x1="352" y1="38" x2="352" y2="78" stroke="#B8C0CB"></line>
+  <line class="divider" x1="365" y1="41" x2="365" y2="75" stroke="#B8C0CB" opacity="0.92"></line>
+  <text class="tag" x="388" y="68" font-size="22" fill="#5B6472">Open Hospitality</text>
+</svg>

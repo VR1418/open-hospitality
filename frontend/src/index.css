@@ -88,6 +88,19 @@
   --radius-control: 0.5rem;
   --shadow-card: 0 1px 3px oklch(20.8% 0.042 265.8 / 0.06), 0 4px 12px oklch(20.8% 0.042 265.8 / 0.04);
   --shadow-overlay: 0 10px 40px oklch(20.8% 0.042 265.8 / 0.25);
+
+  /* Brand: the six colours of the mark, from the logo kit's own
+     brand-colors.json. Not derived from the accent — a logo that moved with
+     the theme's accent would stop being the logo. The kit ships a SECOND
+     palette for dark backgrounds (brighter, so the dots hold up on near-black);
+     it is remapped in .dark below, which is why these are variables and not
+     literals in the component. */
+  --brand-red: #E0453B;
+  --brand-orange: #F7853A;
+  --brand-teal: #0D9B96;
+  --brand-teal-soft: #56BBB7;
+  --brand-pink: #F0568F;
+  --brand-pink-soft: #F4A3C1;
 }
 
 /* Native form controls (selects, date/month pickers, scrollbars) render UA
@@ -100,6 +113,13 @@
    Plain CSS (not @theme) so utilities pick up the remapped values at runtime. */
 .dark {
   color-scheme: dark;
+  /* The kit's on-dark palette, not a filter over the light one. */
+  --brand-red: #FF675D;
+  --brand-orange: #FFA456;
+  --brand-teal: #27C6C0;
+  --brand-teal-soft: #67D7D2;
+  --brand-pink: #FF6EA7;
+  --brand-pink-soft: #FFB1CF;
   --color-surface: oklch(20.8% 0.042 265.8);         /* slate-900 */
   --color-surface-raised: oklch(27.9% 0.041 260.0);  /* slate-800 */
   --color-surface-sunken: oklch(17% 0.036 265);

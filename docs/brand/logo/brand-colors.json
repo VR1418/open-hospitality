@@ -1,0 +1,26 @@
+{
+  "name": "Open Hospitality (ophosp)",
+  "typeface": {
+    "wordmark": "Space Grotesk Bold, letter-spacing -0.05em",
+    "descriptor": "Space Grotesk SemiBold, darker neutral, inline with double-bar divider"
+  },
+  "colors": {
+    "red": "#E0453B",
+    "orange": "#F7853A",
+    "teal": "#0D9B96",
+    "teal_soft": "#56BBB7",
+    "pink": "#F0568F",
+    "pink_soft": "#F4A3C1",
+    "ink": "#16181D",
+    "descriptor": "#5B6472"
+  },
+  "onDark": {
+    "red": "#FF675D",
+    "orange": "#FFA456",
+    "teal": "#27C6C0",
+    "teal_soft": "#67D7D2",
+    "pink": "#FF6EA7",
+    "pink_soft": "#FFB1CF",
+    "descriptor": "#A7B0BC"
+  }
+}
