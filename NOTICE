@@ -58,6 +58,7 @@ Modified upstream files:
     src/usali/gl_api.py
     src/usali/reporting.py
     src/usali/server.py
+    src/usali/transform.py
     tests/test_gl_api.py
 
   The page-title changes are the desktop edition's plain-language names

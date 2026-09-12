@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
+from typing import Protocol
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -19,6 +20,54 @@ class ReconciliationError(RuntimeError):
     pass
 
 
+#: Session key a caller may bind a :class:`MappingResolver` under (desktop
+#: edition). `transform` is reached through eight ingestion handlers and four
+#: entry points — folder watch, /ingest, the night-audit upload, the CLI — so a
+#: SESSION-scoped policy, the shape tenancy already binds with, reaches every
+#: one of them without threading an argument through all eight handlers. Leave
+#: it unbound and nothing changes: the shipped dictionary decides, as before.
+RESOLVER_KEY = "usali_mapping_resolver"
+
+
+@dataclass(frozen=True)
+class Classification:
+    """What a transaction code means: the five fields a fact copies from
+    whatever decided it. One shape, so the fact-building code below does not
+    care whether the dictionary or a resolver answered."""
+
+    usali_schedule_id: int | None
+    usali_major_category: str
+    usali_sub_category: str
+    usali_line_item: str
+    gl_account_code: str | None
+
+
+class MappingResolver(Protocol):
+    """Consulted BEFORE the shipped dictionary, and free to decline by
+    returning None.
+
+    The dictionary's rows are keyed (pms_source, pms_trx_code, usali_edition)
+    with no property, so it cannot hold a per-hotel answer — and the one PMS
+    whose codes are documented as franchise-configurable (choiceADVANTAGE,
+    see mapping/skytouch.yaml) is the one that most needs one. The desktop
+    edition binds a resolver holding each hotel's own confirmed meanings.
+    """
+
+    def __call__(
+        self, *, property_id: str, pms_source: str, trx_code: str, edition: int
+    ) -> Classification | None: ...
+
+
+def _from_dictionary(d: UsaliMappingDictionary) -> Classification:
+    return Classification(
+        usali_schedule_id=d.usali_schedule_id,
+        usali_major_category=d.usali_major_category,
+        usali_sub_category=d.usali_sub_category,
+        usali_line_item=d.usali_line_item,
+        gl_account_code=d.gl_account_code,
+    )
+
+
 @dataclass
 class TransformResult:
     mapped: int
@@ -32,7 +81,9 @@ def transform(
 ) -> TransformResult:
     """Map staged rows for (source, business_date) to USALI facts using the edition's dictionary.
 
-    Unmapped rows are recorded as MappingException rows (nothing is silently dropped).
+    A resolver bound under `RESOLVER_KEY` on the session is asked first and may
+    decline; the dictionary answers whatever it leaves. Unmapped rows are
+    recorded as MappingException rows (nothing is silently dropped).
     Reruns are idempotent: stage rows whose stage_id already has a persisted fact or
     exception are skipped rather than re-inserted. Reconciliation verifies persisted
     totals (facts + exceptions, across all runs) still equal the full staged total.
@@ -76,6 +127,8 @@ def transform(
         ).scalars()
     )
 
+    resolver: MappingResolver | None = session.info.get(RESOLVER_KEY)
+
     mapped = unmapped = skipped = 0
     stage_total = Decimal("0")
 
@@ -84,7 +137,19 @@ def transform(
         if row.stage_id in processed_stage_ids:
             skipped += 1
             continue
-        m = mappings.get(row.pms_trx_code)
+        m = (
+            resolver(
+                property_id=row.property_id,
+                pms_source=source,
+                trx_code=row.pms_trx_code,
+                edition=edition,
+            )
+            if resolver is not None
+            else None
+        )
+        if m is None:
+            d = mappings.get(row.pms_trx_code)
+            m = _from_dictionary(d) if d is not None else None
         if m is None:
             session.add(
                 MappingException(

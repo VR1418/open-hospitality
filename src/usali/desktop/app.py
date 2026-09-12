@@ -357,11 +357,16 @@ def run(args: argparse.Namespace) -> int:
             _LOG.info("sample data: %d reports copied to %s", n, paths.drop_folder)
 
         from usali.db import make_engine, make_session_factory
+        from usali.desktop.mapping_decisions import DecidingSessionFactory
         from usali.desktop.settings import read_modules
         from usali.tenancy import FOUNDING_ORG_ID, OrgBoundSessionFactory
 
         serving_engine = make_engine(serving_url)
-        serving_sessions = make_session_factory(serving_engine)
+        # Wrapped ONCE, here, so every session downstream carries this
+        # install's per-hotel code decisions: the request path, the folder
+        # watch, the /ingest route and the night-audit upload all draw from
+        # this factory, and `transform` reads the resolver off the session.
+        serving_sessions = DecidingSessionFactory(make_session_factory(serving_engine))
         issuer = LocalIssuer.from_pem(keys.issuer_private_key_pem)
         codes = session_api.LaunchCodes()
         checker = accounts_api.SessionChecker(serving_sessions)
