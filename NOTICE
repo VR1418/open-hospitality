@@ -28,6 +28,7 @@ edition. Files under src/usali/desktop/, scripts/desktop/, packaging/desktop/,
 docs/desktop/ and tests/test_desktop_* are additions, not modifications.
 
 Modified upstream files:
+    .github/workflows/ci.yml
     .gitignore
     NOTICE
     README.md

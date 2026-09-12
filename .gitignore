@@ -71,3 +71,7 @@ models/
 # allowlist as if it were project policy. `.claude/launch.json` IS tracked;
 # only the local overrides are ignored.
 .claude/settings.local.json
+
+# Git bundles from the fork's own setup. One was swept into a commit by a
+# `git add -A` and had to be amended out; 4.5 MB of it.
+*.bundle

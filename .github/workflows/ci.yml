@@ -3,7 +3,10 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    # `desktop/**` so the fork's own branches are checked. Without it nothing
+    # here ran on desktop/m1 at all, and the desktop edition was built for a
+    # month on hand-run tests alone.
+    branches: [main, 'desktop/**']
 
 jobs:
   backend:
@@ -65,6 +68,42 @@ jobs:
         run: npx oxlint
       - name: Tests
         run: npm test
+      # `--noEmit` above and `tsc -b` here do NOT check the same files: the
+      # build's project references pull in test files and fixtures that
+      # --noEmit skips. A desktop release once failed at exactly this step
+      # with five errors the type job had passed, so the build is the check,
+      # not a formality after it.
+      - name: Build the portal (tsc -b, the check --noEmit is not)
+        run: npm run build:desktop
+
+  desktop:
+    # The desktop edition's tests run against the REAL bundled PostgreSQL —
+    # the one the product ships — not a container. On ubuntu every one of them
+    # skips, which is how 9 of 19 desktop test files went unchecked: sign-in,
+    # backup, restore, the codes queue and the AI are all proved here or
+    # nowhere. No Docker: nothing in this job uses testcontainers.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+      - name: Sync (dev + desktop)
+        run: uv sync --extra dev --extra desktop
+      - name: Fetch the bundled PostgreSQL
+        # Checked against Maven's SHA-1 and a pinned SHA-256 by the script.
+        run: uv run python scripts/desktop/fetch_postgres.py
+      - name: Desktop tests (real cluster)
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run pytest tests/test_desktop_*.py -q -rs | tee result.txt
+          # Nothing-checked must not read as green — the rule `usali gl-parity`
+          # already follows. These tests SKIP themselves when the cluster is
+          # missing, so a silent fetch failure would otherwise look like a pass.
+          if grep -q "bundled Postgres not fetched" result.txt; then
+            echo "::error::the bundled cluster is missing, so the tests that need it skipped"
+            exit 1
+          fi
 
   marketing:
     runs-on: ubuntu-latest
