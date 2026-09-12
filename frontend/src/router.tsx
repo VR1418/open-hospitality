@@ -39,6 +39,7 @@ import AccountPage from './pages/AccountPage'
 import WelcomePage from './pages/WelcomePage'
 import OverviewPage from './pages/OverviewPage'
 import BackupsPage from './pages/BackupsPage'
+import CodesPage from './pages/CodesPage'
 import UpdatesPage from './pages/UpdatesPage'
 import RouteErrorCard from './components/RouteErrorCard'
 import { CallbackPage, RootShell } from './RootShell'
@@ -353,6 +354,13 @@ const updatesRoute = createRoute({
   component: UpdatesPage,
 })
 
+/** Desktop edition: what this hotel's transaction codes mean (PRD M4). */
+const codesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/codes',
+  component: CodesPage,
+})
+
 /** Desktop edition: backups (ADR-D4). */
 const backupsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -368,6 +376,7 @@ const childRoutes = [
   welcomeRoute,
   overviewRoute,
   backupsRoute,
+  codesRoute,
   updatesRoute,
   entryRoute,
   dashboardRoute,

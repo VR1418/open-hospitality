@@ -108,6 +108,13 @@ const ACCOUNTING_TAB: NavTab = {
     { to: '/performance', label: 'Occupancy and rates', icon: TrendUpIcon },
     { to: '/night-audit', label: 'Close the day', icon: MoonIcon, show: isScheduler },
     { to: '/upload', label: 'Add reports', icon: UploadIcon },
+    {
+      to: '/codes',
+      label: 'Codes to confirm',
+      icon: CoverageIcon,
+      desktopOnly: true,
+      show: isOrgAdmin,
+    },
     { to: '/gl', label: 'Books', icon: BankIcon },
     { to: '/reports', label: 'For your accountant', icon: ReportsIcon },
     { to: '/qbo', label: 'Send to QuickBooks', icon: SyncIcon },

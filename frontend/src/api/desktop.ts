@@ -467,3 +467,76 @@ export async function getPortfolio(date?: string): Promise<Portfolio | null> {
   if (!res.ok) throw new Error(await detail(res))
   return (await res.json()) as Portfolio
 }
+
+/** One USALI line a transaction code can be put on. Null `schedule_id` is
+ * meaningful: it is what puts a code in taxes, settlements or non-operating
+ * rather than in a revenue schedule. */
+export type CodeLine = {
+  schedule_id: number | null
+  major: string
+  sub: string
+  line_item: string
+  gl_account_code: string | null
+}
+
+export type CodeItem = {
+  code: string
+  description: string | null
+  pms_source: string
+  /** unknown — nothing decides it, so its money is not in the books.
+   *  unconfirmed — the shipped dictionary guesses, nobody has agreed.
+   *  confirmed — somebody here said what it means. */
+  status: 'unknown' | 'unconfirmed' | 'confirmed'
+  times_seen: number
+  amount: string
+  first_seen: string
+  last_seen: string
+  current: CodeLine | null
+  decided_by: string | null
+  decided_at: string | null
+}
+
+export type CodesState = {
+  property_id: string
+  edition: number
+  money_not_in_the_books: string
+  settled_count: number
+  items: CodeItem[]
+}
+
+export type ConfirmResult = {
+  code: string
+  days_restated: string[]
+  facts_written: number
+  ledger_refused: Record<string, string>
+}
+
+/** Every code this hotel's reports have used. Null on a hosted deployment,
+ * which has no such route. */
+export async function getCodes(propertyId: string): Promise<CodesState | null> {
+  const res = await fetch(`/api/desktop/codes?property=${encodeURIComponent(propertyId)}`, {
+    headers: await authHeaders(),
+  })
+  if (res.status === 404) return null
+  if (res.status === 401) redirectToLogin()
+  if (!res.ok) throw new Error(await detail(res))
+  return (await res.json()) as CodesState
+}
+
+/** The lines a code may be put on — the ones this product already knows. */
+export async function getCodeLines(): Promise<CodeLine[]> {
+  const res = await signedIn('/api/desktop/codes/choices')
+  return ((await res.json()) as { lines: CodeLine[] }).lines
+}
+
+export async function confirmCode(
+  code: string,
+  body: { property_id: string; pms_source: string; line: CodeLine; note?: string },
+): Promise<ConfirmResult> {
+  const res = await signedIn(`/api/desktop/codes/${encodeURIComponent(code)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return (await res.json()) as ConfirmResult
+}
