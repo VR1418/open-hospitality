@@ -116,8 +116,11 @@ class CodeItem(BaseModel):
 class CodesOut(BaseModel):
     property_id: str
     edition: int
-    #: What the unknown codes add up to — the money sitting in the clearing
-    #: account instead of the profit and loss.
+    #: What the unknown codes add up to, counting every charge and every
+    #: payment as money — NOT their net. A night audit nets to zero by
+    #: construction, so summing signed amounts would report "$0.00 missing"
+    #: for a hotel where nothing at all is classified, which is the case this
+    #: page exists for.
     money_not_in_the_books: str
     #: Codes the shipped dictionary already had confirmed. Nothing to do.
     settled_count: int
@@ -236,7 +239,7 @@ def codes(
             elif row is None:
                 status = "unknown"
                 current = None
-                not_in_books += Decimal(amount)
+                not_in_books += abs(Decimal(amount))
             elif row.review_status != "reviewed" or row.confidence == "LOW":
                 status = "unconfirmed"
                 current = Line(

@@ -31,7 +31,7 @@ import {
   tableClass,
 } from '../components/ui'
 import { errorMessage } from '../lib/errors'
-import { fmtMoney } from '../lib/format'
+import { fmtDollars, fmtMoney } from '../lib/format'
 import { useGlobalProperty } from '../lib/propertyContext'
 
 const buttonClass =
@@ -322,9 +322,9 @@ export default function CodesPage() {
               ${fmtMoney(state.money_not_in_the_books)}
             </p>
             <p className="text-sm text-ink">
-              is on your reports but not on your profit and loss, because nothing here knows
-              what those codes are. Your books still balance — the money is parked in a holding
-              account, which is why no other check mentions it.
+              of charges and payments is on your reports but not on your profit and loss,
+              because nothing here knows what those codes are. Your books still balance — the
+              money is parked in a holding account, which is why no other check mentions it.
             </p>
           </section>
         </Card>
@@ -394,7 +394,7 @@ export default function CodesPage() {
                         </div>
                       </td>
                       <td className={`${cellClass} text-right tabular-nums`}>
-                        ${fmtMoney(item.amount)}
+                        {fmtDollars(item.amount)}
                       </td>
                       <td className={cellClass}>
                         <div>{item.current === null ? 'Nowhere' : lineLabel(item.current)}</div>

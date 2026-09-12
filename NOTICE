@@ -36,7 +36,9 @@ Modified upstream files:
     frontend/src/App.test.tsx
     frontend/src/api/types.ts
     frontend/src/auth/oidc.ts
+    frontend/public/favicon.svg
     frontend/src/Layout.tsx
+    frontend/src/lib/format.ts
     frontend/src/lib/lastRoute.ts
     frontend/src/RootShell.tsx
     frontend/src/router.tsx

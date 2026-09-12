@@ -652,3 +652,60 @@ export async function suggestCode(body: {
   })
   return (await res.json()) as AiSuggestion
 }
+
+// --- reading a report the product has no parser for (ADR-D7, phase 3) -------
+
+export type AiReadRow = { code: string; description: string; amount: string }
+
+/** A page the model was NOT shown, and the KIND of thing that held it back —
+ *  never the thing itself. */
+export type AiHeldBack = { page: number; why: string }
+
+export type AiReading = {
+  property_id: string
+  file: string
+  business_date: string | null
+  rows: AiReadRow[]
+  pages_read: number[]
+  held_back: AiHeldBack[]
+  decline_reason: string | null
+  estimated_cost: string | null
+  model: string
+  spend: AiSpend
+}
+
+export type AiReadApplied = {
+  property_id: string
+  business_date: string
+  staged: number
+  unmapped: number
+  ledger: string
+}
+
+/** Ask the owner's model what charges are on a report we cannot parse.
+ *  Stages nothing: the rows come back to be looked at. */
+export async function readReportWithAi(
+  propertyId: string,
+  file: File,
+): Promise<AiReading> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('property', propertyId)
+  const res = await signedIn('/api/desktop/ai/read', { method: 'POST', body: form })
+  return (await res.json()) as AiReading
+}
+
+/** Put the rows a person accepted into the books. */
+export async function confirmAiReading(body: {
+  property_id: string
+  file: string
+  business_date: string
+  rows: AiReadRow[]
+}): Promise<AiReadApplied> {
+  const res = await signedIn('/api/desktop/ai/read/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return (await res.json()) as AiReadApplied
+}

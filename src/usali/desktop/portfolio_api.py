@@ -299,7 +299,10 @@ def _unknown_codes(session: Session, property_id: str) -> tuple[int, Decimal]:
         .where(PmsDailyFinancialStage.property_id == property_id)
     ).all()
     codes = {r[0] for r in rows}
-    return len(codes), sum((Decimal(r[1]) for r in rows), Decimal("0"))
+    # Absolute, not net: a night audit nets to zero by construction, so
+    # summing signed amounts would report nothing missing for a hotel where
+    # nothing at all is classified.
+    return len(codes), sum((abs(Decimal(r[1])) for r in rows), Decimal("0"))
 
 
 def _findings(

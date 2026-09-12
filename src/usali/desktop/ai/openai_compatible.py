@@ -10,8 +10,7 @@ from typing import Any
 
 import httpx
 
-from usali.desktop.ai import reply
-from usali.desktop.ai.port import Answer, Adapter, AiError, Provider, Usage
+from usali.desktop.ai.port import Adapter, AiError, Provider, Reply, Usage
 
 TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 
@@ -31,7 +30,7 @@ class OpenAiCompatibleAdapter(Adapter):
         # Injected in tests, so no test needs a network or a key.
         self._client = client
 
-    def ask(self, *, provider: Provider, key: str, prompt: str, choices: int) -> Answer:
+    def ask(self, *, provider: Provider, key: str, prompt: str) -> Reply:
         if not provider.base_url:
             raise AiError("this provider needs a web address to send to")
         url = provider.base_url.rstrip("/") + "/chat/completions"
@@ -65,4 +64,4 @@ class OpenAiCompatibleAdapter(Adapter):
             text = body["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise AiError("that provider's answer was not in the shape we expected") from exc
-        return reply.parse(str(text), _usage(body), choices=choices)
+        return Reply(text=str(text), usage=_usage(body))

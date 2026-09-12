@@ -45,6 +45,21 @@ class Usage:
 
 
 @dataclass(frozen=True)
+class Reply:
+    """What a provider said, and what it cost.
+
+    Raw text on purpose: an adapter does the HTTP and the envelope, and
+    nothing else. Interpreting the words is the caller's job, because the
+    product asks two different questions — where does this code belong, and
+    what rows are on this page — and an adapter that knew the difference would
+    be an adapter that has to change every time a new question is asked.
+    """
+
+    text: str
+    usage: Usage
+
+
+@dataclass(frozen=True)
 class Answer:
     """One model reply: the JSON object it returned, and what it cost.
 
@@ -78,18 +93,11 @@ class Provider:
 
 
 class Adapter(Protocol):
-    """Ask one question, get one `Answer`.
+    """Ask one question, get the provider's reply.
 
     Implementations do the HTTP and the response shape, and nothing else: the
     allow-list has already decided what may be in `prompt`, and the spend
     ledger has already decided the call may happen.
-
-    `choices` is how many lines the prompt offered. It is in the contract
-    rather than left to each adapter because a model naming a line that was
-    not on the menu has not done the task, and every adapter must refuse that
-    the same way (`reply.parse`).
     """
 
-    def ask(
-        self, *, provider: Provider, key: str, prompt: str, choices: int
-    ) -> Answer: ...
+    def ask(self, *, provider: Provider, key: str, prompt: str) -> Reply: ...

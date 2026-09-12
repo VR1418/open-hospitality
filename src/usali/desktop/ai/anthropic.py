@@ -11,8 +11,7 @@ from typing import Any
 
 import httpx
 
-from usali.desktop.ai import reply
-from usali.desktop.ai.port import Answer, Adapter, AiError, Provider, Usage
+from usali.desktop.ai.port import Adapter, AiError, Provider, Reply, Usage
 
 BASE_URL = "https://api.anthropic.com/v1"
 VERSION = "2023-06-01"
@@ -34,7 +33,7 @@ class AnthropicAdapter(Adapter):
     def __init__(self, client: httpx.Client | None = None) -> None:
         self._client = client
 
-    def ask(self, *, provider: Provider, key: str, prompt: str, choices: int) -> Answer:
+    def ask(self, *, provider: Provider, key: str, prompt: str) -> Reply:
         url = (provider.base_url or BASE_URL).rstrip("/") + "/messages"
         request = {
             "model": provider.model,
@@ -68,4 +67,4 @@ class AnthropicAdapter(Adapter):
             )
         except (KeyError, TypeError) as exc:
             raise AiError("Anthropic's answer was not in the shape we expected") from exc
-        return reply.parse(text, _usage(body), choices=choices)
+        return Reply(text=text, usage=_usage(body))

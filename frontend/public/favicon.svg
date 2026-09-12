@@ -1,5 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-  <rect x="1.5" y="1.5" width="45" height="45" rx="13" fill="#14342b"/>
-  <path d="M15 37 L15 25 A9 9 0 0 1 33 25 L33 37" fill="none" stroke="#cfa257" stroke-width="2.8" stroke-linecap="round"/>
-  <path d="M12.5 37.5 H35.5" stroke="#cfa257" stroke-width="2.8" stroke-linecap="round"/>
+  <title>Open Hospitality</title>
+  <!-- The mark only. A wordmark is illegible in a 16px browser tab, and the
+       dots are what makes the tab findable in a row of twenty. Kept in step
+       with frontend/src/components/Logo.tsx. -->
+  <circle cx="12.5" cy="12" r="4.3" fill="#F04E37"/>
+  <circle cx="24.5" cy="9.5" r="3.1" fill="#F4897A"/>
+  <circle cx="35" cy="13" r="3.5" fill="#16A6A0"/>
+  <circle cx="9.5" cy="24" r="3.1" fill="#F4897A"/>
+  <circle cx="22" cy="23.5" r="5.2" fill="#F04E37"/>
+  <circle cx="35.5" cy="25.5" r="4.2" fill="#16A6A0"/>
+  <circle cx="13.5" cy="35.5" r="3.6" fill="#16A6A0"/>
+  <circle cx="26.5" cy="36.5" r="3.1" fill="#F4897A"/>
 </svg>

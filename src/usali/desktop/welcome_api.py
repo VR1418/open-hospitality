@@ -40,6 +40,7 @@ from usali.auth import (
     require_grants,
     require_operator,
 )
+from usali.desktop.ai.report import OTHER_SOURCE
 from usali.desktop.backup import BackupConfig
 from usali.desktop.paths import DesktopPaths
 from usali.desktop.settings import read_setting, write_setting
@@ -64,6 +65,7 @@ PMS_NAMES: dict[str, str] = {
     "OPERA": "Oracle OPERA",
     "AUTOCLERK": "AutoClerk",
     "SKYTOUCH": "choiceADVANTAGE",
+    OTHER_SOURCE: "Something else — read with help from your AI helper",
 }
 
 # `detect` matches a phrase anywhere in a report's header, so a very short
@@ -80,10 +82,19 @@ class PmsChoice(BaseModel):
 
 def pms_choices() -> list[PmsChoice]:
     """The engine's own detection registry, never a parallel list (README,
-    "Supported PMS sources"). Upper case: the form `detect` and the facts use."""
+    "Supported PMS sources"), plus OTHER. Upper case: the form `detect` and
+    the facts use.
+
+    OTHER is last and is not a vendor. It exists because refusing to create
+    the hotel at all — which is what this did — locks an owner out of every
+    other part of the product over a report we have no parser for. Their
+    reports are read with the AI helper's assistance instead, and they confirm
+    what it found (ADR-D7, phase 3).
+    """
     ids = sorted(s.upper() for s in supported_pms_sources())
-    return sorted((PmsChoice(id=i, name=PMS_NAMES.get(i, i)) for i in ids),
-                  key=lambda c: c.name.lower())
+    listed = sorted((PmsChoice(id=i, name=PMS_NAMES.get(i, i)) for i in ids),
+                    key=lambda c: c.name.lower())
+    return [*listed, PmsChoice(id=OTHER_SOURCE, name=PMS_NAMES[OTHER_SOURCE])]
 
 
 class WelcomeProperty(BaseModel):

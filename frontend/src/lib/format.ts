@@ -38,3 +38,14 @@ export function fmtStat(s: string | null): string {
   if (s === null) return ''
   return s.includes('.') ? s.replace(/\.?0+$/, '') : s
 }
+
+/**
+ * Money with its sign where a person expects it: "-$785.31", never
+ * "$-785.31". Settlements are negative on every night-audit summary, so this
+ * is the common case, not the edge one.
+ */
+export function fmtDollars(s: string): string {
+  const n = Number(s)
+  const body = moneyFmt.format(Math.abs(n === 0 ? 0 : n))
+  return n < 0 ? `-$${body}` : `$${body}`
+}

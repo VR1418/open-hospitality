@@ -29,7 +29,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from usali.adaptors.pdf import extract_pages
+from usali.adaptors.pdf import Word, cluster_rows, extract_pages
 from usali.desktop.ai.allowlist import BlockedContent, check
 
 
@@ -64,8 +64,21 @@ class Reading:
         return bool(self.kept)
 
 
-def page_text(words: Iterable[object]) -> str:
-    return " ".join(str(getattr(w, "text", "")) for w in words).strip()
+def page_text(words: list[Word]) -> str:
+    """The page as LINES, not as one run-on string.
+
+    A night-audit summary is a table, and a table read as a single paragraph
+    loses the thing that makes it a table: which code goes with which amount.
+    `cluster_rows` is the engine's own row grouping — the same one every
+    adapter uses — so the model is shown the page the way the page is printed.
+    """
+    rows = cluster_rows(list(words))
+    lines = []
+    for row in sorted(rows, key=lambda r: min(w.top for w in r)):
+        line = " ".join(w.text for w in sorted(row, key=lambda w: w.x0)).strip()
+        if line:
+            lines.append(line)
+    return chr(10).join(lines)
 
 
 def safe_pages(pdf: str | Path, *, names: Iterable[str] = ()) -> Reading:

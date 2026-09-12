@@ -49,6 +49,18 @@ allow-list; every existing control is a deny, a mask or a gate.
   amounts, and the candidate USALI lines. Everything else is structurally
   absent rather than stripped.
 
+  **The one exception is reading a report we have no parser for** (phase 3).
+  Its whole content is text nobody here wrote, so construction is impossible
+  and the protection moves earlier, into `ai/pages.py`: the report is split,
+  every page is run through this same scan, and a page either goes WHOLE or is
+  dropped whole with the kind of thing that held it back named. Nothing is
+  masked to make a page acceptable — then we would be guessing whether what
+  remained was safe. If no page survives, nothing is sent and the owner is
+  told. The scan gained a guest-name shape for this: employee names we can
+  look up, a guest's we cannot, because the product deliberately never stores
+  one. Measured on the real choiceADVANTAGE pack that prompted the feature: 21
+  of 48 pages kept, and not one kept page carries a person's name.
+
   Then, immediately before the request leaves, the serialized body is
   **scanned** and the send is **refused** — never masked — if it contains a
   Luhn-valid card number, an SSN-shaped string, a long bare digit run, or any

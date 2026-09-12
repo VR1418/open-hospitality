@@ -41,6 +41,7 @@ import OverviewPage from './pages/OverviewPage'
 import BackupsPage from './pages/BackupsPage'
 import AiPage from './pages/AiPage'
 import CodesPage from './pages/CodesPage'
+import ReadWithAiPage from './pages/ReadWithAiPage'
 import UpdatesPage from './pages/UpdatesPage'
 import RouteErrorCard from './components/RouteErrorCard'
 import { CallbackPage, RootShell } from './RootShell'
@@ -355,6 +356,13 @@ const updatesRoute = createRoute({
   component: UpdatesPage,
 })
 
+/** Desktop edition: reading a report we have no parser for (ADR-D7). */
+const readWithAiRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/read-with-ai',
+  component: ReadWithAiPage,
+})
+
 /** Desktop edition: the owner's own AI helper (ADR-D7). */
 const aiRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -386,6 +394,7 @@ const childRoutes = [
   backupsRoute,
   codesRoute,
   aiRoute,
+  readWithAiRoute,
   updatesRoute,
   entryRoute,
   dashboardRoute,

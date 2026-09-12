@@ -15,11 +15,23 @@ own choice goes through — with `origin="ai-accepted"` and their subject in
 `decided_by` (AI-6). There is deliberately no "apply" endpoint on this router.
 """
 
+from datetime import date
 from decimal import Decimal
+from hashlib import sha256
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+
+from usali import gl_posting
 
 from usali.auth import (
     ORG_ADMIN,
@@ -30,13 +42,17 @@ from usali.auth import (
     require_operator,
 )
 from usali.desktop.ai import client, config, spend
-from usali.desktop.ai.allowlist import CodeQuestion, LineChoice
+from usali.desktop.ai.allowlist import BlockedContent, CodeQuestion, LineChoice
 from usali.desktop.ai.port import AiError, NotConfigured, SpendCapReached
+from usali.desktop.ai.report import OTHER_SOURCE, REPORT_TYPE
 from usali.desktop.ai.spend import Prices
 from usali.desktop.codes_api import DEFAULT_EDITION, Line, known_lines, require_property
 from usali.desktop.keystore import KeyStore
 from usali.desktop.paths import DesktopPaths
-from usali.models import PmsDailyFinancialStage
+from usali.models import AuditEvent, PmsDailyFinancialStage, Property
+from usali.schemas import StagedRecord
+from usali.stage import stage_records
+from usali.transform import transform
 
 _owner = require_grants(ORG_ADMIN)
 router = APIRouter(dependencies=[Depends(require_operator), Depends(require_active_org)])
@@ -44,6 +60,9 @@ router = APIRouter(dependencies=[Depends(require_operator), Depends(require_acti
 #: How many individual amounts the model is shown. Enough to tell a fixed fee
 #: from a per-night charge; not a transaction list.
 SAMPLE_AMOUNTS = 5
+
+#: Upstream's own upload ceiling (server.py `_MAX_PDF_BYTES`).
+_MAX_PDF = 25 * 1024 * 1024
 
 
 class ProviderChoice(BaseModel):
@@ -332,3 +351,186 @@ def install(app: FastAPI, *, paths: DesktopPaths, store: KeyStore) -> None:
     app.state.desktop_ai_paths = paths
     app.state.desktop_ai_store = store
     app.include_router(router)
+
+
+# --- reading a report the product has no parser for (ADR-D7, phase 3) --------
+
+class ReadRow(BaseModel):
+    code: str = Field(min_length=1, max_length=50)
+    description: str = Field(default="", max_length=255)
+    amount: str
+
+
+class HeldBackOut(BaseModel):
+    page: int
+    #: The KIND of thing that held the page back, never the thing itself.
+    why: str
+
+
+class ReadOut(BaseModel):
+    property_id: str
+    file: str
+    business_date: date | None
+    rows: list[ReadRow]
+    #: Which pages were shown to the model, and which were not. Part of the
+    #: answer: the owner decides whether to trust the rest knowing this.
+    pages_read: list[int]
+    held_back: list[HeldBackOut]
+    decline_reason: str | None
+    estimated_cost: str | None
+    model: str
+    spend: SpendOut
+
+
+class ConfirmReadIn(BaseModel):
+    property_id: str = Field(min_length=1, max_length=50)
+    file: str = Field(min_length=1, max_length=255)
+    business_date: date
+    rows: list[ReadRow]
+
+
+class ConfirmReadOut(BaseModel):
+    property_id: str
+    business_date: date
+    staged: int
+    #: Every code lands unmapped, because no dictionary covers OTHER — which
+    #: is to say they land straight in Codes to confirm.
+    unmapped: int
+    ledger: str
+
+
+def _pdf_bytes(file: UploadFile) -> bytes:
+    name = file.filename or "report.pdf"
+    if name in {".", ".."} or "/" in name or "\\" in name or "\x00" in name:
+        raise HTTPException(status_code=422, detail="unsafe upload filename")
+    payload = file.file.read(_MAX_PDF + 1)
+    if len(payload) > _MAX_PDF:
+        raise HTTPException(status_code=413, detail="That PDF is too large to read.")
+    if not payload.startswith(b"%PDF-"):
+        raise HTTPException(status_code=422, detail="That file isn't a PDF.")
+    return payload
+
+
+@router.post("/api/desktop/ai/read")
+def read_report(
+    request: Request,
+    file: UploadFile,
+    property_id: str = Form(alias="property"),
+    principal: Principal = Depends(_owner),
+) -> ReadOut:
+    """Ask the owner's model what charges are on a report we cannot parse.
+
+    Stages nothing. The rows come back to be looked at, and only a person
+    accepting them puts anything in the books (AI-6).
+    """
+    paths = _paths(request)
+    payload = _pdf_bytes(file)
+    with request_session_factory(request)() as session:
+        require_property(session, property_id)
+        hotel = session.scalar(
+            select(Property.name).where(Property.property_id == property_id)
+        ) or property_id
+
+        paths.uploads.mkdir(parents=True, exist_ok=True)
+        dest = paths.uploads / (file.filename or "report.pdf")
+        dest.write_bytes(payload)
+        try:
+            got = client.read_report(
+                session, store=_store(request), sealed=paths.sealed_keys_file,
+                pdf=dest, hotel=str(hotel), property_id=property_id,
+                actor_subject=principal.subject,
+            )
+        except NotConfigured as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
+        except SpendCapReached as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from None
+        except BlockedContent as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        except AiError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from None
+
+        settings_now = config.read(session)
+        out = ReadOut(
+            property_id=property_id, file=dest.name, business_date=got.business_date,
+            rows=[
+                ReadRow(code=r.code, description=r.description, amount=str(r.amount))
+                for r in got.rows
+            ],
+            pages_read=list(got.pages_read),
+            held_back=[HeldBackOut(page=h.number, why=h.why) for h in got.held_back],
+            decline_reason=got.decline_reason,
+            estimated_cost=None if got.estimated_cost is None else str(got.estimated_cost),
+            model=got.model,
+            spend=_spend_out(spend.this_month(
+                session, cap=settings_now.cap, max_calls=settings_now.max_calls
+            )),
+        )
+        session.commit()
+        return out
+
+
+@router.post("/api/desktop/ai/read/confirm")
+def confirm_read(
+    body: ConfirmReadIn, request: Request, principal: Principal = Depends(_owner)
+) -> ConfirmReadOut:
+    """Put the rows a person accepted into the books.
+
+    They go through upstream's ordinary path — stage, transform, post — so an
+    AI-read day is reconciled, posted and corrected exactly like a parsed one.
+    Because no dictionary covers OTHER, every code lands as a mapping
+    exception, which is to say: straight into Codes to confirm, with its money
+    shown against it.
+    """
+    if not body.rows:
+        raise HTTPException(status_code=422, detail="There are no rows to put in the books.")
+    paths = _paths(request)
+    with request_session_factory(request)() as session:
+        require_property(session, body.property_id)
+        records = [
+            StagedRecord(
+                property_id=body.property_id,
+                pms_source=OTHER_SOURCE,
+                report_type=REPORT_TYPE,
+                business_date=body.business_date,
+                pms_trx_code=row.code,
+                pms_trx_desc=row.description or None,
+                raw_amount=Decimal(row.amount),
+                room_count=0,
+            )
+            for row in body.rows
+        ]
+        source_file = body.file
+        stage_records(
+            session, records, source_file=source_file,
+            # The rows a PERSON accepted are what this identifies — so the
+            # same report accepted twice is the same batch, and re-accepting
+            # it does not double the day.
+            file_hash=sha256(
+                f"{body.property_id}|{body.business_date}|{source_file}".encode()
+            ).hexdigest(),
+        )
+        session.flush()
+        result = transform(
+            session, source=OTHER_SOURCE, business_date=body.business_date,
+            edition=DEFAULT_EDITION,
+        )
+        outcome = gl_posting.post_and_record(
+            session, property_id=body.property_id, business_date=body.business_date,
+            source_type="pms_daily", actor=principal.subject,
+        )
+        session.add(AuditEvent(
+            actor_subject=principal.subject, action="ai_report_accepted",
+            resource_type="property", resource_id=body.property_id[:64],
+        ))
+        session.commit()
+
+    read = paths.read_folder
+    read.mkdir(parents=True, exist_ok=True)
+    staged_pdf = paths.uploads / source_file
+    if staged_pdf.is_file():
+        staged_pdf.replace(read / source_file)
+    return ConfirmReadOut(
+        property_id=body.property_id, business_date=body.business_date,
+        staged=len(records), unmapped=result.unmapped,
+        ledger=outcome.message or outcome.status,
+    )

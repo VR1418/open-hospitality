@@ -12,6 +12,7 @@ person's click, which goes through the same endpoint their own choice does.
 
 from collections.abc import Iterator
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -332,3 +333,127 @@ def test_with_the_module_off_the_routes_do_not_exist(world: World) -> None:
         f"/api/desktop/codes?property={world.property_id}", headers=world.headers
     )
     assert still.status_code == 200
+
+
+# --- reading a report the product has no parser for (phase 3) ---------------
+
+SAMPLE = Path("docs/reference/samples/SkyTouch - Standard Audit Pack (mock).pdf")
+
+
+def _other_hotel(world: World) -> str:
+    """A hotel whose front-desk system the product has no parser for.
+
+    Made once and reused: the wizard refuses a second hotel whose reports
+    print the same name, which is a rule worth keeping.
+    """
+    listed = world.get("/api/desktop/welcome").json()["properties"]  # type: ignore[attr-defined]
+    for existing in listed:
+        if existing["pms_source"] == "OTHER":
+            return str(existing["property_id"])
+    made = world.post("/api/desktop/welcome/property", {
+        "name": "Harbour Rest", "report_name": "HARBOUR REST LODGE", "pms_source": "OTHER",
+        "total_rooms": 20, "timezone": "America/Chicago",
+        "fiscal": {"calendar_type": "calendar_month", "fiscal_year_start_month": 1,
+                   "week_start_weekday": None},
+    })
+    assert made.status_code == 201, made.text  # type: ignore[attr-defined]
+    return made.json()["property_id"]  # type: ignore[attr-defined]
+
+
+def test_a_system_we_have_no_parser_for_is_offered_and_accepted(world: World) -> None:
+    """It used to refuse outright — "can't read reports from that system yet" —
+    which locked the owner out of every other part of the product."""
+    choices = world.get("/api/desktop/welcome").json()["pms_choices"]  # type: ignore[attr-defined]
+    other = [c for c in choices if c["id"] == "OTHER"]
+    assert other and "AI helper" in other[0]["name"]
+    assert _other_hotel(world)
+
+
+def test_reading_a_report_proposes_rows_and_stages_nothing(world: World) -> None:
+    world.use_mock()
+    other = _other_hotel(world)
+    with SAMPLE.open("rb") as fh:
+        r = world.client.post(
+            "/api/desktop/ai/read", headers=world.headers,
+            files={"file": (SAMPLE.name, fh, "application/pdf")},
+            data={"property": other},
+        )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["rows"], "the practice provider should find the summary rows"
+    assert body["pages_read"], "it was shown something"
+    # And it says what it was NOT shown, which is part of the answer.
+    assert all(h["why"] and h["page"] for h in body["held_back"])
+    assert body["decline_reason"] is None
+
+    # AI-6: reading proposes. Nothing reached the books.
+    with world.sessions() as s:  # type: ignore[operator]
+        staged = s.execute(text(
+            "SELECT count(*) FROM pms_daily_financial_stage WHERE pms_source = 'OTHER'"
+        )).scalar_one()
+    assert staged == 0
+
+
+def test_the_rows_a_person_accepts_become_codes_to_confirm(world: World) -> None:
+    """Phase 3 meets phase 1 with no new machinery: no dictionary covers
+    OTHER, so every accepted code lands unmapped — which is to say, straight
+    into Codes to confirm with its money shown against it."""
+    world.use_mock()
+    other = _other_hotel(world)
+    with SAMPLE.open("rb") as fh:
+        read = world.client.post(
+            "/api/desktop/ai/read", headers=world.headers,
+            files={"file": (SAMPLE.name, fh, "application/pdf")},
+            data={"property": other},
+        ).json()
+
+    applied = world.post("/api/desktop/ai/read/confirm", {
+        "property_id": other, "file": read["file"],
+        "business_date": read["business_date"] or "2026-07-07",
+        "rows": read["rows"],
+    })
+    assert applied.status_code == 200, applied.text  # type: ignore[attr-defined]
+    out = applied.json()  # type: ignore[attr-defined]
+    assert out["staged"] == len(read["rows"])
+    assert out["unmapped"] == len(read["rows"])
+
+    codes = world.get(f"/api/desktop/codes?property={other}").json()  # type: ignore[attr-defined]
+    seen = {i["code"]: i for i in codes["items"]}
+    assert seen, "the accepted rows are waiting to be confirmed"
+    assert all(i["status"] == "unknown" for i in seen.values())
+    assert Decimal(codes["money_not_in_the_books"]) != Decimal("0")
+
+
+def test_accepting_nothing_is_refused(world: World) -> None:
+    world.use_mock()
+    other = _other_hotel(world)
+    r = world.post("/api/desktop/ai/read/confirm", {
+        "property_id": other, "file": "x.pdf", "business_date": "2026-07-07", "rows": [],
+    })
+    assert r.status_code == 422  # type: ignore[attr-defined]
+
+
+def test_reading_needs_a_hotel_that_exists(world: World) -> None:
+    world.use_mock()
+    with SAMPLE.open("rb") as fh:
+        r = world.client.post(
+            "/api/desktop/ai/read", headers=world.headers,
+            files={"file": (SAMPLE.name, fh, "application/pdf")},
+            data={"property": "NOPE"},
+        )
+    assert r.status_code == 404
+
+
+def test_something_that_is_not_a_pdf_is_refused_before_anything_is_asked(
+    world: World,
+) -> None:
+    world.use_mock()
+    other = _other_hotel(world)
+    before = len(world.calls())
+    r = world.client.post(
+        "/api/desktop/ai/read", headers=world.headers,
+        files={"file": ("notes.txt", b"just some text", "application/pdf")},
+        data={"property": other},
+    )
+    assert r.status_code == 422 and "isn't a PDF" in r.json()["detail"]
+    assert len(world.calls()) == before, "nothing was asked, so nothing was charged"

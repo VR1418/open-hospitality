@@ -16,12 +16,13 @@ click, through the same endpoint their own choice goes through (AI-6).
 """
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from usali.desktop.ai import config, spend
+from usali.desktop.ai import config, report, reply, spend
 from usali.desktop.ai.allowlist import (
     BlockedContent,
     CodeQuestion,
@@ -33,11 +34,13 @@ from usali.desktop.ai.allowlist import (
 from usali.desktop.ai.anthropic import AnthropicAdapter
 from usali.desktop.ai.mock import MockAdapter
 from usali.desktop.ai.openai_compatible import OpenAiCompatibleAdapter
+from usali.desktop.ai.pages import HeldBack, Reading, safe_pages
 from usali.desktop.ai.port import Adapter, AiError, NotConfigured, Provider, Usage
 from usali.desktop.keystore import KeyStore
 from usali.models import AuditEvent
 
 PURPOSE_CLASSIFY = "classify_code"
+PURPOSE_READ = "read_report"
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,12 @@ class Suggestion:
     #: None when this call could not be priced — see `spend`.
     estimated_cost: Decimal | None
     model: str
+
+
+def _said(got: object) -> tuple[str, Usage]:
+    """A provider's reply, unpacked. The adapter does transport; reading the
+    words is the caller's job, and the two questions read them differently."""
+    return str(getattr(got, "text", "")), getattr(got, "usage", Usage(None, None))
 
 
 def adapter_for(kind: str) -> Adapter:
@@ -136,8 +145,9 @@ def suggest_line_for_code(
         kind=settings.provider, model=settings.model, base_url=settings.base_url
     )
     try:
-        answer = use.ask(
-            provider=provider, key=key, prompt=prompt, choices=len(question.choices)
+        answer = reply.parse(
+            *_said(use.ask(provider=provider, key=key, prompt=prompt)),
+            choices=len(question.choices),
         )
     except AiError as failed:
         _record_and_commit(
@@ -165,6 +175,112 @@ def suggest_line_for_code(
         confidence=answer.confidence,
         reason=answer.reason,
         decline_reason=answer.decline_reason,
+        estimated_cost=cost,
+        model=settings.model,
+    )
+
+
+@dataclass(frozen=True)
+class ReportReading:
+    """What the model made of a report the product cannot parse.
+
+    `held_back` is part of the answer, not a footnote: the owner is entitled
+    to know which pages were kept from the model and why before deciding
+    whether to trust what came back from the rest.
+    """
+
+    hotel: str
+    rows: tuple[report.ExtractedRow, ...]
+    business_date: date | None
+    decline_reason: str | None
+    pages_read: tuple[int, ...]
+    held_back: tuple[HeldBack, ...]
+    estimated_cost: Decimal | None
+    model: str
+
+
+def read_report(
+    session: Session,
+    *,
+    store: KeyStore,
+    sealed: Path,
+    pdf: Path,
+    hotel: str,
+    property_id: str,
+    actor_subject: str,
+    adapter: Adapter | None = None,
+) -> ReportReading:
+    """Ask the owner's model what charges are on a report we cannot parse.
+
+    The order is the same as every other call — configured, capped, scanned,
+    asked, recorded — with one difference that matters: the scan runs BEFORE
+    the prompt exists, page by page, and decides what the prompt may contain
+    (`pages`). Nothing is staged here. The rows come back to be confirmed.
+    """
+    settings = config.read(session)
+    if not settings.ready or settings.provider is None:
+        raise NotConfigured("No AI helper is set up yet. Choose one in AI settings first.")
+    key = ""
+    if settings.provider != "mock":
+        found = config.read_key(store, sealed)
+        if not found:
+            raise NotConfigured(
+                "Your AI helper has no key saved on this computer. Add it in AI settings."
+            )
+        key = found
+
+    spend.check(spend.this_month(session, cap=settings.cap, max_calls=settings.max_calls))
+
+    reading: Reading = safe_pages(pdf, names=forbidden_names(session))
+    if not reading.anything_to_send:
+        raise BlockedContent(
+            "nothing on any page of this report that could be shown to a model"
+        )
+
+    question = report.ReportQuestion(hotel=hotel, pages=reading.kept)
+    prompt = report.render(question)
+    # Belt and braces: the pages passed one at a time, so the whole prompt
+    # must pass too. A failure here is a bug in `pages`, not in the report.
+    try:
+        check(prompt, names=forbidden_names(session))
+    except BlockedContent as blocked:
+        _record_and_commit(
+            session, settings=settings, actor_subject=actor_subject,
+            property_id=property_id, prompt=prompt, outcome="blocked",
+            message=str(blocked),
+        )
+        raise
+
+    use = adapter or adapter_for(settings.provider)
+    provider = Provider(
+        kind=settings.provider, model=settings.model, base_url=settings.base_url
+    )
+    try:
+        extracted = report.parse(*_said(use.ask(provider=provider, key=key, prompt=prompt)))
+    except AiError as failed:
+        _record_and_commit(
+            session, settings=settings, actor_subject=actor_subject,
+            property_id=property_id, prompt=prompt, outcome="failed", message=str(failed),
+        )
+        raise
+
+    outcome = "answered" if extracted.rows else "declined"
+    cost = spend.record(
+        session, actor_subject=actor_subject, provider=settings.provider,
+        model=settings.model, purpose=PURPOSE_READ, property_id=property_id,
+        usage=Usage(None, None), prices=settings.prices, prompt=prompt, outcome=outcome,
+    )
+    session.add(AuditEvent(
+        actor_subject=actor_subject, action=f"ai_report_{outcome}",
+        resource_type="property", resource_id=property_id[:64],
+    ))
+    return ReportReading(
+        hotel=hotel,
+        rows=extracted.rows,
+        business_date=extracted.business_date,
+        decline_reason=extracted.decline_reason,
+        pages_read=tuple(p.number for p in reading.kept),
+        held_back=reading.held_back,
         estimated_cost=cost,
         model=settings.model,
     )

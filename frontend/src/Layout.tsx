@@ -30,6 +30,7 @@ import { getMe } from './api/client'
 import { getModules, getWelcome, hiddenPaths } from './api/desktop'
 import type { Me } from './api/types'
 import BuildStamp from './components/BuildStamp'
+import { Logo } from './components/Logo'
 import OrgPicker from './components/OrgPicker'
 import { propertyLabel } from './lib/propertyName'
 import { badgeToneClasses } from './lib/badgeTones'
@@ -113,6 +114,13 @@ const ACCOUNTING_TAB: NavTab = {
       to: '/codes',
       label: 'Codes to confirm',
       icon: CoverageIcon,
+      desktopOnly: true,
+      show: isOrgAdmin,
+    },
+    {
+      to: '/read-with-ai',
+      label: 'Read with AI',
+      icon: UploadIcon,
       desktopOnly: true,
       show: isOrgAdmin,
     },
@@ -335,14 +343,9 @@ function SidebarContent({
         }
       >
         <div className={collapsed ? 'text-center' : ''}>
-          <span className="block text-lg font-semibold leading-tight tracking-tight">
-            <span aria-hidden="true" className="text-accent">
-              ◆
-            </span>
-            <span className={collapsed ? 'sr-only' : ''}>
-              {' '}
-              <span className="text-accent">Open</span> Hospitality
-            </span>
+          <span className="block leading-tight">
+            <Logo compact={collapsed} size={collapsed ? 26 : 28} />
+            {collapsed && <span className="sr-only">Open Hospitality</span>}
           </span>
           <span
             className={

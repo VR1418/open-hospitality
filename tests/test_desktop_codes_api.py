@@ -246,3 +246,15 @@ def test_a_day_in_a_closed_month_is_refused_by_name(world: World) -> None:
     assert world.facts_for("QQZ") == []
     item = _items(world.get(f"/api/desktop/codes?property={world.property_id}").json())["QQZ"]  # type: ignore[attr-defined]
     assert item["status"] == "unknown"
+
+
+def test_charges_and_payments_both_count_towards_the_figure(world: World) -> None:
+    """A night audit nets to zero by construction — charges in, settlements
+    out. Summing signed amounts would tell a hotel whose codes are ALL
+    unknown that nothing was missing, which is the case this page exists for."""
+    day = date(2026, 7, 9)
+    world.stage(day=day, code="WXY", desc="Spa Charge", amount="400.0000")
+    world.stage(day=day, code="WXZ", desc="Card Settlement", amount="-400.0000")
+    body = world.get(f"/api/desktop/codes?property={world.property_id}").json()  # type: ignore[attr-defined]
+    figure = Decimal(body["money_not_in_the_books"])
+    assert figure >= Decimal("800"), "both sides count as money, they do not cancel"

@@ -272,18 +272,42 @@ def _reveal(folder: Path) -> None:
 
 
 def _icon_image() -> Any:
-    from PIL import Image, ImageDraw, ImageFont
+    """The tray icon: the product's mark, the same cluster of dots as the
+    browser tab and the sidebar (frontend/src/components/Logo.tsx).
 
-    size = 64
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    draw.rounded_rectangle((2, 2, size - 3, size - 3), radius=14, fill=(24, 54, 92, 255))
-    try:
-        font: Any = ImageFont.load_default(size=28)
-    except TypeError:  # Pillow without sized default fonts
-        font = ImageFont.load_default()
-    draw.text((size / 2, size / 2), "OH", font=font, fill="white", anchor="mm")
-    return image
+    Drawn rather than loaded so the packaged app carries no image file to lose,
+    and supersampled 4x then reduced, because Pillow's ellipse has no
+    anti-aliasing and a 64px circle drawn directly has visibly ragged edges.
+    """
+    from PIL import Image, ImageDraw
+
+    CORAL = (240, 78, 55, 255)
+    SALMON = (244, 137, 122, 255)
+    TEAL = (22, 166, 160, 255)
+    # (centre x, centre y, radius, colour) on a 48-unit grid — the viewBox the
+    # favicon uses, so the two cannot drift apart.
+    dots = (
+        (12.5, 12.0, 4.3, CORAL),
+        (24.5, 9.5, 3.1, SALMON),
+        (35.0, 13.0, 3.5, TEAL),
+        (9.5, 24.0, 3.1, SALMON),
+        (22.0, 23.5, 5.2, CORAL),
+        (35.5, 25.5, 4.2, TEAL),
+        (13.5, 35.5, 3.6, TEAL),
+        (26.5, 36.5, 3.1, SALMON),
+    )
+
+    size, scale = 64, 4
+    big = Image.new("RGBA", (size * scale, size * scale), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(big)
+    unit = size * scale / 48
+    for cx, cy, r, colour in dots:
+        draw.ellipse(
+            ((cx - r) * unit, (cy - r) * unit, (cx + r) * unit, (cy + r) * unit),
+            fill=colour,
+        )
+    # Pillow moved the filters under `Image.Resampling` in 9.1.
+    return big.resize((size, size), Image.Resampling.LANCZOS)
 
 
 def _run_tray(open_books: Callable[[], None], show_reports: Callable[[], None]) -> bool:

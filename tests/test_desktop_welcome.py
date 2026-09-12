@@ -99,11 +99,19 @@ def world(tmp_path_factory: pytest.TempPathFactory) -> Iterator[World]:
         cluster.stop()
 
 
-def test_the_pms_choices_are_the_engines_own_registry() -> None:
+def test_the_pms_choices_are_the_engines_own_registry_plus_other() -> None:
     choices = pms_choices()
-    assert {c.id for c in choices} == {s.upper() for s in supported_pms_sources()}
+    detectable = {c.id for c in choices} - {"OTHER"}
+    # Every system we claim to READ comes from the engine's own registry, so
+    # the wizard can never offer one whose reports would quarantine on ingest.
+    assert detectable == {s.upper() for s in supported_pms_sources()}
     # The owner reads choiceADVANTAGE, never the engine's SKYTOUCH identifier.
     assert {"id": "SKYTOUCH", "name": "choiceADVANTAGE"} in [c.model_dump() for c in choices]
+    # OTHER is not a vendor and is last: it exists so a hotel we have no
+    # parser for can still be set up, its reports read with the AI helper's
+    # assistance instead (ADR-D7 phase 3).
+    assert choices[-1].id == "OTHER"
+    assert "AI helper" in choices[-1].name
 
 
 def test_property_codes_are_short_and_never_clash() -> None:
