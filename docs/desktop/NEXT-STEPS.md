@@ -122,6 +122,7 @@ Mac.
 | Three version numbers that disagree: `pyproject` 0.1.0, `package.json` 0.0.0, and nothing shown in the app. A tester cannot tell us which build they have. | one source, surfaced in the UI |
 | The wordmark is not Space Grotesk — the kit's own lockups carry no font. Bundling it is the only offline-safe fix. | `docs/brand/README.md` |
 | Six dots on a dark square are hard to pick out at a true 16px tab size. | the kit's `favicon.svg` |
+| **Portal tests are flaky under load.** Three sightings now — `PerformancePage`, `WelcomePage`, and once inside `check.py` — each passing alone and failing while something heavy ran beside them. They are `waitFor` timeouts, not real failures, but CI runs jobs in parallel and will hit this. Worth raising the timeout or reducing jsdom churn before it is dismissed as noise once too often. | `frontend/src/pages/*.test.tsx` |
 
 ## 6. Send the three upstream changes back — *half a day*
 
