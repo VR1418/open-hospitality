@@ -44,9 +44,35 @@ Two things shipped today that a machine would have caught and a person did not:
 - A frontend build that failed only under `tsc -b` — the check I had been
   running, `tsc --noEmit`, covers a narrower set and passed.
 
-**What it needs:** a Windows job that fetches Postgres, runs the desktop suite
-and the portal build (`npm run build:desktop`, not just the type-check). It is
-the last moment this is cheap — the suite is 197 tests and still fast.
+**Done, and blocked on one thing.** `.github/workflows/ci.yml` now has a
+`windows-latest` job that fetches the bundled cluster and runs the desktop
+suite, refuses to pass when those tests skip themselves, and builds the portal
+rather than only type-checking it. Its exact command was run here first: 197
+passed, no skips.
+
+**GitHub is not dispatching it.** Two pushes to `desktop/m1` — a real one and
+an empty probe — created no workflow run at all. What I could check from here
+says everything is in order:
+
+- `repos/.../actions/permissions` → `{"enabled": true, "allowed_actions": "all"}`
+- all six workflows listed `active`
+- the `ci.yml` **on GitHub** reads `branches: [main, 'desktop/**']`, and the
+  branch is `desktop/m1`
+- the repository is private and is not a fork
+- `actions/runs` → `total_count: 0`, for every workflow, ever
+
+So the cause is above the repository, where an API token cannot see it. Worth
+checking, in order:
+
+1. **Billing → Actions minutes.** A private repo on the free tier gets 2,000
+   minutes a month; at the limit, runs stop being created rather than failing.
+   Windows minutes bill at **2× the rate**, which this job will consume.
+2. **Settings → Actions → General**, at the account level as well as the repo.
+3. **Making the repository public** removes the question entirely — Actions is
+   free and unmetered there — and M5 makes it public anyway. That is a decision
+   about timing, not a workaround.
+
+Until it dispatches, the checks exist but nothing runs them but a person.
 
 ## 3. Email intake — *the rest of M4, about a week*
 
