@@ -72,7 +72,23 @@ checking, in order:
    free and unmetered there — and M5 makes it public anyway. That is a decision
    about timing, not a workaround.
 
-Until it dispatches, the checks exist but nothing runs them but a person.
+Until it dispatches, one command runs the lot:
+
+```
+uv run python scripts/desktop/check.py
+```
+
+Eight checks — ruff, strict mypy, the engine suite on Docker, the desktop suite
+on the real bundled cluster, and the portal's types, lint, tests and **build**.
+`--quick` drops the three slow suites; `--list` says what is ready and what is
+missing.
+
+It will not call a run a pass when something did not run. A missing Docker, an
+unfetched cluster or an absent `face` extra is reported as **skipped** and
+exits non-zero unless you pass `--allow-skips`. It also catches the failure
+this whole section is about: the desktop tests skip THEMSELVES when the cluster
+is absent, so a green pytest over nothing is reported as **hollow** rather than
+passed.
 
 ## 3. Email intake — *the rest of M4, about a week*
 
