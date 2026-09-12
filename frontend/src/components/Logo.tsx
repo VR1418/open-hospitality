@@ -30,14 +30,14 @@ export function LogoMark({
       className="shrink-0"
     >
       {title !== undefined && <title>{title}</title>}
-      <circle cx="12.5" cy="12" r="4.3" fill={BRAND.coral} />
-      <circle cx="24.5" cy="9.5" r="3.1" fill={BRAND.salmon} />
-      <circle cx="35" cy="13" r="3.5" fill={BRAND.teal} />
-      <circle cx="9.5" cy="24" r="3.1" fill={BRAND.salmon} />
-      <circle cx="22" cy="23.5" r="5.2" fill={BRAND.coral} />
-      <circle cx="35.5" cy="25.5" r="4.2" fill={BRAND.teal} />
-      <circle cx="13.5" cy="35.5" r="3.6" fill={BRAND.teal} />
-      <circle cx="26.5" cy="36.5" r="3.1" fill={BRAND.salmon} />
+      <circle cx="13.9" cy="12.8" r="3.8" fill={BRAND.coral} />
+      <circle cx="25.9" cy="10.3" r="3.8" fill={BRAND.salmon} />
+      <circle cx="36.4" cy="13.8" r="3.8" fill={BRAND.teal} />
+      <circle cx="10.9" cy="24.8" r="3.8" fill={BRAND.salmon} />
+      <circle cx="23.4" cy="24.3" r="3.8" fill={BRAND.coral} />
+      <circle cx="36.9" cy="26.3" r="3.8" fill={BRAND.teal} />
+      <circle cx="14.9" cy="36.3" r="3.8" fill={BRAND.teal} />
+      <circle cx="27.9" cy="37.3" r="3.8" fill={BRAND.salmon} />
     </svg>
   )
 }

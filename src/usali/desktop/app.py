@@ -286,15 +286,16 @@ def _icon_image() -> Any:
     TEAL = (22, 166, 160, 255)
     # (centre x, centre y, radius, colour) on a 48-unit grid — the viewBox the
     # favicon uses, so the two cannot drift apart.
+    R = 3.8  # every dot the same size
     dots = (
-        (12.5, 12.0, 4.3, CORAL),
-        (24.5, 9.5, 3.1, SALMON),
-        (35.0, 13.0, 3.5, TEAL),
-        (9.5, 24.0, 3.1, SALMON),
-        (22.0, 23.5, 5.2, CORAL),
-        (35.5, 25.5, 4.2, TEAL),
-        (13.5, 35.5, 3.6, TEAL),
-        (26.5, 36.5, 3.1, SALMON),
+        (13.9, 12.8, R, CORAL),
+        (25.9, 10.3, R, SALMON),
+        (36.4, 13.8, R, TEAL),
+        (10.9, 24.8, R, SALMON),
+        (23.4, 24.3, R, CORAL),
+        (36.9, 26.3, R, TEAL),
+        (14.9, 36.3, R, TEAL),
+        (27.9, 37.3, R, SALMON),
     )
 
     size, scale = 64, 4
