@@ -64,7 +64,54 @@ those to us, they're the most useful thing you can report.
 Then open **Overview**: every hotel, last night's figures, and anything the
 audit turned up.
 
-## 5. Backups, which is the part to get right
+## 5. Codes to confirm — the one job only you can do
+
+Your front-desk system labels every charge with a short code of its own.
+We ship a guess at what the common ones mean, but on choiceADVANTAGE
+especially those codes are set up per hotel, so our guess may be wrong for
+yours — and a code we have never seen at all has nowhere to go.
+
+**That second case is the one that matters.** Its money stays out of your
+profit and loss. Your books still balance, because the amount is parked in a
+holding account, which is why nothing else in the app mentions it.
+
+Open **Accounting › Codes to confirm**. The number at the top is what your
+unrecognised codes add up to. Each row says what your report calls the code,
+how often it has appeared and for how much. Pick the line it belongs on and
+press Confirm: every day that code appears on is worked out again and your
+books reposted. Days in a month you have already closed are left alone, and
+it tells you so.
+
+Expect ten or twenty minutes, once. It is the most useful thing you can do
+with this app, and the most useful thing you can report back on: **any code
+you could not work out yourself is worth telling us about.**
+
+## 6. The AI helper, if you want it
+
+Off unless you turn it on, under **Modules**. It is the only part of the app
+that can reach the internet, and only with your own AI account.
+
+If you switch it on, go to **AI helper**, choose who you have an account with
+— OpenRouter, OpenAI, Anthropic, or a model running on your own computer —
+and paste the key they gave you. There is a **practice mode** that answers
+offline and costs nothing, if you just want to see what it does.
+
+Then "Ask the AI" appears next to each code you are confirming. It suggests a
+line and says why, or it tells you it won't guess — on tax questions it is
+meant to refuse rather than risk it.
+
+Three things worth knowing:
+
+- **It only ever suggests.** Nothing reaches your books until you press
+  Confirm, and the decision is recorded in your name, not the model's.
+- **There is a monthly limit**, $10 to begin with. The app stops when it is
+  reached and says so. You can change it.
+- **What it is shown is fixed**: the charge code, how your report describes
+  it, the dates and the amounts. Never a person's name, a pay rate, a bank
+  detail or an account number. The key stays in this computer's password
+  store, and is never included in a backup.
+
+## 7. Backups, which is the part to get right
 
 You chose a folder during setup — ideally one OneDrive, iCloud or Dropbox
 already syncs. A copy of your books is written there when you start the app,
@@ -83,7 +130,7 @@ Restoring is a command for now, on a computer with no books on it yet:
 It asks for your recovery code, and it refuses to write over books that are
 already there.
 
-## 6. Stopping and starting
+## 8. Stopping and starting
 
 Click the ◆ icon near the clock and choose **Quit**. Your books stay where
 they are. Starting it again picks up exactly where you left off.
@@ -93,14 +140,11 @@ they are. Starting it again picks up exactly where you left off.
 - **Mac.** Windows only for now.
 - **Bank feeds, and updates that install themselves.** Neither exists yet.
 - **Email.** Reports go in the folder by hand.
-
-The one thing that can reach the internet is the AI helper, and only if you
-switch it on and give it your own AI account. It is off to begin with, it has
-a monthly limit set to $10, and it only ever suggests — nothing it says
-reaches your books until you click. If you would rather it never ran, leave it
-off: every screen works the same without it.
 - **Front-desk systems:** Oracle OPERA, AutoClerk and choiceADVANTAGE. If
   yours isn't one of those, the app can't read its reports yet.
+
+Leave the AI helper off and every screen works the same — you confirm codes
+yourself instead of being offered a suggestion. Nothing is behind it.
 
 ## When something goes wrong
 

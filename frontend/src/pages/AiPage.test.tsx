@@ -127,7 +127,7 @@ describe('AiPage', () => {
     renderPage()
     await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
     await waitFor(() => expect(saveAiSettings).toHaveBeenCalled())
-    expect(vi.mocked(saveAiSettings).mock.calls[0][0]).not.toHaveProperty('key')
+    expect(vi.mocked(saveAiSettings).mock.calls[0]?.[0]).not.toHaveProperty('key')
   })
 
   it('an address is asked for only by the helper that needs one', async () => {

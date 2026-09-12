@@ -341,6 +341,7 @@ export function makeGlPeriod(overrides: Partial<GlPeriod> = {}): GlPeriod {
     date_to: '2026-07-31',
     unposted_dates: [],
     orphaned_dates: [],
+    stale_dates: [],
     ...overrides,
   }
 }

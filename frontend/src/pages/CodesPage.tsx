@@ -194,7 +194,12 @@ function Editor({
               type="button"
               className={primaryButtonClass}
               disabled={busy || chosen < 0}
-              onClick={() => onConfirm(lines[chosen], note, origin)}
+              onClick={() => {
+                // Disabled below when nothing is chosen; this keeps the
+                // types honest about it rather than asserting.
+                const line = lines[chosen]
+                if (line !== undefined) onConfirm(line, note, origin)
+              }}
             >
               {busy ? 'Working…' : 'Confirm'}
             </button>

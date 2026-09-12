@@ -444,6 +444,7 @@ describe('GlPage period detail', () => {
       state: 'closed',
       unposted_dates: unposted,
       orphaned_dates: [],
+      stale_dates: [],
     })
     renderPage('/gl?period=2026-P07')
 
@@ -776,6 +777,7 @@ describe('GlPage post the period', () => {
       state: 'closed',
       unposted_dates: [],
       orphaned_dates: [],
+      stale_dates: [],
     })
     renderPage('/gl?period=2026-P07')
     const card = await screen.findByRole('region', { name: 'Period 2026-P07' })
