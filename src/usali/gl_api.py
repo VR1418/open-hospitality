@@ -2,10 +2,16 @@
 periods, the trial balance, and posting.
 
 Reads ride the router-level operator gates `create_app` mounts this
-router with; mutations (chart edits, close/reopen, post) narrow to
-org_admin through `require_gl_admin` — the `integrations_api` precedent:
-editing the tenant's chart or closing its books is a standing commitment
-about the TENANT, not any one property's operator concern.
+router with; the property-keyed reads (periods, trial balance, entries)
+are further confined to the caller's properties by
+`workforce._require_readable_property` — the `property_config_api`
+read gate, so an out-of-scope, another org's, or nonexistent property is
+the same 403 there and here. The chart (`/accounts`) is org-wide and
+keyed on no property, so the mount's gates are its whole check.
+Mutations (chart edits, close/reopen, post) narrow to org_admin through
+`require_gl_admin` — the `integrations_api` precedent: editing the
+tenant's chart or closing its books is a standing commitment about the
+TENANT, not any one property's operator concern.
 
 Amounts serialize as `str(Decimal)` — the `journal_entry_body`
 precedent: exact through JSON, no float round-trip.
@@ -20,9 +26,16 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from usali import fiscal, gl_posting, reporting
-from usali.auth import ORG_ADMIN, Principal, request_session_factory, require_grants
+from usali.auth import (
+    ORG_ADMIN,
+    Principal,
+    request_session_factory,
+    require_grants,
+    require_operator,
+)
 from usali.models import GlAccount
 from usali.tenancy import current_org_id
+from usali.workforce import _require_readable_property, resolve_scope
 
 router = APIRouter(prefix="/api/gl")
 
@@ -297,12 +310,16 @@ def get_periods(
     request: Request,
     property_id: str = Query(alias="property"),
     fiscal_year: int | None = Query(default=None),
+    principal: Principal = Depends(require_operator),
 ) -> list[PeriodModel]:
     """Every period of one fiscal year (default: the year containing
     today), each with its derived state and both gap directions —
     `period_state` and `period_gaps`, the same derivations close uses,
-    so this listing and the close can never name different gaps."""
+    so this listing and the close can never name different gaps.
+    Property-confined BEFORE the fiscal config is read, so a refused
+    caller learns nothing — not even whether the property has a calendar."""
     with _session(request) as session:
+        _require_readable_property(session, resolve_scope(principal, session), property_id)
 
         def _list() -> list[PeriodModel]:
             cfg = fiscal.require_config(fiscal.config_for(session, property_id))
@@ -414,7 +431,9 @@ def post_range(
         # The property-existence AND calendar gate in one call: a property
         # with no FiscalCalendar row — which a nonexistent property can
         # never have — is a 422 here, the same refusal the GET endpoints
-        # give. Without it, `post_and_record`'s failure ledger would try
+        # give a calendarless property (a nonexistent one is refused
+        # earlier there, by the read gate's 403). Without it,
+        # `post_and_record`'s failure ledger would try
         # to insert a row for the bogus property and die on
         # fk_gl_posting_ledger_property_org as a 500.
         _run(
@@ -454,9 +473,12 @@ def get_trial_balance(
     request: Request,
     property_id: str = Query(alias="property"),
     period: str = Query(),
+    principal: Principal = Depends(require_operator),
 ) -> TrialBalanceModel:
-    """`reporting.trial_balance`, field-for-field; Decimals as strings."""
+    """`reporting.trial_balance`, field-for-field; Decimals as strings.
+    Property-confined like `get_periods`."""
     with _session(request) as session:
+        _require_readable_property(session, resolve_scope(principal, session), property_id)
         report = _run(
             lambda: reporting.trial_balance(
                 session, property_id=property_id, period_key=period
@@ -491,11 +513,14 @@ def get_entries(
     property_id: str = Query(alias="property"),
     period: str = Query(),
     account_code: str = Query(alias="account"),
+    principal: Principal = Depends(require_operator),
 ) -> JournalEntriesModel:
     """`reporting.journal_entries`, field-for-field; Decimals as strings.
     An account with no lines in the period is an empty list, not an error
-    (the query's own contract — see its docstring)."""
+    (the query's own contract — see its docstring). Property-confined like
+    `get_periods`."""
     with _session(request) as session:
+        _require_readable_property(session, resolve_scope(principal, session), property_id)
         entries = _run(
             lambda: reporting.journal_entries(
                 session,

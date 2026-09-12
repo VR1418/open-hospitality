@@ -55,8 +55,10 @@ Modified upstream files:
     frontend/src/pages/ReportsPage.tsx
     frontend/src/pages/SosPage.tsx
     frontend/src/pages/UploadPage.tsx
+    src/usali/gl_api.py
     src/usali/reporting.py
     src/usali/server.py
+    tests/test_gl_api.py
 
   The page-title changes are the desktop edition's plain-language names
   (docs/desktop/PRD-desktop-edition.md, appendix A): e.g. "Summary Operating

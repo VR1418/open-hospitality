@@ -4,11 +4,13 @@ mirrors `reporting.trial_balance` field-for-field with Decimals as
 strings.
 
 Auth follows the mount: reads ride `create_app`'s operator gates (any
-operator role may look at the chart and the periods), while mutations
-narrow to org_admin through the router's own `require_gl_admin` — the
-`integrations_api` split, tested the same way: an org_admin client, a
-property_gm client for the 403s, and an employee token for the outer
-operator gate.
+operator role may look at the chart), the property-keyed reads are
+further confined to the caller's properties (`_require_readable_property`,
+the property-config read gate), while mutations narrow to org_admin
+through the router's own `require_gl_admin` — the `integrations_api`
+split, tested the same way: an org_admin client, a property_gm client for
+the 403s, and an employee token for the outer operator gate; plus
+property-ASSIGNED clients for the confinement.
 """
 
 from datetime import datetime, timedelta
@@ -24,7 +26,7 @@ from tests.test_gl_posting import _first_grain, _seed_calendar
 from usali import fiscal, gl_chart, gl_posting, reporting
 from usali.db import make_session_factory
 from usali.keycloak_admin import InMemoryKeycloakAdmin
-from usali.models import GlAccount, UsaliFinancialFact
+from usali.models import Department, GlAccount, UsaliFinancialFact
 from usali.server import create_app
 
 
@@ -39,10 +41,12 @@ def _client(db_engine, tmp_path) -> tuple[TestClient, object]:
     return TestClient(app), mint
 
 
-def _authenticated(client, mint, db_session, role: str, sub: str) -> TestClient:
+def _authenticated(client, mint, db_session, role: str, sub: str, **grant) -> TestClient:
     # Both halves of the L4 gate: the realm's coarse claim on the token AND
-    # the org-scoped `role_assignment` grant `require_grants` reads.
-    grant_role(db_session, role, sub=sub, org_id=1)
+    # the org-scoped `role_assignment` grant `require_grants` reads. No
+    # `grant` is the org-wide grant; `property_id=`/`department_id=` narrow
+    # it. No `scopes` claim on the token, so scope resolves from these rows.
+    grant_role(db_session, role, sub=sub, org_id=1, **grant)
     client.headers["Authorization"] = f"Bearer {mint(roles=[role], sub=sub)}"
     return client
 
@@ -480,3 +484,128 @@ def test_every_mutation_requires_org_admin(gl_client_gm, gl_world):
             "date_to": day.isoformat(),
         },
     ).status_code == 403
+
+
+# ------------------------------------------------- property confinement
+
+_HOTELS = ("HISJ", "SSSJ")  # both carry facts in the six-PDF seed
+_READS = ("periods", "trial-balance", "entries")
+
+
+@pytest.fixture
+def gl_two_hotels(gl_client, db_session, founding_org, seed_six_pdfs):
+    """Two hotels of ONE org, each with a calendar and one posted day, so
+    every read below has a real ledger behind it and a 403 is the gate
+    speaking, not an empty property. Posted by the org_admin client (the
+    only caller that may post). Maps property -> (business day, period)."""
+    gl_chart.seed_chart(db_session, org_id=1)
+    days = {}
+    for prop in _HOTELS:
+        days[prop] = db_session.scalar(
+            select(UsaliFinancialFact.business_date)
+            .where(UsaliFinancialFact.property_id == prop)
+            .limit(1)
+        )
+        assert days[prop] is not None, f"the seed promoted no facts for {prop}"
+        _seed_calendar(db_session, prop)
+    db_session.commit()
+    for prop, day in days.items():
+        _post_range(gl_client, prop, day)
+    return {
+        prop: (day, gl_posting.period_key_for(db_session, prop, day))
+        for prop, day in days.items()
+    }
+
+
+@pytest.fixture
+def gl_client_gm_hisj(
+    db_engine, db_session, founding_org, seed_six_pdfs, tmp_path
+) -> TestClient:
+    """A property_gm ASSIGNED to HISJ only — a property grant row, not the
+    org-wide one `gl_client_gm` holds. `seed_six_pdfs` first: the grant's
+    composite property FK needs HISJ to exist."""
+    client, mint = _client(db_engine, tmp_path)
+    return _authenticated(
+        client, mint, db_session, "property_gm", "gl-gm-hisj", property_id="HISJ"
+    )
+
+
+@pytest.fixture
+def gl_client_dept_mgr_hisj(
+    db_engine, db_session, founding_org, seed_six_pdfs, tmp_path
+) -> TestClient:
+    """A department_manager assigned to one department at HISJ (which
+    `seed_six_pdfs` must have created first, for the same FK)."""
+    dept = Department(org_id=1, property_id="HISJ", name="GL confinement dept")
+    db_session.add(dept)
+    db_session.commit()
+    client, mint = _client(db_engine, tmp_path)
+    return _authenticated(
+        client, mint, db_session, "department_manager", "gl-dm-hisj",
+        property_id="HISJ", department_id=dept.department_id,
+    )
+
+
+def _read(client: TestClient, route: str, prop, day, period, account="4000"):
+    """One property-keyed GL read, with the params each route requires."""
+    params = {"property": prop}
+    if route == "periods":
+        params["fiscal_year"] = day.year
+    else:
+        params["period"] = period
+    if route == "entries":
+        params["account"] = account
+    return client.get(f"/api/gl/{route}", params=params)
+
+
+@pytest.mark.parametrize("prop", _HOTELS)
+def test_org_admin_reads_every_hotels_ledger(gl_client, gl_two_hotels, prop):
+    """An org-wide grant is every property in the org: each hotel's
+    periods, trial balance and a non-empty drill all answer."""
+    day, period = gl_two_hotels[prop]
+    assert _read(gl_client, "periods", prop, day, period).status_code == 200
+    tb = _read(gl_client, "trial-balance", prop, day, period)
+    assert tb.status_code == 200, tb.text
+    assert tb.json()["property_id"] == prop
+    account = tb.json()["lines"][0]["account_code"]
+    drill = _read(gl_client, "entries", prop, day, period, account)
+    assert drill.status_code == 200, drill.text
+    assert drill.json()["entries"]  # a real ledger, not an empty 200
+
+
+@pytest.mark.parametrize("route", _READS)
+def test_property_gm_reads_only_the_assigned_hotel(
+    gl_client_gm_hisj, gl_two_hotels, route
+):
+    """Org-scoped is not property-scoped: a GM of one hotel must not read
+    a sibling hotel's ledger in the same org. The refusal is the property
+    APIs' one 403 (`workforce._refuse_property`), word for word."""
+    day, period = gl_two_hotels["HISJ"]
+    own = _read(gl_client_gm_hisj, route, "HISJ", day, period)
+    assert own.status_code == 200, own.text
+    day, period = gl_two_hotels["SSSJ"]
+    other = _read(gl_client_gm_hisj, route, "SSSJ", day, period)
+    assert other.status_code == 403
+    assert other.json() == {"detail": "property out of scope"}
+
+
+@pytest.mark.parametrize("route", _READS)
+def test_department_manager_is_refused_a_sibling_hotel(
+    gl_client_dept_mgr_hisj, gl_two_hotels, route
+):
+    day, period = gl_two_hotels["SSSJ"]
+    resp = _read(gl_client_dept_mgr_hisj, route, "SSSJ", day, period)
+    assert resp.status_code == 403
+    assert resp.json() == {"detail": "property out of scope"}
+
+
+@pytest.mark.parametrize("route", _READS)
+def test_an_unknown_property_is_the_same_refusal(gl_client, gl_world, route):
+    """Even an org_admin, in scope for every id, gets the same 403 for a
+    property that is not in the active org: `_require_readable_property`
+    asks whether the property is HERE, so the reads never say which ids
+    exist — and /periods refuses before touching fiscal config."""
+    _prop, day = gl_world
+    resp = _read(gl_client, route, "NOPE", day, f"{day.year}-P01")
+    assert resp.status_code == 403
+    assert resp.json() == {"detail": "property out of scope"}
