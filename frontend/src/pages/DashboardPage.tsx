@@ -17,13 +17,14 @@ import { getRouteApi, Link } from '@tanstack/react-router'
 import { useQueries, useQuery } from '@tanstack/react-query'
 
 import { getSos } from '../api/client'
-import type { MetricRow, PropertyInfo, SosReport } from '../api/types'
+import type { MetricRow, SosReport } from '../api/types'
 import { Badge, Card, controlClass, sectionHeadClass } from '../components/ui'
 import BarGradients from '../components/BarGradients'
 import { barFill, barRampCss, barWidth, topRoundedBar } from '../lib/chartBars'
 import { BanknoteIcon, ClockIcon, ReportsIcon, UploadIcon } from '../components/icons'
 import { useAuth } from '../auth/authContext'
 import { useGlobalProperty } from '../lib/propertyContext'
+import { propertyDisplayName, propertyLabel } from '../lib/propertyName'
 import { badgeLabel, useChecklist } from '../lib/useChecklist'
 
 // --- formatting --------------------------------------------------------------
@@ -70,14 +71,29 @@ function greeting(): string {
   return 'Good evening'
 }
 
-/** Registry names are stored UPPERCASE; title-case them for display
-    ("HOLIDAY INN & SUITES SAN JOSE" -> "Holiday Inn & Suites San Jose"). */
-function propertyDisplayName(p: PropertyInfo | undefined): string | null {
-  if (p === undefined) return null
-  if (p.name === null) return p.property_id
-  return p.name
-    .toLowerCase()
-    .replace(/(^|[\s(/-])[a-z]/g, (m) => m.toUpperCase())
+/** The hotel these figures are for, and a way to change it. Hidden when
+ *  there is only one hotel: a picker with one option asks a question that has
+ *  no answer. */
+function HotelSwitch() {
+  const { property, setProperty, properties } = useGlobalProperty()
+  if (properties === undefined || properties.length < 2) return null
+  return (
+    <label className="mt-3 flex flex-wrap items-center gap-2 text-sm text-white/85">
+      <span>Showing</span>
+      <select
+        aria-label="Hotel these figures are for"
+        className="rounded-full border border-white/40 bg-white/15 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur [&>option]:text-ink"
+        value={property ?? ''}
+        onChange={(e) => setProperty(e.target.value)}
+      >
+        {properties.map((p) => (
+          <option key={p.property_id} value={p.property_id}>
+            {propertyLabel(p)}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
 }
 
 // --- charts (inline SVG, token-colored) --------------------------------------
@@ -526,6 +542,10 @@ export default function DashboardPage() {
         <h1 className="mt-4 text-3xl font-bold tracking-tight">
           {propertyDisplayName(selected) ?? 'Hotel overview'}
         </h1>
+        {/* Whose figures these are, and how to look at another hotel's —
+            answered here rather than only in the top bar, because this is
+            where the numbers are being read. */}
+        <HotelSwitch />
         <p className="mt-2 max-w-2xl text-[15px] text-white/85">
           Business date {date}. Revenue, occupancy, and labor at a glance, with the full statement
           one click away.

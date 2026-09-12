@@ -877,7 +877,7 @@ describe('GlPage journal drill', () => {
 
   it('closes the panel when the property changes', async () => {
     await openDrill()
-    fireEvent.change(screen.getByLabelText('Active property'), { target: { value: 'SSSJ' } })
+    fireEvent.change(screen.getByLabelText('Hotel'), { target: { value: 'SSSJ' } })
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 

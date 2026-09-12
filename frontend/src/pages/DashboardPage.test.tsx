@@ -5,6 +5,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider, createMemoryHistory } from '@tanstack/react-router'
 import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../api/client', async (importOriginal) => ({
@@ -24,7 +25,7 @@ import { getMe, getProperties, getSos } from '../api/client'
 import { getChecklist } from '../api/checklist'
 import { createAppRouter } from '../router'
 import { AuthContext } from '../auth/authContext'
-import { AUTHED_CONTEXT, HISJ_PROPERTY, makeSosReport } from '../test/fixtures'
+import { AUTHED_CONTEXT, HISJ_PROPERTY, SSSJ_PROPERTY, makeSosReport } from '../test/fixtures'
 
 function stat(metric_code: string, day: string | null) {
   return {
@@ -167,5 +168,34 @@ describe('DashboardPage — setup card', () => {
     })
     renderDashboard()
     expect(await screen.findByText('1 item still to set up')).toBeInTheDocument()
+  })
+})
+
+describe('which hotel these figures are for', () => {
+  it('names the hotel, not its code', async () => {
+    renderDashboard()
+    expect(await screen.findByRole('heading', { name: 'Holiday Inn & Suites San Jose' }))
+      .toBeInTheDocument()
+  })
+
+  it('lets the owner switch hotel from the page they are reading', async () => {
+    vi.mocked(getProperties).mockResolvedValue([HISJ_PROPERTY, SSSJ_PROPERTY])
+    renderDashboard()
+    const picker = await screen.findByLabelText('Hotel these figures are for')
+    expect(within(picker).getByRole('option', { name: /Holiday Inn & Suites San Jose/ }))
+      .toBeInTheDocument()
+    // The PMS identifier is not something an owner has ever heard of.
+    expect(picker).not.toHaveTextContent('AUTOCLERK')
+
+    await userEvent.selectOptions(picker, 'SSSJ')
+    expect(await screen.findByRole('heading', { name: 'Surestay Plus By Bw' }))
+      .toBeInTheDocument()
+    expect(localStorage.getItem('usali.property')).toBe('SSSJ')
+  })
+
+  it('asks nothing when there is only one hotel', async () => {
+    renderDashboard()
+    await screen.findByRole('heading', { name: 'Holiday Inn & Suites San Jose' })
+    expect(screen.queryByLabelText('Hotel these figures are for')).toBeNull()
   })
 })

@@ -31,6 +31,7 @@ import { getModules, getWelcome, hiddenPaths } from './api/desktop'
 import type { Me } from './api/types'
 import BuildStamp from './components/BuildStamp'
 import OrgPicker from './components/OrgPicker'
+import { propertyLabel } from './lib/propertyName'
 import { badgeToneClasses } from './lib/badgeTones'
 import {
   BankIcon,
@@ -499,15 +500,17 @@ function GlobalPropertySelect() {
   if (properties === undefined || properties.length === 0) return null
   return (
     <select
-      aria-label="Active property"
+      aria-label="Hotel"
       title="Hotel (applies across the app)"
       className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink"
       value={property ?? ''}
       onChange={(e) => setProperty(e.target.value)}
     >
       {properties.map((p) => (
+        // The hotel's NAME. It used to read "TXC22 — SKYTOUCH": a code the
+        // owner never chose and an engine identifier they have never heard of.
         <option key={`${p.property_id}|${p.pms_source}`} value={p.property_id}>
-          {p.property_id} — {p.pms_source}
+          {propertyLabel(p)}
         </option>
       ))}
     </select>

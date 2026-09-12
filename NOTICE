@@ -43,18 +43,23 @@ Modified upstream files:
     frontend/src/test/fixtures.ts
     frontend/src/pages/ChecklistPage.tsx
     frontend/src/pages/CoveragePage.tsx
+    frontend/src/pages/DashboardPage.test.tsx
     frontend/src/pages/DashboardPage.tsx
     frontend/src/pages/EmployeesPage.tsx
     frontend/src/pages/GlPage.tsx
     frontend/src/pages/GlPage.test.tsx
     frontend/src/pages/IntegrationsPage.tsx
     frontend/src/pages/KioskDevicesPage.tsx
+    frontend/src/pages/NightAuditPage.test.tsx
     frontend/src/pages/NightAuditPage.tsx
     frontend/src/pages/PayrollDashboardPage.tsx
     frontend/src/pages/PerformancePage.tsx
     frontend/src/pages/PropertyConfigPage.tsx
+    frontend/src/pages/QboPage.test.tsx
     frontend/src/pages/QboPage.tsx
+    frontend/src/pages/ReportsPage.test.tsx
     frontend/src/pages/ReportsPage.tsx
+    frontend/src/pages/SosPage.test.tsx
     frontend/src/pages/SosPage.tsx
     frontend/src/pages/UploadPage.tsx
     src/usali/gl_api.py

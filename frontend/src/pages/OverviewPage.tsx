@@ -255,58 +255,6 @@ export default function OverviewPage() {
         </Card>
       )}
 
-      <section aria-label="Totals" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric
-          label="Revenue"
-          value={dollars(totals.revenue)}
-          detail={`${totals.hotels_in} of ${totals.hotels} ${totals.hotels === 1 ? 'hotel' : 'hotels'} reported`}
-        />
-        <Metric label="Occupancy" value={percent(totals.occupancy_pct)} detail="Rooms sold ÷ rooms" />
-        <Metric
-          label="Average rate"
-          value={dollars(totals.adr, 2)}
-          detail={`Revenue per available room ${dollars(totals.revpar, 2)}`}
-        />
-        <Metric label="Month so far" value={dollars(totals.month_revenue)} detail="Total revenue" />
-      </section>
-
-      <div className="grid gap-5 lg:grid-cols-[3fr_2fr]">
-        <Card role="region" aria-label="Revenue trend">
-          <h2 className={sectionHeadClass}>Revenue, last 14 days</h2>
-          <p className="mb-3 mt-0.5 text-xs text-ink-muted">
-            All hotels together, from the reports read.
-          </p>
-          {data.trend.length === 0 ? (
-            <p className="text-sm text-ink-muted">No reports read yet.</p>
-          ) : (
-            <TrendBars points={data.trend} />
-          )}
-        </Card>
-
-        <Card role="region" aria-label="Last night’s audit">
-          <h2 className={sectionHeadClass}>Last night’s audit</h2>
-          {data.findings.length === 0 ? (
-            <p className="mt-2 text-sm text-ink">
-              Nothing to look at — every hotel’s reports are in and their balances tie.
-            </p>
-          ) : (
-            <>
-              <p className="mb-1 mt-0.5 text-xs text-ink-muted">
-                {data.findings.length} to look at
-              </p>
-              <ul className="flex flex-col">
-                {data.findings.map((f) => (
-                  <FindingRow key={`${f.property_id}-${f.kind}-${f.label}`} finding={f} />
-                ))}
-              </ul>
-              <Link to="/night-audit" className="mt-3 inline-block text-sm text-accent underline">
-                Open Close the day
-              </Link>
-            </>
-          )}
-        </Card>
-      </div>
-
       <Card role="region" aria-label="Hotels">
         <h2 className={sectionHeadClass}>Hotels</h2>
         {hotels.length === 0 ? (
@@ -364,6 +312,59 @@ export default function OverviewPage() {
           </div>
         )}
       </Card>
+
+      <section aria-label="Totals" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric
+          label="Revenue"
+          value={dollars(totals.revenue)}
+          detail={`${totals.hotels_in} of ${totals.hotels} ${totals.hotels === 1 ? 'hotel' : 'hotels'} reported`}
+        />
+        <Metric label="Occupancy" value={percent(totals.occupancy_pct)} detail="Rooms sold ÷ rooms" />
+        <Metric
+          label="Average rate"
+          value={dollars(totals.adr, 2)}
+          detail={`Revenue per available room ${dollars(totals.revpar, 2)}`}
+        />
+        <Metric label="Month so far" value={dollars(totals.month_revenue)} detail="Total revenue" />
+      </section>
+
+      <div className="grid gap-5 lg:grid-cols-[3fr_2fr]">
+        <Card role="region" aria-label="Revenue trend">
+          <h2 className={sectionHeadClass}>Revenue, last 14 days</h2>
+          <p className="mb-3 mt-0.5 text-xs text-ink-muted">
+            All hotels together, from the reports read.
+          </p>
+          {data.trend.length === 0 ? (
+            <p className="text-sm text-ink-muted">No reports read yet.</p>
+          ) : (
+            <TrendBars points={data.trend} />
+          )}
+        </Card>
+
+        <Card role="region" aria-label="Last night’s audit">
+          <h2 className={sectionHeadClass}>Last night’s audit</h2>
+          {data.findings.length === 0 ? (
+            <p className="mt-2 text-sm text-ink">
+              Nothing to look at — every hotel’s reports are in and their balances tie.
+            </p>
+          ) : (
+            <>
+              <p className="mb-1 mt-0.5 text-xs text-ink-muted">
+                {data.findings.length} to look at
+              </p>
+              <ul className="flex flex-col">
+                {data.findings.map((f) => (
+                  <FindingRow key={`${f.property_id}-${f.kind}-${f.label}`} finding={f} />
+                ))}
+              </ul>
+              <Link to="/night-audit" className="mt-3 inline-block text-sm text-accent underline">
+                Open Close the day
+              </Link>
+            </>
+          )}
+        </Card>
+      </div>
+
 
       {data.staff_shown && totals.staff !== null && (
         <Card role="region" aria-label="Staff">

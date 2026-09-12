@@ -261,7 +261,7 @@ describe('QboPage push flow', () => {
     await screen.findByText(/Pushed 2026-07-07 to QBO/)
     expect(screen.getByRole('region', { name: /JE preview/ })).toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('Active property'), { target: { value: 'SSSJ' } })
+    fireEvent.change(screen.getByLabelText('Hotel'), { target: { value: 'SSSJ' } })
     expect(screen.queryByRole('region', { name: /JE preview/ })).not.toBeInTheDocument()
     expect(screen.queryByText(/Pushed 2026-07-07 to QBO/)).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

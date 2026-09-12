@@ -555,7 +555,7 @@ describe('NightAuditPage property switch', () => {
     fireEvent.change(screen.getByLabelText('GRP room_revenue'), { target: { value: '2614.09' } })
 
     queryClient.setQueryData(['night-audit', 'SSSJ'], stateFor('SSSJ'))
-    fireEvent.change(screen.getByLabelText('Active property'), { target: { value: 'SSSJ' } })
+    fireEvent.change(screen.getByLabelText('Hotel'), { target: { value: 'SSSJ' } })
     expect(await screen.findByText('2026-07-05')).toBeInTheDocument()
 
     // The adjust form is gone — closed, not retargeted at SSSJ's books.
@@ -577,7 +577,7 @@ describe('NightAuditPage property switch', () => {
     await screen.findByText(/the audit expects 2026-07-07/)
 
     queryClient.setQueryData(['night-audit', 'SSSJ'], stateFor('SSSJ'))
-    fireEvent.change(screen.getByLabelText('Active property'), { target: { value: 'SSSJ' } })
+    fireEvent.change(screen.getByLabelText('Hotel'), { target: { value: 'SSSJ' } })
     expect(await screen.findByText('2026-07-05')).toBeInTheDocument()
 
     // SSSJ's identical slot row carries no leftover refusal from HISJ.

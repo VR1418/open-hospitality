@@ -42,7 +42,7 @@ beforeEach(() => {
 describe('ReportsPage', () => {
   it('derives month options from the property date window and fetches the pack', async () => {
     renderPage()
-    fireEvent.change(await screen.findByLabelText('Active property'), { target: { value: 'HISJ' } })
+    fireEvent.change(await screen.findByLabelText('Hotel'), { target: { value: 'HISJ' } })
 
     // HISJ spans 2026-07-01..07 -> exactly one month option besides the
     // placeholder. findByRole: the search-param navigation flushes async.

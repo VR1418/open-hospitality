@@ -50,13 +50,13 @@ beforeEach(() => {
 describe('SosPage', () => {
   it('populates the property picker from /api/properties', async () => {
     renderPage()
-    expect(await screen.findByRole('option', { name: 'HISJ — OPERA' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'SSSJ — AUTOCLERK' })).toBeInTheDocument()
+    expect(await screen.findByRole('option', { name: 'Holiday Inn & Suites San Jose · HISJ' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Surestay Plus By Bw · SSSJ' })).toBeInTheDocument()
   })
 
   it('constrains the date input to the property date span and fetches the SOS', async () => {
     renderPage()
-    fireEvent.change(await screen.findByLabelText('Active property'), { target: { value: 'HISJ' } })
+    fireEvent.change(await screen.findByLabelText('Hotel'), { target: { value: 'HISJ' } })
 
     const dateInput = await screen.findByLabelText('Date')
     expect(dateInput).toHaveAttribute('min', '2026-07-01')
@@ -69,7 +69,7 @@ describe('SosPage', () => {
 
   it('opens the drill panel on line click and reconciles the transaction sum', async () => {
     renderPage()
-    fireEvent.change(await screen.findByLabelText('Active property'), { target: { value: 'HISJ' } })
+    fireEvent.change(await screen.findByLabelText('Hotel'), { target: { value: 'HISJ' } })
     fireEvent.change(await screen.findByLabelText('Date'), { target: { value: '2026-07-07' } })
 
     fireEvent.click(await screen.findByRole('button', { name: 'Parking' }))
@@ -161,7 +161,7 @@ describe('SosPage', () => {
 
   it('range mode fetches with from/to and the drill window spans the range', async () => {
     renderPage()
-    fireEvent.change(await screen.findByLabelText('Active property'), { target: { value: 'HISJ' } })
+    fireEvent.change(await screen.findByLabelText('Hotel'), { target: { value: 'HISJ' } })
     fireEvent.click(screen.getByRole('radio', { name: 'Range' }))
     fireEvent.change(await screen.findByLabelText('From'), { target: { value: '2026-07-01' } })
     fireEvent.change(screen.getByLabelText('To'), { target: { value: '2026-07-07' } })

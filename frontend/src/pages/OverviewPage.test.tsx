@@ -110,6 +110,22 @@ describe('OverviewPage', () => {
   })
   afterEach(() => localStorage.clear())
 
+  it('leads with the hotels, so you know whose figures these are', async () => {
+    renderAt()
+    await screen.findByRole('region', { name: 'Hotels' })
+    const regions = screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))
+    // Before the portfolio totals: which hotels these cover is the question
+    // an owner asks first.
+    expect(regions.indexOf('Hotels')).toBeLessThan(regions.indexOf('Totals'))
+  })
+
+  it('names each hotel rather than showing its code alone', async () => {
+    renderAt()
+    const hotels = await screen.findByRole('region', { name: 'Hotels' })
+    expect(within(hotels).getByText('Holiday Inn San Jose')).toBeInTheDocument()
+    expect(within(hotels).getByText('Lakeside Suites')).toBeInTheDocument()
+  })
+
   it('puts every hotel on one screen for the last closed day, with totals', async () => {
     renderAt()
 
