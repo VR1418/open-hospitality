@@ -150,9 +150,9 @@ def test_a_guest_name_is_refused_even_though_we_never_stored_it() -> None:
     deliberately never stores one — so for report text the printed SHAPE is
     all that stands between a guest list and a third party."""
     with pytest.raises(BlockedContent) as e:
-        check("CHECKED OUT CANTU, MARCUS JAY 204 7/13/26")
+        check("CHECKED OUT DOE, JANE MARIE 318 3/4/26")
     assert "person's name" in str(e.value)
-    assert "CANTU" not in str(e.value)
+    assert "DOE" not in str(e.value)
 
 
 def test_a_heading_that_looks_like_a_name_errs_towards_holding_it_back() -> None:
@@ -172,6 +172,6 @@ def test_a_summary_line_of_codes_and_money_passes() -> None:
     """What a night-audit summary page actually looks like. If the scan
     blocked this there would be nothing left to send."""
     check(
-        "Hotel Journal Summary Business Date: 9/10/2026 Property Code: TXC22 "
+        "Hotel Journal Summary Business Date: 9/10/2026 Property Code: RTI22 "
         "RM Room Charge 7,147.07 T1 State Occ Tax 437.42 VI Visa Payment (2,406.13)"
     )

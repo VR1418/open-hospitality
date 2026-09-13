@@ -510,7 +510,7 @@ function GlobalPropertySelect() {
       onChange={(e) => setProperty(e.target.value)}
     >
       {properties.map((p) => (
-        // The hotel's NAME. It used to read "TXC22 — SKYTOUCH": a code the
+        // The hotel's NAME. It used to read "RTI22 — SKYTOUCH": a code the
         // owner never chose and an engine identifier they have never heard of.
         <option key={`${p.property_id}|${p.pms_source}`} value={p.property_id}>
           {propertyLabel(p)}

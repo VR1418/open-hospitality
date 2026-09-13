@@ -36,7 +36,7 @@ from usali.models import Employee
 from usali.redaction import mask_pans
 
 
-#: How a front-desk system prints a guest: "CANTU, MARCUS JAY". Employee names
+#: How a front-desk system prints a guest: "DOE, JANE MARIE". Employee names
 #: we can look up; a GUEST's we cannot, because the product deliberately never
 #: stores one — so for report text this shape is the only thing standing
 #: between a guest list and a third party. Two or more capitalised runs either

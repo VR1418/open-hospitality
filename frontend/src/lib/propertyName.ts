@@ -1,7 +1,7 @@
 // What an owner calls their hotel, from what the registry stores.
 //
 // The registry keeps the name as it is PRINTED on the reports, which is
-// upper-case ("COMFORT SUITES PECOS, TX"), because that is what the detector
+// upper-case ("REDSTONE TEST INN, TX"), because that is what the detector
 // matches against. Shouting it back at the owner is not what they call the
 // place, so it is title-cased for display — in one module, because the top
 // bar, the hotel dashboard and the all-hotels overview must agree.
@@ -22,7 +22,7 @@ export function propertyDisplayName(p: PropertyInfo | undefined): string | null 
 }
 
 /** Name and code together, for a picker where two hotels could share a name
- *  ("Comfort Suites Pecos · TXC22"). */
+ *  ("Redstone Test Inn · RTI22"). */
 export function propertyLabel(p: PropertyInfo): string {
   const name = propertyDisplayName(p)
   return name === null || name === p.property_id ? p.property_id : `${name} · ${p.property_id}`

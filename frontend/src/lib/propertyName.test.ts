@@ -13,7 +13,7 @@ const HISJ: PropertyInfo = {
 
 describe('what an owner calls their hotel', () => {
   it('stops shouting the name the reports print', () => {
-    expect(titleCase('COMFORT SUITES PECOS, TX')).toBe('Comfort Suites Pecos, Tx')
+    expect(titleCase('REDSTONE TEST INN, TX')).toBe('Redstone Test Inn, Tx')
     expect(propertyDisplayName(HISJ)).toBe('Holiday Inn & Suites San Jose')
   })
 

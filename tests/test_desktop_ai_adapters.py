@@ -200,7 +200,7 @@ def test_the_practice_provider_reads_a_page_of_charges() -> None:
         "REPORT PAGES",
         "--- page 38 ---",
         "Hotel Journal Summary",
-        "Date Range: 9/10/2026 - 9/10/2026 Property Code: TXC22",
+        "Date Range: 9/10/2026 - 9/10/2026 Property Code: RTI22",
         "Description (Transaction Code) Postings Corrections Adjustments Totals",
         "Room Charge (RM) 7,147.07 0.00 0.00 7,147.07",
         "State Occ Tax (T1) 437.42 0.00 0.00 437.42",
