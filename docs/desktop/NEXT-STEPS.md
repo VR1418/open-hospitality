@@ -207,11 +207,11 @@ Left as they are, on purpose: the Ops tab (five "Soon" items — upstream's way
 of showing where it is going, and its tests say so), and the Report codes
 page under Settings (the accountant's view; owners have Codes to confirm).
 
-| And then — guidance for the first week | |
+| Guidance for the first week — done the same evening | |
 |---|---|
-| Add reports shows nothing about what just happened | "Just read: RTI22 · Sep 10–12 ✓ · 11 codes waiting → Confirm". |
-| A "This morning" strip on the Overview | Reports in? Codes to confirm? Bank check due? Backup done? |
-| A ? on each page into INSTALL.md | Email has one; nothing else does. |
+| **This morning** on the Overview (`GET /api/desktop/morning`) | Four lines: last night's reports in? codes to confirm? bank checked in the last 35 days? backed up? — tick, circle or red mark, each with its page. |
+| **Just read** on Add reports | The last eight files from the intake's own record: hotel and night, or the reason it was set aside; and the count of codes waiting, with the link. Polled every five seconds while the page is open, so a dropped file is seen to land. |
+| A ? on each page into INSTALL.md | Not done: the portal has no markdown renderer, and a bare link to a .md file is not help for this owner. The sections are numbered to match the pages; a Help page that renders INSTALL.md is the next small piece. |
 
 ## 6. Send the three upstream changes back — *half a day*
 

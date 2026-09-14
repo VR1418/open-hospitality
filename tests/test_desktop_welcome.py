@@ -369,3 +369,19 @@ def test_the_folder_dialog_answers_with_a_folder_or_nothing(world: World) -> Non
     finally:
         app.state.desktop_folders_pick = original  # type: ignore[attr-defined]
     assert world.client.post("/api/desktop/folders/pick", json={}).status_code == 401
+
+
+def test_the_morning_is_four_lines_and_what_just_came_in(world: World) -> None:
+    """The owner's morning: reports in? codes to confirm? bank checked? backed
+    up? — each done or not, with where to go — and the last files read."""
+    body = world.get("/api/desktop/morning").json()  # type: ignore[attr-defined]
+    items = {i["id"]: i for i in body["items"]}
+    assert list(items) == ["reports", "codes", "bank", "backup"]
+    assert all(i["page"].startswith("/") for i in items.values())
+    assert items["reports"]["state"] in ("attention", "todo")
+    assert items["codes"]["state"] in ("done", "todo")
+    assert items["bank"]["state"] == "todo" and "no statement" in items["bank"]["text"] or \
+        items["bank"]["text"] == "No hotel set up yet."
+    assert items["backup"]["state"] == "attention"
+    assert isinstance(body["recent"], list)
+    assert world.client.get("/api/desktop/morning").status_code == 401

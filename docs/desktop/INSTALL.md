@@ -123,6 +123,17 @@ Expect ten or twenty minutes, once. It is the most useful thing you can do
 with this app, and the most useful thing you can report back on: **any code
 you could not work out yourself is worth telling us about.**
 
+## 4a. This morning
+
+The Overview opens with four lines — **This morning**: last night's reports
+in? codes to confirm? bank checked? backed up? Each is a tick, a circle
+(something to do) or a red mark (needs attention), with a link to the page.
+That is the whole daily routine; if all four are ticks, you are done.
+
+On **Add reports**, **Just read** lists the last few files as they land:
+which hotel and night each one was, or why it couldn't be read — and how
+many codes are waiting to be confirmed.
+
 ## 4b. What's connected
 
 The Overview has a **What's connected** card: your hotels and their last

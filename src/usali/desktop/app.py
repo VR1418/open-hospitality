@@ -35,6 +35,7 @@ from usali.desktop import (
     backup_api,
     codes_api,
     connections_api,
+    morning_api,
     folders_api,
     mail_api,
     modules_api,
@@ -199,6 +200,7 @@ def build_app(
     update_api.install(app)
     folders_api.install(app, paths=paths)
     connections_api.install(app, paths=paths, store=store or MemoryKeyStore())
+    morning_api.install(app, paths=paths)
     statements_api.install(app)
     mail_api.install(app, paths=paths, store=store or MemoryKeyStore(), intake=mail_intake)
     backup_api.install(app, paths=paths, store=store or MemoryKeyStore(), sessions=sessions)

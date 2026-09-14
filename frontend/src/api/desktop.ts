@@ -715,6 +715,35 @@ export async function setStartup(enabled: boolean): Promise<Startup> {
   return (await res.json()) as Startup
 }
 
+// --- This morning (src/usali/desktop/morning_api.py) ------------------------
+
+export type MorningItem = {
+  id: string
+  state: 'done' | 'todo' | 'attention'
+  text: string
+  page: string
+}
+
+export type RecentFile = {
+  file: string
+  state: 'read' | 'unreadable'
+  property_id: string | null
+  business_date: string | null
+  when: string
+  reason: string | null
+}
+
+export type Morning = { last_night: string; items: MorningItem[]; recent: RecentFile[] }
+
+/** Null outside the desktop edition. */
+export async function getMorning(): Promise<Morning | null> {
+  const res = await fetch('/api/desktop/morning', { headers: await authHeaders() })
+  if (res.status === 404) return null
+  if (res.status === 401) redirectToLogin()
+  if (!res.ok) throw new Error(await detail(res))
+  return (await res.json()) as Morning
+}
+
 // --- The owner's folders (src/usali/desktop/folders_api.py) -----------------
 
 export type OwnerFolder = {

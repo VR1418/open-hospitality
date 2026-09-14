@@ -9,6 +9,7 @@ import { Fragment, useRef, useState } from 'react'
 import { postIngest } from '../api/client'
 import type { IngestReport, IngestResult } from '../api/types'
 import FoldersCard from '../components/FoldersCard'
+import RecentReportsCard from '../components/RecentReportsCard'
 import { Card, PageHeader } from '../components/ui'
 import { errorMessage } from '../lib/errors'
 
@@ -124,6 +125,7 @@ export default function UploadPage() {
       ))}
 
       {/* Desktop edition only: where read reports, and the saved ones, go. */}
+      <RecentReportsCard />
       <FoldersCard />
     </div>
   )

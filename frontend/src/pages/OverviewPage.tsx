@@ -19,6 +19,7 @@ import {
 } from '../api/desktop'
 import ConnectionsCard from '../components/ConnectionsCard'
 import FoldersCard from '../components/FoldersCard'
+import MorningCard from '../components/MorningCard'
 import { barRampCss } from '../lib/chartBars'
 import {
   Badge,
@@ -257,6 +258,7 @@ export default function OverviewPage() {
         </Card>
       )}
 
+      {canAdd && <MorningCard />}
       {canAdd && <ConnectionsCard />}
 
       <Card role="region" aria-label="Hotels">
