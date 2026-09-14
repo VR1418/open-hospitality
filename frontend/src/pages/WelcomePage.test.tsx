@@ -46,9 +46,10 @@ const FRESH: WelcomeState = {
   group_named: false,
   properties: [],
   pms_choices: [
-    { id: 'AUTOCLERK', name: 'AutoClerk' },
-    { id: 'SKYTOUCH', name: 'choiceADVANTAGE' },
-    { id: 'OPERA', name: 'Oracle OPERA' },
+    { id: 'AUTOCLERK', name: 'AutoClerk', prints_code: false },
+    { id: 'SKYTOUCH', name: 'choiceADVANTAGE', prints_code: true },
+    { id: 'OPERA', name: 'Oracle OPERA', prints_code: false },
+    { id: 'OTHER', name: 'Something else — read with help from your AI helper', prints_code: true },
   ],
 }
 
@@ -104,9 +105,15 @@ describe('WelcomePage', () => {
 
     // 2. The hotel. Nothing is saved yet: it goes with its fiscal year.
     expect(await screen.findByText('Step 2 of 5')).toBeInTheDocument()
+    // Three things about the hotel, and no room count: the first night audit
+    // carries it.
+    expect(screen.queryByLabelText('Rooms you can sell')).toBeNull()
+    await type('Ownership entity name', 'Redstone Hospitality LLC')
     await type('Hotel name', 'Redstone Inn')
+    await type('Hotel code', 'tx901')
     await userEvent.selectOptions(screen.getByLabelText('Front-desk system (PMS)'), 'SKYTOUCH')
-    await type('Rooms you can sell', '60')
+    // choiceADVANTAGE prints the code, so the printed name is not asked for.
+    expect(screen.queryByLabelText('The hotel’s name on your reports')).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
     expect(addHotel).not.toHaveBeenCalled()
 
@@ -118,11 +125,12 @@ describe('WelcomePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save and continue' }))
     expect(addHotel).toHaveBeenCalledWith(
       expect.objectContaining({
+        ownership_entity: 'Redstone Hospitality LLC',
         name: 'Redstone Inn',
-        // Left blank, the name on reports is the hotel's name.
-        report_name: 'Redstone Inn',
+        code: 'TX901',
+        // Recognised by its code; the server builds the phrase.
+        report_name: '',
         pms_source: 'SKYTOUCH',
-        total_rooms: 60,
         fiscal: { calendar_type: '445', fiscal_year_start_month: 4, week_start_weekday: 6 },
       }),
     )
@@ -156,17 +164,33 @@ describe('WelcomePage', () => {
     expect(waitForModules).toHaveBeenCalled()
   })
 
-  it('says so, and goes no further, when the hotel’s PMS is one it can’t read', async () => {
+  it('will not continue without the owning company, the name and a code that looks like one', async () => {
     getWelcome.mockResolvedValue({ ...FRESH, group_named: true, group_name: 'Redstone Hotels' })
     renderPage()
 
     expect(await screen.findByText('Step 2 of 5')).toBeInTheDocument()
+    const next = screen.getByRole('button', { name: 'Continue' })
     await type('Hotel name', 'Redstone Inn')
-    await type('Rooms you can sell', '60')
-    await userEvent.selectOptions(screen.getByLabelText('Front-desk system (PMS)'), 'other')
+    await type('Hotel code', 'TX901')
+    expect(next).toBeDisabled() // no ownership entity yet
+    await type('Ownership entity name', 'Redstone Hospitality LLC')
+    expect(next).toBeEnabled()
+    await userEvent.clear(screen.getByLabelText('Hotel code'))
+    await type('Hotel code', 'TX/901!')
+    expect(next).toBeDisabled()
+  })
 
-    expect(screen.getByRole('status')).toHaveTextContent('can’t read your reports yet')
-    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  it('asks how the reports print the name only for a system that prints no code', async () => {
+    getWelcome.mockResolvedValue({ ...FRESH, group_named: true, group_name: 'Redstone Hotels' })
+    renderPage()
+
+    await screen.findByText('Step 2 of 5')
+    await userEvent.selectOptions(screen.getByLabelText('Front-desk system (PMS)'), 'OPERA')
+    expect(screen.getByLabelText('The hotel’s name on your reports')).toBeInTheDocument()
+    // A hotel on a system we have no reader for is still set up: the AI
+    // helper reads its reports.
+    await userEvent.selectOptions(screen.getByLabelText('Front-desk system (PMS)'), 'OTHER')
+    expect(screen.queryByLabelText('The hotel’s name on your reports')).toBeNull()
   })
 
   it('shows the server’s refusal and keeps the answers', async () => {
@@ -175,8 +199,9 @@ describe('WelcomePage', () => {
     renderPage()
 
     await screen.findByText('Step 2 of 5')
+    await type('Ownership entity name', 'Redstone Hospitality LLC')
     await type('Hotel name', 'Redstone Inn')
-    await type('Rooms you can sell', '60')
+    await type('Hotel code', 'TX901')
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Save and continue' }))
 
@@ -184,6 +209,8 @@ describe('WelcomePage', () => {
     expect(screen.getByText('Step 3 of 5')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByLabelText('Hotel name')).toHaveValue('Redstone Inn')
+    expect(screen.getByLabelText('Hotel code')).toHaveValue('TX901')
+    expect(screen.getByLabelText('Ownership entity name')).toHaveValue('Redstone Hospitality LLC')
   })
 
   it('an owner with a hotel but no backup folder is asked for one', async () => {
@@ -194,7 +221,7 @@ describe('WelcomePage', () => {
       backup_folder_set: false,
       properties: [
         { property_id: 'RI', name: 'Redstone Inn', pms_source: 'SKYTOUCH',
-          has_fiscal_calendar: true, has_rooms: true },
+          ownership_entity: null, has_fiscal_calendar: true, has_rooms: true },
       ],
     })
     renderPage()
@@ -217,7 +244,7 @@ describe('WelcomePage', () => {
       group_name: 'Redstone Hotels',
       properties: [
         { property_id: 'RI', name: 'Redstone Inn', pms_source: 'SKYTOUCH',
-          has_fiscal_calendar: true, has_rooms: true },
+          ownership_entity: null, has_fiscal_calendar: true, has_rooms: true },
       ],
     })
     try {
@@ -227,14 +254,18 @@ describe('WelcomePage', () => {
       expect(await screen.findByRole('heading', { name: 'Add a hotel' })).toBeInTheDocument()
       expect(screen.queryByText(/Step \d of 5/)).toBeNull()
       expect(screen.getByRole('link', { name: 'Cancel' })).toHaveAttribute('href', '/overview')
+      await type('Ownership entity name', 'Harbour Holdings LLC')
       await type('Hotel name', 'Harbour View')
+      await type('Hotel code', 'CA118')
       await userEvent.selectOptions(screen.getByLabelText('Front-desk system (PMS)'), 'OPERA')
-      await type('Rooms you can sell', '120')
+      await type('The hotel’s name on your reports', 'HARBOUR VIEW HOTEL')
       await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
       await userEvent.click(await screen.findByRole('button', { name: 'Save and continue' }))
 
       expect(addHotel).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'Harbour View', pms_source: 'OPERA', total_rooms: 120 }),
+        expect.objectContaining({
+          name: 'Harbour View', code: 'CA118', pms_source: 'OPERA', report_name: 'HARBOUR VIEW HOTEL',
+        }),
       )
       // It never asks the module question again.
       expect(finishWelcome).not.toHaveBeenCalled()
@@ -251,7 +282,7 @@ describe('WelcomePage', () => {
       backup_folder_set: true,
       properties: [
         { property_id: 'RI', name: 'Redstone Inn', pms_source: 'SKYTOUCH',
-          has_fiscal_calendar: true, has_rooms: true },
+          ownership_entity: null, has_fiscal_calendar: true, has_rooms: true },
       ],
     })
     renderPage()

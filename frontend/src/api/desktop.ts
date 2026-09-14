@@ -239,12 +239,19 @@ export type WelcomeProperty = {
   property_id: string
   name: string
   pms_source: string
+  /** The company that owns it, when the owner gave one. */
+  ownership_entity: string | null
   has_fiscal_calendar: boolean
   has_rooms: boolean
 }
 
 /** A PMS this install can read, from the engine's own detection registry. */
-export type PmsChoice = { id: string; name: string }
+export type PmsChoice = {
+  id: string
+  name: string
+  /** Its reports print the hotel's code, so the code alone recognises them. */
+  prints_code: boolean
+}
 
 export type WelcomeState = {
   finished: boolean
@@ -283,11 +290,15 @@ export type FiscalChoice = {
 }
 
 export type NewHotel = {
+  /** The company that owns the hotel. */
+  ownership_entity: string
   name: string
-  /** The hotel's name as the PMS prints it at the top of its reports. */
+  /** The hotel's code (NM236) — becomes its id everywhere. */
+  code: string
+  /** How its reports name it, only for systems that print no code. Blank
+   *  means the code (or the name). */
   report_name: string
   pms_source: string
-  total_rooms: number
   timezone: string
   fiscal: FiscalChoice
 }

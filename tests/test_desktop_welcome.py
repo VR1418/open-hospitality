@@ -106,12 +106,16 @@ def test_the_pms_choices_are_the_engines_own_registry_plus_other() -> None:
     # the wizard can never offer one whose reports would quarantine on ingest.
     assert detectable == {s.upper() for s in supported_pms_sources()}
     # The owner reads choiceADVANTAGE, never the engine's SKYTOUCH identifier.
-    assert {"id": "SKYTOUCH", "name": "choiceADVANTAGE"} in [c.model_dump() for c in choices]
+    assert ("SKYTOUCH", "choiceADVANTAGE") in [(c.id, c.name) for c in choices]
     # OTHER is not a vendor and is last: it exists so a hotel we have no
     # parser for can still be set up, its reports read with the AI helper's
     # assistance instead (ADR-D7 phase 3).
     assert choices[-1].id == "OTHER"
     assert "AI helper" in choices[-1].name
+    # choiceADVANTAGE prints the hotel's code on every report, so its hotels
+    # are recognised by the code and the form does not ask for a printed name.
+    by_id = {c.id: c for c in choices}
+    assert by_id["SKYTOUCH"].prints_code and not by_id["OPERA"].prints_code
 
 
 def test_property_codes_are_short_and_never_clash() -> None:
@@ -157,7 +161,7 @@ def test_a_new_hotel_is_ready_for_its_first_report(world: World) -> None:
 
     [hotel] = world.get("/api/desktop/welcome").json()["properties"]  # type: ignore[attr-defined]
     assert hotel == {"property_id": "RTI", "name": "Redstone Test Inn", "pms_source": "SKYTOUCH",
-                     "has_fiscal_calendar": True, "has_rooms": True}
+                     "ownership_entity": None, "has_fiscal_calendar": True, "has_rooms": True}
 
     # Upstream's own reads agree: the checklist's required set-up items...
     items = {i["key"]: i["status"] for i in world.get("/api/checklist").json()["items"]}  # type: ignore[attr-defined]
@@ -215,3 +219,46 @@ def test_finishing_stops_the_wizard(world: World) -> None:
     r = world.post("/api/desktop/welcome/finish")
     assert r.status_code == 200 and r.json() == {"finished": True}  # type: ignore[attr-defined]
     assert world.get("/api/desktop/welcome").json()["finished"] is True  # type: ignore[attr-defined]
+
+
+SIGNUP = {
+    "ownership_entity": "Redstone Hospitality LLC",
+    "name": "Redstone Lodge",
+    "code": " tx901 ",
+    "pms_source": "SKYTOUCH",
+    "timezone": "America/Chicago",
+    "fiscal": {"calendar_type": "calendar_month", "fiscal_year_start_month": 1,
+               "week_start_weekday": None},
+}
+
+
+def test_signup_asks_for_the_owning_company_the_name_and_the_code(world: World) -> None:
+    """No room count: the first statistics report carries it (ingestion), and
+    the checklist says so until one has arrived."""
+    r = world.post("/api/desktop/welcome/property", SIGNUP)
+    assert r.status_code == 201, r.text  # type: ignore[attr-defined]
+    # The code the owner typed is the hotel's code everywhere — not one made up.
+    assert r.json() == {"property_id": "TX901", "name": "Redstone Lodge"}  # type: ignore[attr-defined]
+
+    hotels = world.get("/api/desktop/welcome").json()["properties"]  # type: ignore[attr-defined]
+    [hotel] = [h for h in hotels if h["property_id"] == "TX901"]
+    assert hotel["ownership_entity"] == "Redstone Hospitality LLC"
+    assert hotel["has_rooms"] is False
+
+    # A choiceADVANTAGE report is matched by the code it prints, so a report
+    # naming a different hotel of the same brand is not claimed.
+    with world.org_sessions() as s:  # type: ignore[operator]
+        registry = load_registry(s)
+    header = "Hotel Journal Summary Property Name: Redstone Lodge Property Code: TX901".split()
+    found = detect([Word(text=t, x0=0.0, top=0.0) for t in header], registry)
+    assert found.property_id == "TX901"
+    other = "Hotel Journal Summary Property Name: Redstone Lodge Property Code: TX902".split()
+    with pytest.raises(ValueError):
+        detect([Word(text=t, x0=0.0, top=0.0) for t in other], registry)
+
+
+def test_a_code_is_set_up_once_and_looks_like_a_code(world: World) -> None:
+    again = world.post("/api/desktop/welcome/property", {**SIGNUP, "name": "Another"})
+    assert again.status_code == 409 and "TX901" in again.json()["detail"]  # type: ignore[attr-defined]
+    bad = world.post("/api/desktop/welcome/property", {**SIGNUP, "code": "TX 9/01!"})
+    assert bad.status_code == 422 and "letters and numbers" in bad.json()["detail"]  # type: ignore[attr-defined]

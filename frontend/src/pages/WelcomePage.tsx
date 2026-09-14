@@ -37,7 +37,13 @@ const STEP_NUMBER: Record<Exclude<Step, 'done'>, number> = {
   modules: 5,
 }
 
-type HotelDraft = { name: string; report_name: string; pms_source: string; total_rooms: number }
+type HotelDraft = {
+  ownership_entity: string
+  name: string
+  code: string
+  report_name: string
+  pms_source: string
+}
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -45,7 +51,6 @@ const MONTHS = [
 ]
 // Python's weekday(): 0 is Monday (src/usali/fiscal.py).
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-const OTHER_PMS = 'other'
 
 const primaryButtonClass =
   'h-11 rounded-lg bg-accent px-5 text-sm font-semibold text-accent-contrast shadow-sm ' +
@@ -258,10 +263,11 @@ function HotelStep({
 }) {
   const existing = state.properties
   const [adding, setAdding] = useState(addMode || existing.length === 0)
+  const [entity, setEntity] = useState(draft?.ownership_entity ?? '')
   const [name, setName] = useState(draft?.name ?? '')
+  const [code, setCode] = useState(draft?.code ?? '')
   const [reportName, setReportName] = useState(draft?.report_name ?? '')
   const [pms, setPms] = useState(draft?.pms_source ?? state.pms_choices[0]?.id ?? '')
-  const [rooms, setRooms] = useState(draft === null ? '' : String(draft.total_rooms))
 
   if (!adding) {
     return (
@@ -286,8 +292,11 @@ function HotelStep({
     )
   }
 
-  const unsupported = pms === OTHER_PMS
-  const roomCount = Number(rooms)
+  // Systems that print the hotel's code on every report are recognised by
+  // it; the others print a name, so only they are asked how it's printed.
+  const printsCode = state.pms_choices.find((c) => c.id === pms)?.prints_code ?? true
+  const cleanCode = code.replace(/\s+/g, '').toUpperCase()
+  const codeLooksRight = /^[A-Z0-9][A-Z0-9-]{1,19}$/.test(cleanCode)
 
   return (
     <Shell
@@ -299,13 +308,27 @@ function HotelStep({
         onSubmit={(e: FormEvent) => {
           e.preventDefault()
           onNext({
+            ownership_entity: entity.trim(),
             name: name.trim(),
-            report_name: reportName.trim() || name.trim(),
+            code: cleanCode,
+            report_name: printsCode ? '' : reportName.trim() || name.trim(),
             pms_source: pms,
-            total_rooms: roomCount,
           })
         }}
       >
+        <Label
+          text="Ownership entity name"
+          hint="The company that owns this hotel, as it appears on its legal papers — for example “Carlsbad Hospitality LLC”."
+        >
+          <input
+            aria-label="Ownership entity name"
+            className={controlLargeClass}
+            required
+            maxLength={200}
+            value={entity}
+            onChange={(e) => setEntity(e.target.value)}
+          />
+        </Label>
         <Label text="Hotel name">
           <input
             aria-label="Hotel name"
@@ -317,16 +340,18 @@ function HotelStep({
           />
         </Label>
         <Label
-          text="The hotel’s name on your reports"
-          hint="Look at the top of any night audit report and type the hotel name exactly as it’s printed there — it’s how Open Hospitality knows which hotel a report belongs to. Capital letters don’t matter. Leave it blank if it’s the same as above."
+          text="Hotel code"
+          hint="The code your brand gives the hotel. It’s printed at the top of your night audit reports, next to “Property Code” — for example NM236."
         >
           <input
-            aria-label="The hotel’s name on your reports"
+            aria-label="Hotel code"
             className={controlLargeClass}
-            maxLength={200}
-            placeholder={name.toUpperCase()}
-            value={reportName}
-            onChange={(e) => setReportName(e.target.value)}
+            required
+            maxLength={20}
+            spellCheck={false}
+            autoCapitalize="characters"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
           />
         </Label>
         <Label text="Front-desk system (PMS)">
@@ -341,34 +366,32 @@ function HotelStep({
                 {c.name}
               </option>
             ))}
-            <option value={OTHER_PMS}>Something else</option>
           </select>
         </Label>
-        {unsupported && (
-          <p role="status" className="text-sm text-ink">
-            Open Hospitality can only read reports from{' '}
-            {state.pms_choices.map((c) => c.name).join(', ')} so far. If your hotel uses another
-            system, it can’t read your reports yet.
-          </p>
+        {!printsCode && (
+          <Label
+            text="The hotel’s name on your reports"
+            hint="This system prints the hotel’s name rather than its code. Type it exactly as it’s printed at the top of a night audit report — capital letters don’t matter. Leave it blank if it’s the same as the hotel name."
+          >
+            <input
+              aria-label="The hotel’s name on your reports"
+              className={controlLargeClass}
+              maxLength={200}
+              placeholder={name.toUpperCase()}
+              value={reportName}
+              onChange={(e) => setReportName(e.target.value)}
+            />
+          </Label>
         )}
-        <Label text="Rooms you can sell" hint="All the rooms at the hotel that can be let to guests.">
-          <input
-            aria-label="Rooms you can sell"
-            className={controlLargeClass}
-            type="number"
-            inputMode="numeric"
-            min={1}
-            step={1}
-            required
-            value={rooms}
-            onChange={(e) => setRooms(e.target.value)}
-          />
-        </Label>
+        <p className="text-xs text-ink-muted">
+          No need to count rooms — Open Hospitality reads the room count from your first night
+          audit.
+        </p>
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="submit"
             className={primaryButtonClass}
-            disabled={unsupported || !(Number.isInteger(roomCount) && roomCount > 0)}
+            disabled={!entity.trim() || !name.trim() || !codeLooksRight}
           >
             Continue
           </button>

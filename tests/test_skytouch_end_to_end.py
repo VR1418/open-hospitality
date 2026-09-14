@@ -247,6 +247,48 @@ def test_a_pack_for_a_hotel_not_set_up_yet_is_still_a_pack(db_session, tmp_path,
     assert "could not detect report type" not in message
     assert "isn't set up here yet" in message
     # The code is what to register by; the name is how the owner recognises it.
-    assert "property code TEST1" in message and "typing TEST1" in message
+    assert "property code TEST1" in message and "hotel code TEST1" in message
     assert "“Redstone Test Inn”" in message
     assert (tmp_path / "f" / SAMPLE.name).exists()
+
+
+def test_the_room_count_comes_from_the_report_when_nobody_gave_one(db_session, tmp_path):
+    """Setup no longer asks for rooms: Hotel Statistics prints "Total Rooms",
+    and a typed count that disagrees with it skews every percentage."""
+    from usali.models import RoomInventory
+
+    seed_schedules(db_session, "mapping/usali_schedules.yaml")
+    load_mappings(db_session, "mapping/skytouch.yaml")
+    seed_properties(db_session, "mapping/properties.yaml")
+    db_session.commit()
+
+    drop = tmp_path / SAMPLE.name
+    shutil.copy(SAMPLE, drop)
+    process_pack(db_session, drop, processed_dir=tmp_path / "d", failed_dir=tmp_path / "f")
+
+    [row] = db_session.scalars(
+        select(RoomInventory).where(RoomInventory.property_id == "STDEMO")
+    ).all()
+    assert row.total_rooms == 100  # the mock pack prints "Total Rooms 100"
+    assert row.effective_date.isoformat() == "2025-01-01"  # business date 6/21/2026
+
+
+def test_a_room_count_the_owner_set_is_never_overwritten_by_a_report(db_session, tmp_path):
+    from datetime import date
+
+    from usali.models import RoomInventory
+
+    seed_schedules(db_session, "mapping/usali_schedules.yaml")
+    load_mappings(db_session, "mapping/skytouch.yaml")
+    seed_properties(db_session, "mapping/properties.yaml")
+    db_session.add(RoomInventory(property_id="STDEMO", effective_date=date(2026, 1, 1), total_rooms=96))
+    db_session.commit()
+
+    drop = tmp_path / SAMPLE.name
+    shutil.copy(SAMPLE, drop)
+    process_pack(db_session, drop, processed_dir=tmp_path / "d", failed_dir=tmp_path / "f")
+
+    counts = db_session.scalars(
+        select(RoomInventory.total_rooms).where(RoomInventory.property_id == "STDEMO")
+    ).all()
+    assert counts == [96]

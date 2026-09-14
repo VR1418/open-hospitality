@@ -41,11 +41,11 @@ from usali.detect import Detection, detect, detect_report_signature, load_regist
 from usali import gl_posting
 from usali.ledger_promote import promote_ledgers
 from usali.ledger_stage import stage_ledgers
-from usali.models import IngestBatch, IngestionCoverage
+from usali.models import IngestBatch, IngestionCoverage, PmsDailyStatisticStage, RoomInventory
 from usali.segment_promote import promote_segments
 from usali.segment_stage import stage_segments
 from usali.stage import stage_records
-from usali.stats_promote import promote_statistics
+from usali.stats_promote import _load_metric_map, promote_statistics
 from usali.stats_stage import stage_statistics
 from usali.transform import transform
 
@@ -289,6 +289,52 @@ def process_file(
     return dataclasses.replace(result, destination=dest)
 
 
+_STATISTICS_MAP = "mapping/statistics.yaml"
+
+
+def _learn_room_count(session: Session, property_id: str, business_date: date) -> None:
+    """Take a hotel's room count from its own report when nobody has given one.
+
+    Occupancy, ADR and RevPAR divide by the rooms in force, and `inventory`
+    refuses rather than guess when there is none. Most PMS statistics reports
+    print "Total Rooms", so asking the owner to type it at setup is asking for
+    a number the first report already carries — and a typo there skews every
+    percentage from day one.
+
+    Only ever the FIRST count, and only when the hotel has none: a count the
+    owner set, or an effective-dated change after a renovation, is theirs and
+    is never overwritten by a report. Effective from the start of last year,
+    like the setup screen's, so a year of back reports has a denominator.
+    """
+    session.flush()
+    if session.scalar(
+        select(RoomInventory.inventory_id).where(RoomInventory.property_id == property_id).limit(1)
+    ) is not None:
+        return
+    # From the STAGED rows, not the promoted facts: SkyTouch prints the day's
+    # count under an "ACTUAL" column that promotion does not keep as a period.
+    labels = [
+        label for (source, label), code in _load_metric_map(_STATISTICS_MAP).items()
+        if code == "TOTAL_ROOMS"
+    ]
+    value = session.scalar(
+        select(PmsDailyStatisticStage.value).where(
+            PmsDailyStatisticStage.property_id == property_id,
+            PmsDailyStatisticStage.business_date == business_date,
+            PmsDailyStatisticStage.metric_label.in_(labels),
+            PmsDailyStatisticStage.period_label.in_(("ACTUAL", "DAY", "Today")),
+            PmsDailyStatisticStage.is_prior_year.is_(False),
+        ).limit(1)
+    )
+    if value is None or int(value) <= 0:
+        return
+    session.add(RoomInventory(
+        property_id=property_id,
+        effective_date=date(business_date.year - 1, 1, 1),
+        total_rooms=int(value),
+    ))
+
+
 def _process_section(
     session: Session, words: list[Word], det: Detection, path: Path, file_hash: str, edition: int
 ) -> ProcessResult:
@@ -301,6 +347,7 @@ def _process_section(
     # Record which report type landed for this property-day. A file that spans
     # DAY/MONTH/YEAR periods records the DAY business_date the handler returns.
     record_coverage(session, det.property_id, business_date, det.report_type)
+    _learn_room_count(session, det.property_id, business_date)
     batch.status = "transformed"
     # OH-27: promotion and posting land in the caller's one transaction.
     # post_and_record's docstring is the contract enforced here: the typed
@@ -434,8 +481,7 @@ def _unregistered_hotel_message(words: list[Word]) -> str:
         hotel = f"“{printed}”, {hotel}"
     return (
         f"these reports are for a hotel that isn't set up here yet ({hotel}). "
-        f"Add the hotel, typing {code.group(1)} as the name its reports print, "
-        "then upload the file again."
+        f"Add the hotel with the hotel code {code.group(1)}, then upload the file again."
     )
 
 

@@ -3,8 +3,9 @@ year → modules.
 
     GET  /api/desktop/welcome           progress, and the PMSs this install can read
     PUT  /api/desktop/welcome/group     name the hotel group
-    POST /api/desktop/welcome/property  a hotel, the name its reports print, its rooms
-                                        and its fiscal calendar — all or nothing
+    POST /api/desktop/welcome/property  a hotel: its owning company, name, code, how
+                                        its reports name it, and its fiscal calendar —
+                                        all or nothing
     POST /api/desktop/welcome/finish    stop sending the owner here
 
 The modules step uses PUT /api/desktop/modules (modules_api) unchanged.
@@ -31,6 +32,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select, update
+from sqlalchemy.orm import Session
 
 from usali.auth import (
     ORG_ADMIN,
@@ -74,10 +76,24 @@ _MIN_REPORT_NAME = 4
 
 _owner = require_grants(ORG_ADMIN)
 
+#: Systems whose report headers print the hotel's code ("Property Code:
+#: NM236"). For these the code the owner types IS how a report is recognised,
+#: and they are not asked for a printed name at all: a brand name like
+#: "Rodeway Inn" prints on many hotels' reports, a code on one.
+PRINTS_PROPERTY_CODE = frozenset({"SKYTOUCH"})
+
+#: Where each hotel's owning company is kept. Not a column on upstream's
+#: `property` (the engine is not forked); an install setting keyed by code.
+PROFILES_KEY = "hotel_profiles"
+
+_CODE = re.compile(r"^[A-Z0-9][A-Z0-9-]{1,19}$")
+
 
 class PmsChoice(BaseModel):
     id: str
     name: str
+    #: The form asks for the printed name only when this is false.
+    prints_code: bool = False
 
 
 def pms_choices() -> list[PmsChoice]:
@@ -92,15 +108,19 @@ def pms_choices() -> list[PmsChoice]:
     what it found (ADR-D7, phase 3).
     """
     ids = sorted(s.upper() for s in supported_pms_sources())
-    listed = sorted((PmsChoice(id=i, name=PMS_NAMES.get(i, i)) for i in ids),
-                    key=lambda c: c.name.lower())
-    return [*listed, PmsChoice(id=OTHER_SOURCE, name=PMS_NAMES[OTHER_SOURCE])]
+    listed = sorted(
+        (PmsChoice(id=i, name=PMS_NAMES.get(i, i), prints_code=i in PRINTS_PROPERTY_CODE)
+         for i in ids),
+        key=lambda c: c.name.lower(),
+    )
+    return [*listed, PmsChoice(id=OTHER_SOURCE, name=PMS_NAMES[OTHER_SOURCE], prints_code=True)]
 
 
 class WelcomeProperty(BaseModel):
     property_id: str
     name: str
     pms_source: str
+    ownership_entity: str | None
     has_fiscal_calendar: bool
     has_rooms: bool
 
@@ -128,6 +148,7 @@ def progress(request: Request, _: Principal = Depends(_owner)) -> WelcomeOut:
         with_calendar = set(session.scalars(select(FiscalCalendar.property_id)))
         with_rooms = set(session.scalars(select(RoomInventory.property_id)))
         finished = read_setting(session, FINISHED_KEY) is True
+        profiles = _profiles(session)
     paths: DesktopPaths = request.app.state.desktop_welcome_paths
     return WelcomeOut(
         finished=finished,
@@ -139,6 +160,7 @@ def progress(request: Request, _: Principal = Depends(_owner)) -> WelcomeOut:
         properties=[
             WelcomeProperty(
                 property_id=p.property_id, name=p.name, pms_source=p.pms_source,
+                ownership_entity=profiles.get(p.property_id, {}).get("ownership_entity"),
                 has_fiscal_calendar=p.property_id in with_calendar,
                 has_rooms=p.property_id in with_rooms,
             )
@@ -183,11 +205,24 @@ class FiscalIn(BaseModel):
         return self
 
 
+def _profiles(session: Session) -> dict[str, dict[str, str]]:
+    raw = read_setting(session, PROFILES_KEY)
+    return raw if isinstance(raw, dict) else {}
+
+
 class PropertyIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
-    report_name: str = Field(min_length=1, max_length=200)
+    #: The company that owns the hotel ("Carlsbad Hospitality LLC").
+    ownership_entity: str = Field(default="", max_length=200)
+    #: The hotel's own code (NM236). Becomes its property id. Blank makes one
+    #: from the name, as before codes were asked for.
+    code: str = Field(default="", max_length=20)
+    #: How its reports name it, for systems that print a name rather than a
+    #: code. Blank means the code (when the system prints one) or the name.
+    report_name: str = Field(default="", max_length=200)
     pms_source: str = Field(min_length=1, max_length=20)
-    total_rooms: int = Field(gt=0, le=100_000)
+    #: No longer asked: the first statistics report carries it (ingestion).
+    total_rooms: int | None = Field(default=None, gt=0, le=100_000)
     # The owner's computer's IANA zone, sent by the browser. Optional: a bad
     # or missing one leaves upstream's column default in place.
     timezone: str = Field(default="", max_length=50)
@@ -227,15 +262,30 @@ def add_property(
     body: PropertyIn, request: Request, principal: Principal = Depends(_owner),
 ) -> PropertyOut:
     name = " ".join(body.name.split())
-    # `detect` joins the header's words with single spaces and upper-cases
-    # them; the phrase is stored the same way so it matches as typed.
-    phrase = " ".join(body.report_name.upper().split())
+    entity = " ".join(body.ownership_entity.split())
+    code = "".join(body.code.split()).upper()
     pms = body.pms_source.upper()
     if pms not in {c.id for c in pms_choices()}:
         raise HTTPException(
             status_code=422,
             detail="Open Hospitality can't read reports from that system yet.",
         )
+    if code and not _CODE.match(code):
+        raise HTTPException(
+            status_code=422,
+            detail="A hotel code is letters and numbers, like NM236 — as it's printed on "
+                   "your reports.",
+        )
+    # `detect` joins the header's words with single spaces and upper-cases
+    # them; the phrase is stored the same way so it matches as typed. Where
+    # the system prints the code, the code in its printed context is the
+    # phrase: "PROPERTY CODE: NM236" cannot turn up in another hotel's header
+    # the way a bare "NM23" or a shared brand name could.
+    printed = body.report_name
+    if not printed.strip():
+        by_code = code and pms in PRINTS_PROPERTY_CODE | {OTHER_SOURCE}
+        printed = f"Property Code: {code}" if by_code else name
+    phrase = " ".join(printed.upper().split())
     if len(phrase) < _MIN_REPORT_NAME:
         raise HTTPException(
             status_code=422,
@@ -257,7 +307,13 @@ def add_property(
                            "hotel's name more fully, exactly as its reports print it, so the two "
                            "can't be mixed up.",
                 )
-        property_id = new_property_id(name, set(session.scalars(select(Property.property_id))))
+        taken = set(session.scalars(select(Property.property_id)))
+        if code in taken:
+            raise HTTPException(
+                status_code=409,
+                detail=f"A hotel with the code {code} is already set up.",
+            )
+        property_id = code or new_property_id(name, taken)
         zone = _valid_zone(body.timezone)
         session.add(Property(
             property_id=property_id, name=name, pms_source=pms,
@@ -271,15 +327,20 @@ def add_property(
         # Effective from the start of last year, so a year of back reports
         # (and this year's comparison with last) has a room count in force.
         # Effective-dated upstream: a later change is a new row, not an edit.
-        session.add(RoomInventory(
-            property_id=property_id, effective_date=date(date.today().year - 1, 1, 1),
-            total_rooms=body.total_rooms,
-        ))
+        if body.total_rooms is not None:
+            session.add(RoomInventory(
+                property_id=property_id, effective_date=date(date.today().year - 1, 1, 1),
+                total_rooms=body.total_rooms,
+            ))
         session.add(FiscalCalendar(
             property_id=property_id, calendar_type=body.fiscal.calendar_type,
             fiscal_year_start_month=body.fiscal.fiscal_year_start_month,
             week_start_weekday=body.fiscal.week_start_weekday,
         ))
+        if entity:
+            write_setting(session, PROFILES_KEY, {
+                **_profiles(session), property_id: {"ownership_entity": entity},
+            })
         session.add(AuditEvent(
             actor_subject=principal.subject, action="property_created",
             resource_type="property", resource_id=property_id,
