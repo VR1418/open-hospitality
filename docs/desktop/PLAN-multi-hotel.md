@@ -70,13 +70,31 @@ A **Profit picture** card at the top, under This morning: one bar per hotel (yea
 
 **Words.** "Breakeven" is the owner's term and stays. The card never says "profit": revenue above breakeven is what the owner's own estimate says is profit, and the card says *above breakeven*. Estimated labour is shown beside it as the one cost the app does know.
 
+### B3c. A budget, if the owner has one
+
+Many owners already keep a budget — a revenue figure per month, sometimes per department, often with the costs beside it. That is better than any projection the app can make, so the app takes it.
+
+**How it is uploaded.** On **Your hotels** (and from the pencil on the Profit picture card): **Upload a budget** takes a spreadsheet — `.xlsx` or `.csv` — one row per month. A **Download the template** button gives the exact shape: *Month · Total revenue · Room revenue (optional) · Other revenue (optional) · Rooms sold (optional) · Costs (optional)*, twelve rows, this year. The owner fills the total revenue column at least; anything else is a bonus. The upload is read with the same care as a bank statement (headers matched by name, not position; numbers with commas and $ accepted; a month written as "Jan", "January", "2026-01" or "1/2026" all understood), and the page shows what it read before it is saved: *"12 months, total $612,000 — save?"*
+
+**What the budget does.**
+
+- **The seasonal shape.** Where a budget exists, the projection uses it first: *heading for* = actual to date + budget for the rest of the year × (actual to date ÷ budget to date). Budget beats last year's report, which beats the owner's single number, which beats the run rate — and the card always says which it used.
+- **Month against budget.** *Month so far* gains *vs budget to date* per hotel and in the totals; the Profit picture gains a budget marker on each bar.
+- **Breakeven from the budget.** If the budget carries a costs column, the annual breakeven is filled from it (the owner can still overwrite it); if not, the breakeven stays the owner's number.
+- **Needs a look** gains *behind budget* — a hotel more than 5% under its budget to date.
+- The morning email carries *vs budget* on every hotel's block.
+
+**Where it lives.** A `desktop.budget_line` table (hotel, year, month, the figures, uploaded when, file name), one budget per hotel per year, replaced whole on re-upload — never merged, so what the owner sees on the page is exactly the file they sent. A budget is not a book entry; nothing in the ledger changes.
+
+**Code.** `src/usali/desktop/budgets.py` (parse like `statements.py` parses a CSV, plus `.xlsx` through openpyxl, which the accountant pack already uses), `budgets_api.py` (template, preview, save, get), migration `d0007_budgets`, `portfolio_api.py` (budget to date and the projection basis), `PropertyConfigPage.tsx` / the Profit picture pencil, and the morning email.
+
 ### B4. Needs a look — the operational picture in one list
 
 Extend *Last night's audit* into **Needs a look**, worst first, each line a hotel, a reason and a link:
 
 - last night's report missing (exists);
 - a check on the audit failed (exists);
-- **behind breakeven** last night or year to date (new, from B3);
+- **behind breakeven** last night or year to date (new, from B3), or **behind budget** to date (B3c);
 - **occupancy fell** more than 15 points against the hotel's own last 7 nights (new);
 - **codes waiting** to be confirmed for that hotel (new; the count exists);
 - **labour above** the owner's target for that hotel, when a target is set (later — needs a labour target, the same shape as breakeven).
@@ -117,7 +135,7 @@ Either way, **one email per business date**: a late report re-read after the sen
 | Step | Builds | Owner gets | Effort |
 |---|---|---|---|
 | 1 | B1 selector · B2 rooms · table columns · sortable table | The whole portfolio in rooms and money, and one hotel in a click | 1 day |
-| 2 | B3 breakeven: setting, entry on two pages, Profit picture card · B4 list | Which hotels are making money, at a glance, by their own number | 1 day |
+| 2 | B3 breakeven and last year's revenue · **B3c budget upload with a template** · Profit picture card · B4 list | Which hotels are making money, at a glance, by their own numbers — and against their budget | 1½–2 days |
 | 3 | A email rules · unrouted list · Add this hotel from an email · the reader's hint | Six hotels' audits in one inbox file themselves; a new hotel is two clicks | 1–1½ days |
 | 4 | B6 morning sheet · **C the report in the mailbox** (recipients, schedule, send once per date, Send a test) | The whole picture, every morning, in the owner's inbox — no app to open | 1–1½ days |
 | 5 | B5 month comparisons | The picture over time | ½ day |
