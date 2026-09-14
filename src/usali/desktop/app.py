@@ -37,6 +37,7 @@ from usali.desktop import (
     folders_api,
     modules_api,
     portfolio_api,
+    rota_api,
     session_api,
     update_api,
     welcome_api,
@@ -185,6 +186,8 @@ def build_app(
     # ADR-D3 again: with the AI module off, these routes do not exist at all,
     # which is what makes PRD AI-8 ("with AI disabled, every feature still
     # works") true by construction rather than by a flag somewhere.
+    if "payroll" in enabled:
+        rota_api.install(app)
     if "ai" in enabled:
         ai_api.install(app, paths=paths, store=store or MemoryKeyStore())
     update_api.install(app)

@@ -45,6 +45,7 @@ from usali.auth import (
 from usali.desktop.ai.report import OTHER_SOURCE
 from usali.desktop.backup import BackupConfig
 from usali.desktop.paths import DesktopPaths
+from usali.desktop.rota_api import seed_starter_shifts
 from usali.desktop.settings import read_setting, write_setting
 from usali.detect import supported_pms_sources
 from usali.mapping.property_registry import _DEFAULT_ORG
@@ -337,6 +338,9 @@ def add_property(
             fiscal_year_start_month=body.fiscal.fiscal_year_start_month,
             week_start_weekday=body.fiscal.week_start_weekday,
         ))
+        # The standard hotel shifts, so the schedule is usable the day the
+        # hotel is set up (rota_api). The owner edits or deletes any of them.
+        seed_starter_shifts(session, property_id)
         if entity:
             write_setting(session, PROFILES_KEY, {
                 **_profiles(session), property_id: {"ownership_entity": entity},
