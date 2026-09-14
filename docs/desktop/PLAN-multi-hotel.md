@@ -44,18 +44,20 @@ A **Rooms** card beside the totals: *412 rooms across 3 hotels · 318 sold last 
 
 ### B3. Breakeven — the owner's number
 
-**What it is.** For each hotel, the owner types one number: **the revenue the hotel needs in a month to cover its costs** (rent or mortgage, payroll, utilities, franchise fees…). It is an estimate the owner owns, changed any time, and the app never guesses it.
+**What it is.** For each hotel, the owner types one number: **the revenue the hotel needs in a year to cover its costs** — the annual breakeven, worked out from their own past years (rent or mortgage, payroll, utilities, franchise fees, everything). It is the owner's estimate; they change it whenever they know better, and the app never guesses it.
 
-**Where it is entered.** On the Overview's Profit picture card (a pencil beside each hotel → type → Save), and on **Your hotels**. Stored in the hotel profile setting (`hotel_profiles`, beside the ownership entity), so it is per hotel and survives everything.
+**Why a year, and what the app does with it.** Hotel costs are yearly things and hotel revenue is seasonal, so a monthly figure would be wrong in both directions. The app divides the annual number by the days in the year (365, or 366) into a **breakeven per day**, and every comparison is against that:
 
-**What the app shows from it.** For each hotel, month to date:
+- *Last night:* revenue against the daily breakeven — above or below, by how much.
+- *Month to date:* revenue against daily breakeven × days elapsed.
+- *Year to date:* revenue against daily breakeven × days elapsed this year — the one that answers "will the year cover it?"
+- *Heading for:* year-to-date ÷ days elapsed × days in the year, a plain run rate the card names as such (a busy season ahead or behind will move it, and the card says so).
 
-- *Where it should be by today:* breakeven × (days elapsed ÷ days in month).
-- *Where it is:* month-to-date revenue.
-- *Where it is heading:* month-to-date ÷ days elapsed × days in month (a plain run rate — the card says so, and says a weekend-heavy month will read low early).
-- The verdict, in words: **"Above breakeven pace — heading for $48,200 against $45,000"** in green, or **"Behind — short $6,100 at this pace"** in red, or **"No breakeven set"** with the pencil.
+The verdict, in words: **"Above breakeven — $1,640 a night against $1,479 needed; heading for $598,000 this year against $540,000"** in green, or **"Behind — $310 a night short; at this pace $497,000 against $540,000"** in red, or **"No breakeven set — type this hotel's annual breakeven"** with the pencil.
 
-A **Profit picture** card at the top, under This morning: one bar per hotel (month-to-date against breakeven, with a marker for where today should be), the portfolio total on the first line — *"3 hotels · 2 above breakeven pace, 1 behind · $9,300 above in total"* — and the worst first.
+**Where it is entered.** On the Overview's Profit picture card (a pencil beside each hotel → *Annual breakeven* → Save; the card shows the per-day figure it makes, so the owner can sanity-check it), and on **Your hotels**. Stored in the hotel profile setting (`hotel_profiles`, beside the ownership entity), per hotel, with when it was last changed. Changing it re-reads the whole picture at once — nothing is stored from an old number.
+
+A **Profit picture** card at the top, under This morning: one bar per hotel (year to date against where the year should be by today, with last night marked), the portfolio total on the first line — *"3 hotels · 2 above breakeven, 1 behind · $9,300 above year to date"* — and the worst first.
 
 **Words.** "Breakeven" is the owner's term and stays. The card never says "profit": revenue above breakeven is what the owner's own estimate says is profit, and the card says *above breakeven*. Estimated labour is shown beside it as the one cost the app does know.
 
@@ -65,7 +67,7 @@ Extend *Last night's audit* into **Needs a look**, worst first, each line a hote
 
 - last night's report missing (exists);
 - a check on the audit failed (exists);
-- **behind breakeven pace** (new, from B3);
+- **behind breakeven** last night or year to date (new, from B3);
 - **occupancy fell** more than 15 points against the hotel's own last 7 nights (new);
 - **codes waiting** to be confirmed for that hotel (new; the count exists);
 - **labour above** the owner's target for that hotel, when a target is set (later — needs a labour target, the same shape as breakeven).
@@ -86,7 +88,7 @@ The app already writes a daily summary PDF per hotel into *Saved reports*. A **p
 
 **What is sent.** One email a day, in plain words, no login needed to read it:
 
-- **The body** is the overview, readable on a phone: the date; the portfolio line (*3 hotels · $14,887 revenue · 318 of 412 rooms sold, 77% · month to date $148,300 · 2 above breakeven pace, 1 behind*); then **one block per hotel** — revenue, rooms sold of total, occupancy, average rate, RevPAR, month to date, the breakeven verdict, estimated labour, codes waiting — and *Needs a look* at the end. A hotel whose report has not arrived is listed as **not in yet**, never shown as zero.
+- **The body** is the overview, readable on a phone: the date; the portfolio line (*3 hotels · $14,887 revenue · 318 of 412 rooms sold, 77% · month to date $148,300 · 2 above breakeven, 1 behind*); then **one block per hotel** — revenue, rooms sold of total, occupancy, average rate, RevPAR, month to date, the breakeven verdict, estimated labour, codes waiting — and *Needs a look* at the end. A hotel whose report has not arrived is listed as **not in yet**, never shown as zero.
 - **Attached:** the portfolio morning sheet (B6) and each hotel's daily summary PDF, the same files already in *Saved reports*, so the breakdown by department and charge code is there without opening the app.
 - Nothing in it names a guest or an employee: the summaries never carried one. It does carry money, which is why the recipients are the owner's own list and nothing else.
 
@@ -115,8 +117,8 @@ Each step ships with its own tests, an e2e step (rules with three hotels' subjec
 
 ## Two things to confirm before step 2
 
-1. **Breakeven is total revenue per calendar month.** Not per fiscal period, not room revenue only. (Calendar month matches how owners think of rent and payroll; a 4-4-5 hotel can be handled later.)
-2. **The verdict uses a plain run rate.** Month-to-date ÷ days elapsed × days in month. Simple and honest early in the month; a later version can weight by the hotel's own day-of-week pattern.
+1. **Breakeven is one annual total-revenue figure per hotel**, from the owner's own past years; the app divides it by the days in the year and compares every day, month and year against that. Room revenue only, or a monthly figure, would both mislead — total revenue and a year it is.
+2. **The verdict uses a plain run rate.** Year-to-date ÷ days elapsed × days in the year, named as such. A later version can weight by the hotel's own seasons once a full year of books exists.
 
 3. **The email is sent from the same account the reports are collected from.** Simplest for the owner, and the app password already saved covers sending. A separate sending account can be added later if someone needs it.
 
