@@ -44,6 +44,21 @@ vi.mock('../api/client', async (importOriginal) => ({
   putAvailabilityNote: vi.fn(),
   getDemand: vi.fn(),
 }))
+vi.mock('../api/desktop', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/desktop')>()),
+  getRotaTemplates: vi.fn(),
+  createRotaTemplate: vi.fn(),
+  editRotaTemplate: vi.fn(),
+  addStarterShifts: vi.fn(),
+  copyRotaWeek: vi.fn(),
+}))
+import {
+  addStarterShifts,
+  copyRotaWeek,
+  createRotaTemplate,
+  editRotaTemplate,
+  getRotaTemplates,
+} from '../api/desktop'
 import {
   ApiError,
   createScheduleWeek,
@@ -88,6 +103,20 @@ const FRONT_DESK_AM: ShiftTemplate = {
   crosses_midnight: false,
 }
 
+// Housekeeping is "9:00 AM – Done": the end is a planned one for the hours
+// estimate, never shown on a chip or a printout.
+const HOUSEKEEPING: ShiftTemplate & { until_done: boolean } = {
+  template_id: 4, property_id: 'HISJ', department_id: 5,
+  name: 'Housekeeping', start_time: '09:00', end_time: '15:00',
+  crosses_midnight: false, until_done: true,
+}
+
+const CORA_SHIFT: ScheduleShift = {
+  shift_id: 3, schedule_id: 10, business_date: '2026-07-22', department_id: 5,
+  start_time: '09:00', end_time: '15:00', crosses_midnight: false,
+  employee_id: 12, template_id: 4,
+}
+
 const HANK_SHIFT: ScheduleShift = {
   shift_id: 1, schedule_id: 10, business_date: '2026-07-20', department_id: 5,
   start_time: '07:00', end_time: '15:00', crosses_midnight: false,
@@ -103,7 +132,7 @@ const OPEN_SHIFT: ScheduleShift = {
 const WEEK: ScheduleWeek = {
   schedule_id: 10, property_id: 'HISJ', week_start: '2026-07-20',
   status: 'draft', version: 0, published_at: null,
-  shifts: [HANK_SHIFT, OPEN_SHIFT],
+  shifts: [HANK_SHIFT, OPEN_SHIFT, CORA_SHIFT],
 }
 
 // Rooms carries the ONLY money on the page (two PRICED employees, so not
@@ -292,6 +321,15 @@ beforeEach(() => {
     makeEmployee({ employee_id: 12, full_name: 'Rita Roomer', department_id: 5 }),
   ])
   vi.mocked(getTemplates).mockResolvedValue([FRONT_DESK_AM])
+  vi.mocked(getRotaTemplates).mockResolvedValue([{ ...FRONT_DESK_AM, until_done: false }, HOUSEKEEPING])
+  vi.mocked(createRotaTemplate).mockClear()
+  vi.mocked(createRotaTemplate).mockResolvedValue({ ...FRONT_DESK_AM, template_id: 9, name: 'Mid', until_done: false })
+  vi.mocked(editRotaTemplate).mockClear()
+  vi.mocked(editRotaTemplate).mockResolvedValue({ ...FRONT_DESK_AM, until_done: false })
+  vi.mocked(addStarterShifts).mockClear()
+  vi.mocked(addStarterShifts).mockResolvedValue({ departments_added: 4, shifts_added: 7 })
+  vi.mocked(copyRotaWeek).mockClear()
+  vi.mocked(copyRotaWeek).mockResolvedValue({ schedule_id: 11, copied: 3, left_open: 1, skipped: 0 })
   vi.mocked(getScheduleWeek).mockResolvedValue(WEEK)
   vi.mocked(createShift).mockClear()
   vi.mocked(createShift).mockResolvedValue(HANK_SHIFT)
@@ -336,9 +374,9 @@ describe('SchedulePage', () => {
     // The chip shows times only; who and where live in its accessible name,
     // because the row and column already say them on screen.
     expect(
-      await within(grid).findByRole('button', { name: /07:00–15:00 Hank Housekeeper/ }),
+      await within(grid).findByRole('button', { name: /7:00 AM – 3:00 PM Hank Housekeeper/ }),
     ).toBeInTheDocument()
-    expect(within(grid).getByRole('button', { name: /15:00–23:00 OPEN/ })).toBeInTheDocument()
+    expect(within(grid).getByRole('button', { name: /3:00 PM – 11:00 PM OPEN/ })).toBeInTheDocument()
     // Departments render by NAME now (the accordion header + legend).
     expect(within(grid).getAllByText('Front Desk').length).toBeGreaterThan(0)
     // Publish state moved to the page header card, beside the week it applies to.
@@ -357,7 +395,7 @@ describe('SchedulePage', () => {
       // Wait for the week to actually land: the queries below are `query*`,
       // which would pass vacuously against a grid that had not loaded yet.
       const pastChip = await within(grid).findByRole('button', {
-        name: /07:00–15:00 Hank Housekeeper/,
+        name: /7:00 AM – 3:00 PM Hank Housekeeper/,
       })
 
       // No way in on a day that is over — the + is absent, not merely hidden.
@@ -387,7 +425,7 @@ describe('SchedulePage', () => {
     // Every cell carries a hover "+" that opens the add-shift modal prefilled.
     fireEvent.click(screen.getAllByLabelText(/^Add shift for/)[0]!)
     const form = await screen.findByRole('dialog', { name: 'Add shift' })
-    await userEvent.selectOptions(within(form).getByLabelText('Shift template'), '3')
+    await userEvent.click(within(form).getByRole('button', { name: /Front Desk AM/ }))
     await userEvent.selectOptions(within(form).getByLabelText('Shift employee'), '12')
     await userEvent.click(within(form).getByRole('button', { name: 'Add shift' }))
 
@@ -410,7 +448,7 @@ describe('SchedulePage', () => {
 
     fireEvent.click(screen.getAllByLabelText(/^Add shift for/)[0]!)
     const form = await screen.findByRole('dialog', { name: 'Add shift' })
-    await userEvent.selectOptions(within(form).getByLabelText('Shift template'), '3')
+    await userEvent.click(within(form).getByRole('button', { name: /Front Desk AM/ }))
     await userEvent.click(within(form).getByRole('button', { name: 'Add shift' }))
 
     expect(await within(form).findByRole('alert')).toHaveTextContent(
@@ -431,7 +469,7 @@ describe('SchedulePage', () => {
     ).toBeInTheDocument()
     fireEvent.click(screen.getAllByLabelText(/^Add shift for/)[0]!)
     const form = await screen.findByRole('dialog', { name: 'Add shift' })
-    await userEvent.selectOptions(within(form).getByLabelText('Shift template'), '3')
+    await userEvent.click(within(form).getByRole('button', { name: /Front Desk AM/ }))
     await userEvent.click(within(form).getByRole('button', { name: 'Add shift' }))
 
     expect(await within(form).findByRole('alert')).toHaveTextContent(
@@ -448,11 +486,11 @@ describe('SchedulePage', () => {
 
     const grid = await screen.findByRole('region', { name: 'week grid' })
     await userEvent.click(
-      await within(grid).findByRole('button', { name: /15:00–23:00 OPEN/ }),
+      await within(grid).findByRole('button', { name: /3:00 PM – 11:00 PM OPEN/ }),
     )
     const editor = await screen.findByRole('region', { name: 'shift detail' })
     await userEvent.selectOptions(within(editor).getByLabelText('Reassign employee'), '12')
-    await userEvent.click(within(editor).getByRole('button', { name: 'Save assignment' }))
+    await userEvent.click(within(editor).getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(updateShift).toHaveBeenCalledWith(2, {
       business_date: '2026-07-21',
@@ -471,7 +509,7 @@ describe('SchedulePage', () => {
 
     const grid = await screen.findByRole('region', { name: 'week grid' })
     await userEvent.click(
-      await within(grid).findByRole('button', { name: /07:00–15:00 Hank Housekeeper/ }),
+      await within(grid).findByRole('button', { name: /7:00 AM – 3:00 PM Hank Housekeeper/ }),
     )
     const editor = await screen.findByRole('region', { name: 'shift detail' })
     await userEvent.click(within(editor).getByRole('button', { name: 'Delete shift' }))
@@ -586,6 +624,114 @@ describe('SchedulePage', () => {
     await waitFor(() => expect(publishSchedule).toHaveBeenCalledWith(10))
     expect(await screen.findByText('v1 published 2026-07-16')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Republish (v2)' })).toBeInTheDocument()
+  })
+
+  it('reads shifts the way people say them, and "until done" as Done', async () => {
+    renderPage()
+    await pickWeek()
+    const grid = await screen.findByRole('region', { name: 'week grid' })
+    expect(
+      await within(grid).findByRole('button', { name: /9:00 AM – Done Rita Roomer/ }),
+    ).toBeInTheDocument()
+    // The planned end is never on the chip.
+    expect(within(grid).queryByText(/3:00 PM Rita/)).toBeNull()
+    // The ready-made shifts strip reads the same way.
+    expect(within(grid).getByText(/Housekeeping · 9:00 AM – Done/)).toBeInTheDocument()
+  })
+
+  it('edits a shift’s times as typed ("3pm") and sends the server clock', async () => {
+    renderPage()
+    await pickWeek()
+    const grid = await screen.findByRole('region', { name: 'week grid' })
+    await userEvent.click(
+      await within(grid).findByRole('button', { name: /3:00 PM – 11:00 PM OPEN/ }),
+    )
+    const editor = await screen.findByRole('region', { name: 'shift detail' })
+    const endField = within(editor).getByLabelText('Shift end time')
+    await userEvent.clear(endField)
+    await userEvent.type(endField, '10pm')
+    await userEvent.selectOptions(within(editor).getByLabelText('Shift day'), '2026-07-23')
+    await userEvent.click(within(editor).getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(updateShift).toHaveBeenCalledWith(2, expect.objectContaining({
+      business_date: '2026-07-23',
+      start_time: '15:00',
+      end_time: '22:00',
+    })))
+  })
+
+  it('refuses a time it cannot read, and says how to write one', async () => {
+    renderPage()
+    await pickWeek()
+    fireEvent.click(screen.getAllByLabelText(/^Add shift for/)[0]!)
+    const form = await screen.findByRole('dialog', { name: 'Add shift' })
+    await userEvent.type(within(form).getByLabelText('Shift start time'), 'seven')
+    expect(within(form).getByText(/Try 7:00 AM/)).toBeInTheDocument()
+    expect(within(form).getByRole('button', { name: 'Add shift' })).toBeDisabled()
+  })
+
+  it('keeps a shift on screen as a ready-made one', async () => {
+    renderPage()
+    await pickWeek()
+    const grid = await screen.findByRole('region', { name: 'week grid' })
+    await userEvent.click(
+      await within(grid).findByRole('button', { name: /3:00 PM – 11:00 PM OPEN/ }),
+    )
+    const editor = await screen.findByRole('region', { name: 'shift detail' })
+    await userEvent.click(within(editor).getByRole('button', { name: 'Save as a ready-made shift' }))
+    await userEvent.type(within(editor).getByLabelText('Ready-made shift name'), 'Evening desk')
+    await userEvent.click(within(editor).getByRole('button', { name: 'Keep it' }))
+    await waitFor(() => expect(createRotaTemplate).toHaveBeenCalledWith({
+      property: 'HISJ', department_id: 5, name: 'Evening desk',
+      start_time: '15:00', end_time: '23:00', crosses_midnight: false, until_done: false,
+    }))
+  })
+
+  it('copies the week to the next one and says what was left open', async () => {
+    renderPage()
+    await pickWeek()
+    await userEvent.click(await screen.findByRole('button', { name: 'Copy to next week' }))
+    await waitFor(() => expect(copyRotaWeek).toHaveBeenCalledWith(expect.objectContaining({
+      property: 'HISJ',
+    })))
+    const [call] = vi.mocked(copyRotaWeek).mock.calls[0]!
+    expect(call.to_week_start > call.from_week_start).toBe(true)
+    expect(await screen.findByRole('status')).toHaveTextContent(/Copied 3 shifts.*1 left open/)
+  })
+
+  it('offers last week to fill an empty one', async () => {
+    vi.mocked(getScheduleWeek).mockResolvedValue({ ...WEEK, shifts: [] })
+    renderPage()
+    await pickWeek()
+    await userEvent.click(screen.getByRole('button', { name: 'Copy last week here' }))
+    await waitFor(() => expect(copyRotaWeek).toHaveBeenCalled())
+    const [call] = vi.mocked(copyRotaWeek).mock.calls[0]!
+    expect(call.from_week_start < call.to_week_start).toBe(true)
+  })
+
+  it('changes a ready-made shift, with "until done" and typed times', async () => {
+    renderPage()
+    await pickWeek()
+    const panel = await screen.findByRole('region', { name: 'shift templates' })
+    await userEvent.click(within(panel).getByRole('button', { name: 'Edit shift Front Desk AM' }))
+    const form = within(panel).getByRole('form', { name: 'Change shift Front Desk AM' })
+    expect(within(form).getByLabelText('Template start time')).toHaveValue('7:00 AM')
+    const end = within(form).getByLabelText('Template end time')
+    await userEvent.clear(end)
+    await userEvent.type(end, '2:30pm')
+    await userEvent.click(within(form).getByLabelText('Template until done'))
+    await userEvent.click(within(form).getByRole('button', { name: 'Save shift' }))
+    await waitFor(() => expect(editRotaTemplate).toHaveBeenCalledWith(3, {
+      department_id: 5, name: 'Front Desk AM', start_time: '07:00', end_time: '14:30',
+      crosses_midnight: false, until_done: true,
+    }))
+  })
+
+  it('adds the standard hotel shifts in one click', async () => {
+    renderPage()
+    await pickWeek()
+    const panel = await screen.findByRole('region', { name: 'shift templates' })
+    await userEvent.click(within(panel).getByRole('button', { name: 'Add the standard hotel shifts' }))
+    await waitFor(() => expect(addStarterShifts).toHaveBeenCalledWith('HISJ'))
   })
 
   it('Print week calls window.print', async () => {
@@ -761,7 +907,7 @@ describe('SchedulePage', () => {
     await userEvent.click(within(form).getByRole('button', { name: 'Cancel' }))
     const grid = screen.getByRole('region', { name: 'week grid' })
     await userEvent.click(
-      await within(grid).findByRole('button', { name: /07:00–15:00 Hank Housekeeper/ }),
+      await within(grid).findByRole('button', { name: /7:00 AM – 3:00 PM Hank Housekeeper/ }),
     )
     const editor = await screen.findByRole('region', { name: 'shift detail' })
     expect(within(editor).getByText("note: can't work Tuesdays")).toBeInTheDocument()

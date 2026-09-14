@@ -2,6 +2,7 @@
 // from client.ts/types.ts so upstream's files stay untouched; the header
 // seam (bearer + active org) is upstream's own authHeaders.
 import { authHeaders, redirectToLogin } from './client'
+import type { ShiftTemplate } from './types'
 
 export type ModuleLimitation = { text: string; workaround: string | null }
 
@@ -434,6 +435,81 @@ export type BackupStatus = {
   due: boolean
   keep: number
   files: BackupFile[]
+}
+
+// --- The schedule, made easy (src/usali/desktop/rota_api.py) ----------------
+
+/** A ready-made shift. `until_done` is "9:00 AM – Done": the end is a planned
+ *  one, kept for the hours estimate, never printed. */
+export type RotaTemplate = ShiftTemplate & { until_done: boolean }
+
+export type RotaTemplateIn = {
+  property: string
+  department_id: number
+  name: string
+  start_time: string
+  end_time: string
+  crosses_midnight: boolean
+  until_done: boolean
+}
+
+export type RotaCopyResult = {
+  schedule_id: number
+  copied: number
+  /** Copied with nobody on them: the person has left or was already booked. */
+  left_open: number
+  skipped: number
+}
+
+export function getRotaTemplates(property: string): Promise<RotaTemplate[]> {
+  return signedIn(`/api/desktop/rota/templates?property=${encodeURIComponent(property)}`)
+    .then((res) => res.json() as Promise<RotaTemplate[]>)
+}
+
+export async function createRotaTemplate(body: RotaTemplateIn): Promise<RotaTemplate> {
+  const res = await signedIn('/api/desktop/rota/templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return (await res.json()) as RotaTemplate
+}
+
+export async function editRotaTemplate(
+  templateId: number,
+  body: Omit<RotaTemplateIn, 'property'>,
+): Promise<RotaTemplate> {
+  const res = await signedIn(`/api/desktop/rota/templates/${templateId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return (await res.json()) as RotaTemplate
+}
+
+/** The standard hotel shifts and departments, for a hotel without them. */
+export async function addStarterShifts(
+  property: string,
+): Promise<{ departments_added: number; shifts_added: number }> {
+  const res = await signedIn(
+    `/api/desktop/rota/starter?property=${encodeURIComponent(property)}`,
+    { method: 'POST' },
+  )
+  return (await res.json()) as { departments_added: number; shifts_added: number }
+}
+
+export async function copyRotaWeek(body: {
+  property: string
+  from_week_start: string
+  to_week_start: string
+  keep_people?: boolean
+}): Promise<RotaCopyResult> {
+  const res = await signedIn('/api/desktop/rota/copy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return (await res.json()) as RotaCopyResult
 }
 
 // --- The owner's folders (src/usali/desktop/folders_api.py) -----------------

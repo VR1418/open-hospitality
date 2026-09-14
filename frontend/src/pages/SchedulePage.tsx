@@ -15,7 +15,6 @@ import {
   ApiError,
   createScheduleWeek,
   createShift,
-  createTemplate,
   deleteShift,
   deleteStandard,
   deleteTemplate,
@@ -29,7 +28,6 @@ import {
   getScheduleWeek,
   getStandards,
   getTargets,
-  getTemplates,
   publishSchedule,
   putAvailabilityNote,
   saveForecast,
@@ -48,12 +46,21 @@ import type {
   ScheduleProjectionWarning,
   ScheduleShift,
   ScheduleWeek,
-  ShiftTemplate,
   StandardBasis,
   TargetDay,
 } from '../api/types'
 import { fmtMoney } from '../lib/format'
 import Modal from '../components/Modal'
+import {
+  addStarterShifts,
+  copyRotaWeek,
+  createRotaTemplate,
+  editRotaTemplate,
+  getRotaTemplates,
+  type RotaTemplate,
+} from '../api/desktop'
+import { parseClock, shiftText, to12 } from '../lib/clock'
+import { propertyDisplayName } from '../lib/propertyName'
 import { hasRole } from '../lib/roles'
 import { useGlobalProperty } from '../lib/propertyContext'
 import { errorMessage } from '../lib/errors'
@@ -125,11 +132,50 @@ function fmtHM(hours: number): string {
   return `${h}:${String(m).padStart(2, '0')}`
 }
 
-function shiftLabel(s: ScheduleShift, nameOf: (id: number | null) => string): string {
-  return `${s.start_time}–${s.end_time}${s.crosses_midnight ? ' (+1d)' : ''} ${nameOf(s.employee_id)}`
+function shiftLabel(
+  s: ScheduleShift,
+  nameOf: (id: number | null) => string,
+  untilDone = false,
+): string {
+  return `${shiftText(s.start_time, s.end_time, s.crosses_midnight, untilDone)} ${nameOf(s.employee_id)}`
 }
 
-/** One number in the week bar. Small, quiet, and next to the week it counts. */
+/** Whether a shift came from an "until done" ready-made shift. */
+function isUntilDone(sh: ScheduleShift, templates: RotaTemplate[]): boolean {
+  return templates.find((t) => t.template_id === sh.template_id)?.until_done ?? false
+}
+
+/** A clock time typed the way people say it: "7am", "3:30 pm", "15:00". */
+function TimeField({
+  label,
+  ariaLabel,
+  value,
+  onChange,
+}: {
+  label: string
+  ariaLabel: string
+  value: string
+  onChange: (text: string) => void
+}) {
+  const parsed = parseClock(value)
+  const bad = value !== '' && parsed === null
+  return (
+    <label className="flex flex-col gap-1 text-sm">
+      <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">{label}</span>
+      <input
+        className={controlClass}
+        value={value}
+        placeholder="7:00 AM"
+        aria-label={ariaLabel}
+        aria-invalid={bad}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => { if (parsed !== null) onChange(to12(parsed)) }}
+      />
+      {bad && <span className="text-xs text-danger-red">Try 7:00 AM, 3:30 pm or 15:00</span>}
+    </label>
+  )
+}
+
 function WeekStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <span className="inline-flex items-baseline gap-1.5 text-xs">
@@ -142,7 +188,7 @@ function WeekStat({ label, value, tone }: { label: string; value: string; tone?:
 export default function SchedulePage() {
   const qc = useQueryClient()
   const me = useQuery({ queryKey: ['me'], queryFn: getMe })
-  const { property: globalProperty } = useGlobalProperty()
+  const { property: globalProperty, selected: selectedProperty } = useGlobalProperty()
   const employees = useQuery({ queryKey: ['employees'], queryFn: () => getEmployees() })
   // Mirrors the backend's require_scheduler (org_admin | property_gm) — the
   // same gate as the Timecards nav link.
@@ -164,7 +210,7 @@ export default function SchedulePage() {
 
   const templates = useQuery({
     queryKey: ['schedule-templates', propertyId],
-    queryFn: () => getTemplates(propertyId),
+    queryFn: () => getRotaTemplates(propertyId),
     enabled: canSchedule && propertyId !== '',
   })
 
@@ -208,6 +254,24 @@ export default function SchedulePage() {
     onSettled: () => void qc.invalidateQueries({ queryKey: ['schedule-week'] }),
   })
 
+  // Copying a week: the same shifts, same people, on another week. The
+  // server leaves anyone who has left or is double-booked OPEN, and says so.
+  const [copyNote, setCopyNote] = useState<string | null>(null)
+  const copy = useMutation({
+    mutationFn: ({ from, to }: { from: string; to: string }) =>
+      copyRotaWeek({ property: propertyId, from_week_start: from, to_week_start: to }),
+    onSuccess: (out, { to }) => {
+      const open = out.left_open > 0
+        ? ` ${out.left_open} left open — someone has left or was already booked that day.`
+        : ''
+      // Move first: going to a week clears the note, and this one is about
+      // the week we land on.
+      if (to !== weekStart) goToWeek(to)
+      setCopyNote(`Copied ${out.copied} shift${out.copied === 1 ? '' : 's'} to the week of ${usDate(to)}.${open}`)
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['schedule-week'] }),
+  })
+
   const roster = (employees.data ?? []).filter((e) => e.property_id === propertyId)
   const nameOf = (id: number | null): string => {
     if (id === null) return 'OPEN'
@@ -241,7 +305,9 @@ export default function SchedulePage() {
   const goToWeek = (nextMonday: string) => {
     setWeekStart(nextMonday)
     setSelectedShiftId(null)
+    setCopyNote(null)
   }
+  const hotelName = propertyDisplayName(selectedProperty) ?? propertyId
 
   return (
     <div className="flex flex-col gap-5">
@@ -326,6 +392,23 @@ export default function SchedulePage() {
             onClick={() => goToWeek(currentMonday())}
             className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-muted hover:bg-surface-sunken"
           >This week</button>
+          {shifts.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => copy.mutate({ from: addDays(weekStart, -7), to: weekStart })}
+              disabled={copy.isPending}
+              title="Fill this empty week with last week's shifts and people"
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-sunken disabled:opacity-50"
+            >{copy.isPending ? 'Copying…' : 'Copy last week here'}</button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => copy.mutate({ from: weekStart, to: addDays(weekStart, 7) })}
+              disabled={copy.isPending}
+              title="Put this week's shifts and people on next week"
+              className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-sunken disabled:opacity-50"
+            >{copy.isPending ? 'Copying…' : 'Copy to next week'}</button>
+          )}
 
           <span className="mx-1 hidden h-6 w-px bg-line sm:block" />
 
@@ -343,6 +426,16 @@ export default function SchedulePage() {
         {weekMissing && (
           <p className="border-t border-line px-5 py-2 text-xs text-ink-faint">
             Empty week — it is created automatically with the first shift.
+          </p>
+        )}
+        {copyNote !== null && (
+          <p role="status" className="border-t border-line px-5 py-2 text-sm text-ink">
+            {copyNote}
+          </p>
+        )}
+        {copy.isError && (
+          <p className="border-t border-line px-5 py-2 text-sm text-danger-red" role="alert">
+            Copy failed: {errorMessage(copy.error)}
           </p>
         )}
         {(createWeek.isError || publish.isError) && (
@@ -372,6 +465,7 @@ export default function SchedulePage() {
         onSelectShift={setSelectedShiftId}
         ensureWeek={ensureWeek}
         propertyId={propertyId}
+        hotelName={hotelName}
         demand={demand}
       />
 
@@ -400,6 +494,10 @@ export default function SchedulePage() {
           key={selectedShift.shift_id}
           shift={selectedShift}
           roster={roster}
+          departments={departments.data ?? []}
+          templates={templates.data ?? []}
+          days={Array.from({ length: 7 }, (_, i) => addDays(week.data?.week_start ?? weekStart, i))}
+          propertyId={propertyId}
           nameOf={nameOf}
           onClose={() => setSelectedShiftId(null)}
         />
@@ -416,129 +514,231 @@ function TemplatesPanel({
   departments,
 }: {
   propertyId: string
-  templates: ShiftTemplate[]
+  templates: RotaTemplate[]
   departments: Department[]
 }) {
   const qc = useQueryClient()
-  const [name, setName] = useState('')
-  const [departmentId, setDepartmentId] = useState('')
-  const [startTime, setStartTime] = useState('')
-  const [endTime, setEndTime] = useState('')
-  const [crossesMidnight, setCrossesMidnight] = useState(false)
+  const [editing, setEditing] = useState<number | null>(null)
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ['schedule-templates'] })
+    void qc.invalidateQueries({ queryKey: ['departments'] })
+  }
 
-  const create = useMutation({
-    mutationFn: () =>
-      createTemplate({
-        property: propertyId,
-        department_id: Number(departmentId),
-        name,
-        start_time: startTime,
-        end_time: endTime,
-        crosses_midnight: crossesMidnight,
-      }),
-    onSuccess: () => {
-      setName(''); setDepartmentId(''); setStartTime(''); setEndTime('')
-      setCrossesMidnight(false)
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: ['schedule-templates'] }),
-  })
-
+  const starter = useMutation({ mutationFn: () => addStarterShifts(propertyId), onSettled: refresh })
   const remove = useMutation({
     mutationFn: (id: number) => deleteTemplate(id),
-    onSettled: () => qc.invalidateQueries({ queryKey: ['schedule-templates'] }),
+    onSettled: refresh,
   })
+  const deptName = (id: number) =>
+    departments.find((d) => d.department_id === id)?.name ?? `Dept ${id}`
 
   return (
     <Card role="region" aria-label="shift templates" className="print:hidden">
-      <PageHeader level={2} title="Shift templates" />
+      <PageHeader
+        level={2}
+        title="Ready-made shifts"
+        subtitle="Pick one when you add a shift. Change or delete any of them — shifts already on the schedule keep their own times."
+        actions={
+          <button
+            type="button"
+            onClick={() => starter.mutate()}
+            disabled={starter.isPending}
+            className="rounded-control border border-line px-3 py-1.5 text-sm text-ink hover:bg-surface-sunken disabled:opacity-50"
+          >{starter.isPending ? 'Adding…' : 'Add the standard hotel shifts'}</button>
+        }
+      />
       {templates.length === 0 ? (
-        <p className="text-sm text-ink-muted">No templates yet for {propertyId}.</p>
+        <p className="text-sm text-ink-muted">
+          No shifts yet. Add the standard ones (7–3, 3–11, 11–7, housekeeping until done, and
+          more), or make your own below.
+        </p>
       ) : (
         <table className={tableClass} aria-label="Shift templates">
           <thead>
             <tr className="border-b border-line">
-              <th className={headCellClass}>Name</th>
+              <th className={headCellClass}>Shift</th>
               <th className={headCellClass}>Department</th>
-              <th className={headCellClass}>Times</th>
+              <th className={headCellClass}>Hours</th>
               <th className={headCellClass}></th>
             </tr>
           </thead>
           <tbody>
-            {templates.map((t) => (
-              <tr key={t.template_id} className="border-b border-line last:border-0">
-                <td className={cellClass}>{t.name}</td>
-                <td className={cellClass}>{departments.find((d) => d.department_id === t.department_id)?.name ?? `Dept ${t.department_id}`}</td>
-                <td className={cellClass}>
-                  {t.start_time}–{t.end_time}{t.crosses_midnight ? ' (+1d)' : ''}
-                </td>
-                <td className={cellClass}>
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => remove.mutate(t.template_id)}
-                      disabled={remove.isPending}
-                      aria-label={`Delete template ${t.name}`}
-                      className="rounded-control border border-line px-2 py-1 text-xs text-danger-red hover:bg-danger-red-soft"
-                    >Delete</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {templates.map((t) =>
+              editing === t.template_id ? (
+                <tr key={t.template_id} className="border-b border-line last:border-0">
+                  <td className={cellClass} colSpan={4}>
+                    <ShiftTemplateForm
+                      propertyId={propertyId}
+                      departments={departments}
+                      existing={t}
+                      onDone={() => { setEditing(null); refresh() }}
+                      onCancel={() => setEditing(null)}
+                    />
+                  </td>
+                </tr>
+              ) : (
+                <tr key={t.template_id} className="border-b border-line last:border-0">
+                  <td className={`${cellClass} font-medium`}>{t.name}</td>
+                  <td className={cellClass}>{deptName(t.department_id)}</td>
+                  <td className={`${cellClass} tabular-nums`}>
+                    {shiftText(t.start_time, t.end_time, t.crosses_midnight, t.until_done)}
+                    {t.until_done && (
+                      <span className="ml-2 text-xs text-ink-muted">
+                        (about {to12(t.end_time)}, for the hours estimate)
+                      </span>
+                    )}
+                  </td>
+                  <td className={cellClass}>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditing(t.template_id)}
+                        aria-label={`Edit shift ${t.name}`}
+                        className="rounded-control border border-line px-2 py-1 text-xs text-ink hover:bg-surface-sunken"
+                      >Change</button>
+                      <button
+                        type="button"
+                        onClick={() => remove.mutate(t.template_id)}
+                        disabled={remove.isPending}
+                        aria-label={`Delete template ${t.name}`}
+                        className="rounded-control border border-line px-2 py-1 text-xs text-danger-red hover:bg-danger-red-soft"
+                      >Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ),
+            )}
           </tbody>
         </table>
       )}
       {remove.isError && (
-        <p className="mt-2 text-sm text-danger-red">
-          Delete failed: {errorMessage(remove.error)}
+        <p className="mt-2 text-sm text-danger-red" role="alert">
+          {errorMessage(remove.error).includes('referenced')
+            ? 'That shift is already on a schedule, so it stays. You can change it instead.'
+            : `Delete failed: ${errorMessage(remove.error)}`}
         </p>
       )}
-      <form
-        className="mt-3 flex flex-wrap items-end gap-3"
-        onSubmit={(e) => { e.preventDefault(); create.mutate() }}
-      >
+      {starter.isError && (
+        <p className="mt-2 text-sm text-danger-red" role="alert">
+          Couldn’t add them: {errorMessage(starter.error)}
+        </p>
+      )}
+      <div className="mt-4 border-t border-line pt-4">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Make your own shift</h3>
+        <ShiftTemplateForm propertyId={propertyId} departments={departments} onDone={refresh} />
+      </div>
+    </Card>
+  )
+}
+
+/** One ready-made shift, new or being changed. Times are typed the way
+ *  people say them ("7am", "3:30 pm"); the server gets "HH:MM". */
+function ShiftTemplateForm({
+  propertyId,
+  departments,
+  existing,
+  onDone,
+  onCancel,
+}: {
+  propertyId: string
+  departments: Department[]
+  existing?: RotaTemplate
+  onDone: () => void
+  onCancel?: () => void
+}) {
+  const [name, setName] = useState(existing?.name ?? '')
+  const [departmentId, setDepartmentId] = useState(
+    existing !== undefined ? String(existing.department_id) : '',
+  )
+  const [startText, setStartText] = useState(existing ? to12(existing.start_time) : '')
+  const [endText, setEndText] = useState(existing ? to12(existing.end_time) : '')
+  const [crossesMidnight, setCrossesMidnight] = useState(existing?.crosses_midnight ?? false)
+  const [untilDone, setUntilDone] = useState(existing?.until_done ?? false)
+  const start = parseClock(startText)
+  const end = parseClock(endText)
+
+  const save = useMutation({
+    mutationFn: () => {
+      const body = {
+        department_id: Number(departmentId), name: name.trim(),
+        start_time: start as string, end_time: end as string,
+        crosses_midnight: crossesMidnight, until_done: untilDone,
+      }
+      return existing !== undefined
+        ? editRotaTemplate(existing.template_id, body)
+        : createRotaTemplate({ property: propertyId, ...body })
+    },
+    onSuccess: () => {
+      if (existing === undefined) {
+        setName(''); setDepartmentId(''); setStartText(''); setEndText('')
+        setCrossesMidnight(false); setUntilDone(false)
+      }
+      onDone()
+    },
+  })
+
+  return (
+    <form
+      className="flex flex-col gap-3"
+      aria-label={existing ? `Change shift ${existing.name}` : 'New ready-made shift'}
+      onSubmit={(e) => { e.preventDefault(); save.mutate() }}
+    >
+      <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-xs font-medium text-ink-muted">Name</span>
-          <input className={controlClass} value={name} required
+          <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Name</span>
+          <input className={controlClass} value={name} required placeholder="Evening desk"
             onChange={(e) => setName(e.target.value)} aria-label="Template name" />
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-xs font-medium text-ink-muted">Department</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Department</span>
           <select className={controlClass} value={departmentId} required
-            onChange={(e) => setDepartmentId(e.target.value)} aria-label="Template department id">
+            onChange={(e) => setDepartmentId(e.target.value)} aria-label="Template department">
             <option value="">Select…</option>
             {departments.map((d) => (
               <option key={d.department_id} value={d.department_id}>{d.name}</option>
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-xs font-medium text-ink-muted">Start</span>
-          <input className={controlClass} type="time" value={startTime} required
-            onChange={(e) => setStartTime(e.target.value)} aria-label="Template start time" />
+        <TimeField label="Starts" ariaLabel="Template start time" value={startText} onChange={setStartText} />
+        <TimeField
+          label={untilDone ? 'Usually done by' : 'Ends'}
+          ariaLabel="Template end time"
+          value={endText}
+          onChange={setEndText}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={untilDone}
+            onChange={(e) => setUntilDone(e.target.checked)} aria-label="Template until done" />
+          <span className="text-xs font-medium text-ink-muted">
+            “Until done” — no fixed end (housekeeping); the end time is only an estimate
+          </span>
         </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-xs font-medium text-ink-muted">End</span>
-          <input className={controlClass} type="time" value={endTime} required
-            onChange={(e) => setEndTime(e.target.value)} aria-label="Template end time" />
-        </label>
-        <label className="flex items-center gap-2 pb-1.5 text-sm">
+        <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={crossesMidnight}
             onChange={(e) => setCrossesMidnight(e.target.checked)}
             aria-label="Template crosses midnight" />
-          <span className="text-xs font-medium text-ink-muted">Crosses midnight</span>
+          <span className="text-xs font-medium text-ink-muted">Runs past midnight (night audit)</span>
         </label>
-        <button
-          type="submit"
-          disabled={create.isPending || !name || !departmentId || !startTime || !endTime}
-          className="rounded-control bg-accent px-3 py-1.5 text-sm font-medium text-accent-contrast disabled:opacity-50"
-        >Add template</button>
-      </form>
-      {create.isError && (
-        <p className="mt-2 text-sm text-danger-red">
-          Create failed: {errorMessage(create.error)}
-        </p>
+        <span className="ml-auto flex gap-2">
+          {onCancel && (
+            <button type="button" onClick={onCancel}
+              className="rounded-control border border-line px-3 py-1.5 text-sm text-ink-muted hover:bg-surface-sunken">
+              Cancel
+            </button>
+          )}
+          <button
+            type="submit"
+            disabled={save.isPending || !name.trim() || !departmentId || start === null || end === null}
+            className="rounded-control bg-accent px-3 py-1.5 text-sm font-medium text-accent-contrast disabled:opacity-50"
+          >{existing ? 'Save shift' : 'Add this shift'}</button>
+        </span>
+      </div>
+      {save.isError && (
+        <p className="text-sm text-danger-red" role="alert">{errorMessage(save.error)}</p>
       )}
-    </Card>
+    </form>
   )
 }
 
@@ -1118,18 +1318,20 @@ function ScheduleBoard({
   onSelectShift,
   ensureWeek,
   propertyId,
+  hotelName,
   demand,
 }: {
   weekStart: string
   week: ScheduleWeek | null
   departments: Department[]
   roster: Employee[]
-  templates: ShiftTemplate[]
+  templates: RotaTemplate[]
   deptNameOf: (id: number) => string
   nameOf: (id: number | null) => string
   onSelectShift: (id: number) => void
   ensureWeek: () => Promise<number>
   propertyId: string
+  hotelName: string
   demand?: DemandSurface
 }) {
   const qc = useQueryClient()
@@ -1169,7 +1371,7 @@ function ScheduleBoard({
   }
 
   const addFromTemplate = useMutation({
-    mutationFn: async ({ t, day, employeeId }: { t: ShiftTemplate; day: string; employeeId: number | null }) => {
+    mutationFn: async ({ t, day, employeeId }: { t: RotaTemplate; day: string; employeeId: number | null }) => {
       const sid = await ensureWeek()
       return createShift(sid, {
         business_date: day,
@@ -1298,8 +1500,8 @@ function ScheduleBoard({
           // The visible chip is deliberately terse — times only, so a wall of
           // them stays readable. The accessible name carries what the eye gets
           // from the row and column the chip sits in.
-          aria-label={`${shiftLabel(sh, nameOf)} · ${deptNameOf(sh.department_id)} · ${day}`}
-          title={`${deptNameOf(sh.department_id)} · ${shiftLabel(sh, nameOf)}${
+          aria-label={`${shiftLabel(sh, nameOf, isUntilDone(sh, templates))} · ${deptNameOf(sh.department_id)} · ${day}`}
+          title={`${deptNameOf(sh.department_id)} · ${shiftLabel(sh, nameOf, isUntilDone(sh, templates))}${
             isPast(day) ? ' — this day has passed' : ' — click to edit, drag to move'
           }`}
           className={`flex w-full items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-center text-[11px] font-semibold leading-tight text-shift-ink shadow-sm transition-transform ${fill} ${
@@ -1307,8 +1509,7 @@ function ScheduleBoard({
           }`}
         >
           <span className="tabular-nums">
-            {sh.start_time}–{sh.end_time}
-            {sh.crosses_midnight ? ' +1' : ''}
+            {shiftText(sh.start_time, sh.end_time, sh.crosses_midnight, isUntilDone(sh, templates))}
           </span>
           {open && <span className="opacity-90">· OPEN</span>}
           {showWho && !open && (
@@ -1333,8 +1534,8 @@ function ScheduleBoard({
   }
 
   const headCls =
-    'sticky top-0 z-20 border-b border-line bg-surface-raised py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-ink-faint'
-  const stickyNameCls = 'sticky left-0 z-10 bg-surface-raised'
+    'sticky print-static top-0 z-20 border-b border-line bg-surface-raised py-3 text-center text-[11px] font-semibold uppercase tracking-wide text-ink-faint'
+  const stickyNameCls = 'sticky print-static left-0 z-10 bg-surface-raised'
 
   return (
     <Card
@@ -1351,9 +1552,15 @@ function ScheduleBoard({
         </p>
       )}
 
+      {/* The printed page's own heading: the screen has the page header. */}
+      <div className="hidden px-5 py-3 print:block">
+        <h1 className="text-xl font-bold text-ink">{hotelName}</h1>
+        <p className="text-sm text-ink-muted">Schedule for the week of {weekLabel(effectiveStart)}</p>
+      </div>
+
       {templates.length > 0 && (
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-5 py-3 print:hidden">
-          <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Templates</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Shifts</span>
           {templates.map((t) => (
             <span
               key={t.template_id}
@@ -1362,14 +1569,14 @@ function ScheduleBoard({
                 e.dataTransfer.setData('text/plain', JSON.stringify({ kind: 'template', id: t.template_id }))
                 e.dataTransfer.effectAllowed = 'copy'
               }}
-              title={`Drag onto the grid: ${t.name} ${t.start_time}–${t.end_time}`}
+              title={`Drag onto the grid: ${t.name} ${shiftText(t.start_time, t.end_time, t.crosses_midnight, t.until_done)}`}
               className={`inline-flex cursor-grab items-center gap-1.5 rounded-full border border-line px-3 py-1 text-xs font-medium active:cursor-grabbing ${toneOf(t.department_id)}`}
             >
               <span aria-hidden="true">⠿</span>
-              {t.name} · {t.start_time}–{t.end_time}
+              {t.name} · {shiftText(t.start_time, t.end_time, t.crosses_midnight, t.until_done)}
             </span>
           ))}
-          <span className="text-xs text-ink-faint">drag onto a cell, or use a cell's +</span>
+          <span className="text-xs text-ink-faint">drag onto a cell, or press + on a cell</span>
         </div>
       )}
 
@@ -1799,7 +2006,7 @@ function AddShiftModal({
   target: { date: string; employeeId: number | null; departmentId: number | null }
   weekStart: string
   departments: Department[]
-  templates: ShiftTemplate[]
+  templates: RotaTemplate[]
   roster: Employee[]
   ensureWeek: () => Promise<number>
   onClose: () => void
@@ -1814,21 +2021,20 @@ function AddShiftModal({
     target.employeeId !== null ? String(target.employeeId) : '',
   )
   const [date, setDate] = useState(target.date)
-  const [startTime, setStartTime] = useState('')
-  const [endTime, setEndTime] = useState('')
+  const [startText, setStartText] = useState('')
+  const [endText, setEndText] = useState('')
   const [crossesMidnight, setCrossesMidnight] = useState(false)
+  const start = parseClock(startText)
+  const end = parseClock(endText)
 
-  // Picking a template pre-fills department + times; everything stays editable
-  // (templates are provenance, not a straitjacket).
-  function applyTemplate(id: string) {
-    setTemplateId(id)
-    const t = templates.find((x) => String(x.template_id) === id)
-    if (t !== undefined) {
-      setDepartmentId(String(t.department_id))
-      setStartTime(t.start_time)
-      setEndTime(t.end_time)
-      setCrossesMidnight(t.crosses_midnight)
-    }
+  // Picking a ready-made shift fills department and times; everything stays
+  // editable (a template is where a shift came from, not a rule).
+  function applyTemplate(t: RotaTemplate) {
+    setTemplateId(String(t.template_id))
+    setDepartmentId(String(t.department_id))
+    setStartText(to12(t.start_time))
+    setEndText(to12(t.end_time))
+    setCrossesMidnight(t.crosses_midnight)
   }
 
   const add = useMutation({
@@ -1837,8 +2043,8 @@ function AddShiftModal({
       return createShift(sid, {
         business_date: date,
         department_id: Number(departmentId),
-        start_time: startTime,
-        end_time: endTime,
+        start_time: start as string,
+        end_time: end as string,
         crosses_midnight: crossesMidnight,
         employee_id: employeeId === '' ? null : Number(employeeId),
         template_id: templateId === '' ? null : Number(templateId),
@@ -1848,29 +2054,43 @@ function AddShiftModal({
   })
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+  const who = target.employeeId !== null
+    ? roster.find((e) => e.employee_id === target.employeeId)?.full_name ?? 'this person'
+    : 'an open shift'
 
   return (
     <Modal
       title="Add shift"
-      subtitle={`${propertyId} · week of ${weekStart}`}
+      subtitle={`${who} · ${dayName(target.date)} ${usDate(target.date)} · ${propertyId}`}
       onClose={onClose}
     >
       <form
         className="flex flex-col gap-4"
         onSubmit={(e) => { e.preventDefault(); add.mutate() }}
       >
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Template</span>
-          <select className={controlClass} value={templateId}
-            onChange={(e) => applyTemplate(e.target.value)} aria-label="Shift template">
-            <option value="">(pick a template)</option>
-            {templates.map((t) => (
-              <option key={t.template_id} value={t.template_id}>
-                {t.name} · {t.start_time}–{t.end_time}
-              </option>
-            ))}
-          </select>
-        </label>
+        {templates.length > 0 && (
+          <div role="group" aria-label="Ready-made shifts" className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Pick a shift</span>
+            <div className="flex flex-wrap gap-2">
+              {templates.map((t) => (
+                <button
+                  key={t.template_id}
+                  type="button"
+                  aria-pressed={templateId === String(t.template_id)}
+                  onClick={() => applyTemplate(t)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                    templateId === String(t.template_id)
+                      ? 'border-accent bg-accent text-accent-contrast'
+                      : 'border-line text-ink hover:bg-surface-sunken'
+                  }`}
+                >
+                  {t.name} · {shiftText(t.start_time, t.end_time, t.crosses_midnight, t.until_done)}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-ink-faint">or type your own times below</span>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Department</span>
@@ -1883,10 +2103,10 @@ function AddShiftModal({
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Employee</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Who</span>
             <select className={controlClass} value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)} aria-label="Shift employee">
-              <option value="">(open shift)</option>
+              <option value="">(open shift — nobody yet)</option>
               {roster.map((emp) => (
                 <option key={emp.employee_id} value={emp.employee_id}>{emp.full_name}</option>
               ))}
@@ -1912,22 +2132,14 @@ function AddShiftModal({
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Start</span>
-            <input className={controlClass} type="time" value={startTime} required
-              onChange={(e) => setStartTime(e.target.value)} aria-label="Shift start time" />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">End</span>
-            <input className={controlClass} type="time" value={endTime} required
-              onChange={(e) => setEndTime(e.target.value)} aria-label="Shift end time" />
-          </label>
+          <TimeField label="Starts" ariaLabel="Shift start time" value={startText} onChange={setStartText} />
+          <TimeField label="Ends" ariaLabel="Shift end time" value={endText} onChange={setEndText} />
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={crossesMidnight}
             onChange={(e) => setCrossesMidnight(e.target.checked)}
             aria-label="Shift crosses midnight" />
-          <span className="text-xs font-medium text-ink-muted">Crosses midnight</span>
+          <span className="text-xs font-medium text-ink-muted">Runs past midnight</span>
         </label>
         <div className="mt-1 flex items-center justify-end gap-2">
           <button type="button" onClick={onClose}
@@ -1936,7 +2148,7 @@ function AddShiftModal({
           </button>
           <button
             type="submit"
-            disabled={add.isPending || departmentId === '' || !startTime || !endTime}
+            disabled={add.isPending || departmentId === '' || start === null || end === null}
             className="rounded-control bg-accent px-4 py-1.5 text-sm font-semibold text-accent-contrast disabled:opacity-50"
           >Add shift</button>
         </div>
@@ -1953,11 +2165,19 @@ function AddShiftModal({
 function ShiftEditor({
   shift,
   roster,
+  departments,
+  templates,
+  days,
+  propertyId,
   nameOf,
   onClose,
 }: {
   shift: ScheduleShift
   roster: Employee[]
+  departments: Department[]
+  templates: RotaTemplate[]
+  days: string[]
+  propertyId: string
   nameOf: (id: number | null) => string
   onClose: () => void
 }) {
@@ -1965,6 +2185,18 @@ function ShiftEditor({
   const [employeeId, setEmployeeId] = useState(
     shift.employee_id === null ? '' : String(shift.employee_id),
   )
+  const [departmentId, setDepartmentId] = useState(String(shift.department_id))
+  const [date, setDate] = useState(shift.business_date)
+  const [startText, setStartText] = useState(to12(shift.start_time))
+  const [endText, setEndText] = useState(to12(shift.end_time))
+  const [crossesMidnight, setCrossesMidnight] = useState(shift.crosses_midnight)
+  const [keepName, setKeepName] = useState<string | null>(null)
+  const [keepUntilDone, setKeepUntilDone] = useState(false)
+  const start = parseClock(startText)
+  const end = parseClock(endText)
+  const untilDone = isUntilDone(shift, templates)
+  const deptName = (id: number) =>
+    departments.find((d) => d.department_id === id)?.name ?? `Dept ${id}`
 
   function invalidate() {
     void qc.invalidateQueries({ queryKey: ['schedule-week'] })
@@ -1977,16 +2209,15 @@ function ShiftEditor({
   const selectedEmployee =
     roster.find((e) => String(e.employee_id) === employeeId) ?? null
 
-  const reassign = useMutation({
-    // The PUT re-sends the shift's full shape (the API revalidates
-    // everything); only the assignment changes here.
+  // The PUT re-sends the shift's full shape (the API revalidates everything).
+  const save = useMutation({
     mutationFn: () =>
       updateShift(shift.shift_id, {
-        business_date: shift.business_date,
-        department_id: shift.department_id,
-        start_time: shift.start_time,
-        end_time: shift.end_time,
-        crosses_midnight: shift.crosses_midnight,
+        business_date: date,
+        department_id: Number(departmentId),
+        start_time: start as string,
+        end_time: end as string,
+        crosses_midnight: crossesMidnight,
         employee_id: employeeId === '' ? null : Number(employeeId),
         template_id: shift.template_id,
       }),
@@ -1999,12 +2230,26 @@ function ShiftEditor({
     onSettled: invalidate,
   })
 
+  // The owner's own shift, kept for next time — from exactly what is on screen.
+  const keep = useMutation({
+    mutationFn: () =>
+      createRotaTemplate({
+        property: propertyId, department_id: Number(departmentId),
+        name: (keepName ?? '').trim(), start_time: start as string, end_time: end as string,
+        crosses_midnight: crossesMidnight, until_done: keepUntilDone,
+      }),
+    onSuccess: () => {
+      setKeepName(null)
+      void qc.invalidateQueries({ queryKey: ['schedule-templates'] })
+    },
+  })
+
   return (
     <Card role="region" aria-label="shift detail" className="print:hidden">
       <PageHeader
         level={2}
-        title={`Shift — ${shift.business_date} ${shift.start_time}–${shift.end_time}`}
-        subtitle={`Dept ${shift.department_id} · currently ${nameOf(shift.employee_id)}`}
+        title={`Shift — ${dayName(shift.business_date)} ${usDate(shift.business_date)}, ${shiftText(shift.start_time, shift.end_time, shift.crosses_midnight, untilDone)}`}
+        subtitle={`${deptName(shift.department_id)} · ${nameOf(shift.employee_id)}`}
         actions={
           <button
             type="button"
@@ -2014,40 +2259,120 @@ function ShiftEditor({
           >Close</button>
         }
       />
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-xs font-medium text-ink-muted">Assign to</span>
-          <select className={controlClass} value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)} aria-label="Reassign employee">
-            <option value="">(open shift)</option>
-            {roster.map((e) => (
-              <option key={e.employee_id} value={e.employee_id}>{e.full_name}</option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          onClick={() => reassign.mutate()}
-          disabled={reassign.isPending}
-          className="rounded-control bg-accent px-3 py-1.5 text-sm font-medium text-accent-contrast disabled:opacity-50"
-        >Save assignment</button>
-        <button
-          type="button"
-          onClick={() => remove.mutate()}
-          disabled={remove.isPending}
-          aria-label="Delete shift"
-          className="rounded-control border border-line px-2 py-1.5 text-sm text-danger-red hover:bg-danger-red-soft"
-        >Delete shift</button>
-      </div>
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(e) => { e.preventDefault(); save.mutate() }}
+      >
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Who</span>
+            <select className={controlClass} value={employeeId}
+              onChange={(e) => setEmployeeId(e.target.value)} aria-label="Reassign employee">
+              <option value="">(open shift — nobody yet)</option>
+              {roster.map((e) => (
+                <option key={e.employee_id} value={e.employee_id}>{e.full_name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Day</span>
+            <select className={controlClass} value={date}
+              onChange={(e) => setDate(e.target.value)} aria-label="Shift day">
+              {days.map((d) => (
+                <option key={d} value={d}>{dayName(d)} {d.slice(5)}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Department</span>
+            <select className={controlClass} value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)} aria-label="Shift department">
+              {departments.map((d) => (
+                <option key={d.department_id} value={d.department_id}>{d.name}</option>
+              ))}
+            </select>
+          </label>
+          <TimeField label="Starts" ariaLabel="Shift start time" value={startText} onChange={setStartText} />
+          <TimeField
+            label={untilDone ? 'Usually done by' : 'Ends'}
+            ariaLabel="Shift end time"
+            value={endText}
+            onChange={setEndText}
+          />
+          <label className="flex items-center gap-2 pb-2 text-sm">
+            <input type="checkbox" checked={crossesMidnight}
+              onChange={(e) => setCrossesMidnight(e.target.checked)}
+              aria-label="Shift crosses midnight" />
+            <span className="text-xs font-medium text-ink-muted">Runs past midnight</span>
+          </label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="submit"
+            disabled={save.isPending || start === null || end === null}
+            className="rounded-control bg-accent px-3 py-1.5 text-sm font-medium text-accent-contrast disabled:opacity-50"
+          >{save.isPending ? 'Saving…' : 'Save changes'}</button>
+          <button
+            type="button"
+            onClick={() => remove.mutate()}
+            disabled={remove.isPending}
+            aria-label="Delete shift"
+            className="rounded-control border border-line px-2 py-1.5 text-sm text-danger-red hover:bg-danger-red-soft"
+          >Delete shift</button>
+          {keepName === null ? (
+            <button
+              type="button"
+              onClick={() => setKeepName('')}
+              className="ml-auto rounded-control border border-line px-2 py-1.5 text-sm text-ink-muted hover:bg-surface-sunken"
+            >Save as a ready-made shift</button>
+          ) : (
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              <input
+                className={controlClass}
+                value={keepName}
+                placeholder="Call it…"
+                aria-label="Ready-made shift name"
+                onChange={(e) => setKeepName(e.target.value)}
+              />
+              <label className="flex items-center gap-1 text-xs text-ink-muted">
+                <input type="checkbox" checked={keepUntilDone}
+                  onChange={(e) => setKeepUntilDone(e.target.checked)} aria-label="Keep as until done" />
+                until done
+              </label>
+              <button
+                type="button"
+                onClick={() => keep.mutate()}
+                disabled={keep.isPending || keepName.trim() === '' || start === null || end === null}
+                className="rounded-control bg-accent px-3 py-1.5 text-sm font-medium text-accent-contrast disabled:opacity-50"
+              >Keep it</button>
+              <button type="button" onClick={() => setKeepName(null)}
+                className="rounded-control border border-line px-2 py-1.5 text-xs text-ink-muted hover:bg-surface-sunken">
+                Cancel
+              </button>
+            </span>
+          )}
+        </div>
+        {save.isSuccess && !save.isPending && (
+          <p className="text-sm text-ink-muted" role="status">Saved.</p>
+        )}
+        {keep.isSuccess && (
+          <p className="text-sm text-ink-muted" role="status">Kept — it’s in Ready-made shifts now.</p>
+        )}
+      </form>
       {selectedEmployee && (
         <AvailabilityNote
           key={selectedEmployee.employee_id}
           employee={selectedEmployee}
         />
       )}
-      {reassign.isError && (
+      {save.isError && (
         <p className="mt-2 text-sm text-danger-red" role="alert">
-          Reassign failed: {errorMessage(reassign.error)}
+          Save failed: {errorMessage(save.error)}
+        </p>
+      )}
+      {keep.isError && (
+        <p className="mt-2 text-sm text-danger-red" role="alert">
+          Couldn’t keep it: {errorMessage(keep.error)}
         </p>
       )}
       {remove.isError && (

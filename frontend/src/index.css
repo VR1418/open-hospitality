@@ -221,3 +221,18 @@
     .dash-hero::before { animation: none; }
   }
 }
+
+/* The printed rota (SchedulePage): landscape, the week grid and nothing else.
+   Sticky headers become plain so a browser never repeats them mid-page. */
+@media print {
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+  body {
+    background: #fff;
+  }
+  .print-static {
+    position: static !important;
+  }
+}
