@@ -125,6 +125,13 @@ const ACCOUNTING_TAB: NavTab = {
       show: isOrgAdmin,
     },
     { to: '/gl', label: 'Books', icon: BankIcon },
+    {
+      to: '/bank',
+      label: 'Check against your bank',
+      icon: BankIcon,
+      desktopOnly: true,
+      show: isOrgAdmin,
+    },
     { to: '/reports', label: 'For your accountant', icon: ReportsIcon },
     { to: '/qbo', label: 'Send to QuickBooks', icon: SyncIcon },
   ],

@@ -40,6 +40,7 @@ import WelcomePage from './pages/WelcomePage'
 import OverviewPage from './pages/OverviewPage'
 import BackupsPage from './pages/BackupsPage'
 import EmailPage from './pages/EmailPage'
+import BankPage from './pages/BankPage'
 import AiPage from './pages/AiPage'
 import CodesPage from './pages/CodesPage'
 import ReadWithAiPage from './pages/ReadWithAiPage'
@@ -378,6 +379,13 @@ const codesRoute = createRoute({
   component: CodesPage,
 })
 
+/** Desktop edition: the books checked against the bank, the card sorted. */
+const bankRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/bank',
+  component: BankPage,
+})
+
 /** Desktop edition: night-audit reports collected from a mailbox. */
 const emailRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -401,6 +409,7 @@ const childRoutes = [
   overviewRoute,
   backupsRoute,
   emailRoute,
+  bankRoute,
   codesRoute,
   aiRoute,
   readWithAiRoute,

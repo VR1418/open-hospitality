@@ -40,6 +40,7 @@ from usali.desktop import (
     portfolio_api,
     rota_api,
     session_api,
+    statements_api,
     update_api,
     welcome_api,
 )
@@ -196,6 +197,7 @@ def build_app(
         ai_api.install(app, paths=paths, store=store or MemoryKeyStore())
     update_api.install(app)
     folders_api.install(app, paths=paths)
+    statements_api.install(app)
     mail_api.install(app, paths=paths, store=store or MemoryKeyStore(), intake=mail_intake)
     backup_api.install(app, paths=paths, store=store or MemoryKeyStore(), sessions=sessions)
     if dist.is_dir():

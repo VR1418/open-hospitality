@@ -594,6 +594,89 @@ export async function allowMailSender(sender: string): Promise<MailFetch> {
   return (await res.json()) as MailFetch
 }
 
+// --- Bank and card statements (src/usali/desktop/statements_api.py) ----------
+
+export type StatementLine = {
+  line_id: number
+  posted_on: string
+  description: string
+  amount: string
+  balance: string | null
+  /** bank: settlement | cash | payroll | unmatched | ignored */
+  match_kind: string
+  match_note: string | null
+  matched_amount: string | null
+  /** card: one of the categories, or null until sorted */
+  category: string | null
+}
+
+export type StatementSummary = {
+  statement_id: number
+  property_id: string
+  kind: 'bank' | 'card'
+  account_label: string
+  file_name: string
+  uploaded_at: string
+  first_date: string
+  last_date: string
+  lines: number
+  matched: number
+  unmatched: number
+  money_in: string
+  money_out: string
+}
+
+export type StatementDetail = StatementSummary & {
+  rows: StatementLine[]
+  /** Card statements: [category, total] largest first. */
+  by_category: [string, string][]
+}
+
+export function getStatements(property: string): Promise<StatementSummary[]> {
+  return signedIn(`/api/desktop/statements?property=${encodeURIComponent(property)}`)
+    .then((res) => res.json() as Promise<StatementSummary[]>)
+}
+
+export function getStatement(statementId: number): Promise<StatementDetail> {
+  return signedIn(`/api/desktop/statements/${statementId}`)
+    .then((res) => res.json() as Promise<StatementDetail>)
+}
+
+export function getCardCategories(): Promise<string[]> {
+  return signedIn('/api/desktop/statements/categories').then((res) => res.json() as Promise<string[]>)
+}
+
+export async function uploadStatement(args: {
+  property: string
+  kind: 'bank' | 'card'
+  account_label: string
+  file: File
+}): Promise<StatementDetail> {
+  const form = new FormData()
+  form.append('file', args.file)
+  form.append('property', args.property)
+  form.append('kind', args.kind)
+  form.append('account_label', args.account_label)
+  const res = await signedIn('/api/desktop/statements', { method: 'POST', body: form })
+  return (await res.json()) as StatementDetail
+}
+
+export async function markStatementLine(
+  lineId: number,
+  body: { match_kind?: string; match_note?: string | null; category?: string | null },
+): Promise<StatementLine> {
+  const res = await signedIn(`/api/desktop/statements/lines/${lineId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return (await res.json()) as StatementLine
+}
+
+export async function deleteStatement(statementId: number): Promise<void> {
+  await signedIn(`/api/desktop/statements/${statementId}`, { method: 'DELETE' })
+}
+
 // --- The owner's folders (src/usali/desktop/folders_api.py) -----------------
 
 export type OwnerFolder = {

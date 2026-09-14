@@ -60,6 +60,7 @@ ACCOUNTING = Module(
     nav=(
         "/dashboard", "/setup", "/sos", "/upload", "/reports", "/performance", "/qbo",
         "/integrations", "/coverage", "/night-audit", "/gl", "/property-config",
+        "/bank", "/email",
     ),
     limitations=(
         Limitation(
