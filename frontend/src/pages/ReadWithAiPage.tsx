@@ -51,7 +51,7 @@ export default function ReadWithAiPage() {
   const [applied, setApplied] = useState<AiReadApplied | null>(null)
 
   const read = useMutation({
-    mutationFn: () => readReportWithAi(property!, file!),
+    mutationFn: (askAi: boolean) => readReportWithAi(property!, file!, askAi),
     onSuccess: (result) => {
       setRows(result.rows)
       setDay(result.business_date ?? '')
@@ -119,7 +119,7 @@ export default function ReadWithAiPage() {
               type="button"
               className={primaryButtonClass}
               disabled={file === null || property === undefined || read.isPending}
-              onClick={() => read.mutate()}
+              onClick={() => read.mutate(false)}
             >
               {read.isPending ? 'Reading…' : 'Read it'}
             </button>
@@ -132,7 +132,42 @@ export default function ReadWithAiPage() {
         </div>
       </Card>
 
-      {reading !== null && (
+      {reading !== null && reading.learned !== null && (
+        <Card>
+          <section aria-label="Read from memory" className="flex flex-col gap-2">
+            <h2 className={sectionHeadClass}>Read from memory</h2>
+            <p className="text-sm text-ink">
+              Read the way you confirmed on {reading.learned.confirmed_at}. No AI helper was
+              asked, so nothing left this computer and it cost nothing.
+            </p>
+            <p className="text-sm text-ink-muted">
+              {reading.learned.reads} report{reading.learned.reads === 1 ? '' : 's'} read this
+              way so far. Still check the rows below before they go in.
+            </p>
+            <div>
+              <button
+                type="button"
+                className={buttonClass}
+                disabled={read.isPending}
+                onClick={() => read.mutate(true)}
+              >
+                Ask the AI helper to read it instead
+              </button>
+            </div>
+          </section>
+        </Card>
+      )}
+
+      {reading !== null && reading.shape_changed && (
+        <Card>
+          <p role="status" className="text-sm text-ink">
+            <Badge tone="warn">Layout changed</Badge> This report doesn’t look like the ones you
+            confirmed before, so the AI helper read it instead. Check the rows carefully.
+          </p>
+        </Card>
+      )}
+
+      {reading !== null && reading.learned === null && (
         <Card>
           <section aria-label="What it was shown" className="flex flex-col gap-2">
             <h2 className={sectionHeadClass}>What it was shown</h2>
@@ -244,6 +279,13 @@ export default function ReadWithAiPage() {
                 'Every code was already known.'
               )}
             </p>
+            {applied.learned && (
+              <p className="text-sm text-ink-muted">
+                <Badge tone="ok">Learned</Badge> Open Hospitality now knows how this report is
+                laid out. Next time it is read without the AI helper, at no cost, and you
+                still check it before it goes in.
+              </p>
+            )}
           </section>
         </Card>
       )}

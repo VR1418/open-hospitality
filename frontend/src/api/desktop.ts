@@ -758,6 +758,11 @@ export type AiReading = {
   estimated_cost: string | null
   model: string
   spend: AiSpend
+  /** Set when it was read the way the owner confirmed before — no AI call. */
+  learned: { confirmed_at: string; reads: number } | null
+  /** A reading was remembered for this hotel, but this report's layout no
+   *  longer matches it, so the AI helper read it instead. */
+  shape_changed: boolean
 }
 
 export type AiReadApplied = {
@@ -766,6 +771,8 @@ export type AiReadApplied = {
   staged: number
   unmapped: number
   ledger: string
+  /** The app learned this report's layout from these rows. */
+  learned: boolean
 }
 
 /** Ask the owner's model what charges are on a report we cannot parse.
@@ -773,10 +780,13 @@ export type AiReadApplied = {
 export async function readReportWithAi(
   propertyId: string,
   file: File,
+  askAi = false,
 ): Promise<AiReading> {
   const form = new FormData()
   form.append('file', file)
   form.append('property', propertyId)
+  // Skip what the app remembers and have the AI helper read it.
+  if (askAi) form.append('ask_ai', 'true')
   const res = await signedIn('/api/desktop/ai/read', { method: 'POST', body: form })
   return (await res.json()) as AiReading
 }

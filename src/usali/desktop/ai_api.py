@@ -44,7 +44,10 @@ from usali.auth import (
     require_operator,
 )
 from usali.desktop.ai import catalog, client, config, spend
-from usali.desktop.ai.allowlist import BlockedContent, CodeQuestion, LineChoice
+from usali.desktop import report_recipes
+from usali.desktop.ai import recipes
+from usali.desktop.ai.allowlist import BlockedContent, CodeQuestion, LineChoice, forbidden_names
+from usali.desktop.ai.pages import safe_pages
 from usali.desktop.ai.port import AiError, NotConfigured, SpendCapReached
 from usali.desktop.ai.report import OTHER_SOURCE, REPORT_TYPE
 from usali.desktop.ai.spend import Prices
@@ -449,11 +452,23 @@ class HeldBackOut(BaseModel):
     why: str
 
 
+class LearnedOut(BaseModel):
+    """This report was read the way the owner confirmed before — no model."""
+
+    confirmed_at: str
+    reads: int
+
+
 class ReadOut(BaseModel):
     property_id: str
     file: str
     business_date: date | None
     rows: list[ReadRow]
+    #: Set when the rows came from a learned recipe rather than the model.
+    learned: LearnedOut | None = None
+    #: A recipe exists for this hotel but this report no longer matches it —
+    #: the layout changed, so the model read it instead, and the owner is told.
+    shape_changed: bool = False
     #: Which pages were shown to the model, and which were not. Part of the
     #: answer: the owner decides whether to trust the rest knowing this.
     pages_read: list[int]
@@ -479,6 +494,9 @@ class ConfirmReadOut(BaseModel):
     #: is to say they land straight in Codes to confirm.
     unmapped: int
     ledger: str
+    #: True when a recipe was learned from these rows: the next report of this
+    #: shape is read without the AI helper.
+    learned: bool = False
 
 
 def _pdf_bytes(file: UploadFile) -> bytes:
@@ -498,12 +516,14 @@ def read_report(
     request: Request,
     file: UploadFile,
     property_id: str = Form(alias="property"),
+    ask_ai: bool = Form(default=False),
     principal: Principal = Depends(_owner),
 ) -> ReadOut:
-    """Ask the owner's model what charges are on a report we cannot parse.
+    """Read a report we cannot parse: from memory if this hotel's reports of
+    this shape have been confirmed before, otherwise by the owner's model.
 
     Stages nothing. The rows come back to be looked at, and only a person
-    accepting them puts anything in the books (AI-6).
+    accepting them puts anything in the books (AI-6). `ask_ai` skips memory.
     """
     paths = _paths(request)
     payload = _pdf_bytes(file)
@@ -516,6 +536,37 @@ def read_report(
         paths.uploads.mkdir(parents=True, exist_ok=True)
         dest = paths.uploads / (file.filename or "report.pdf")
         dest.write_bytes(payload)
+
+        # Memory first: a recipe learned from rows the owner confirmed reads
+        # the report with no model call and no cost (usali.desktop.ai.recipes).
+        # Only the pages that pass the scan, exactly as the model would get.
+        known = report_recipes.for_property(session, property_id)
+        shape_changed = False
+        if known and not ask_ai:
+            reading = safe_pages(dest, names=forbidden_names(session))
+            remembered = report_recipes.read_with_memory(session, property_id, reading.kept)
+            if remembered is not None:
+                stored, (when, found) = remembered
+                settings_now = config.read(session)
+                out = ReadOut(
+                    property_id=property_id, file=dest.name,
+                    business_date=when,  # type: ignore[arg-type]
+                    rows=[ReadRow(code=r.code, description=r.description, amount=str(r.amount))
+                          for r in found],
+                    learned=LearnedOut(confirmed_at=stored.confirmed_at.date().isoformat(),
+                                       reads=stored.reads + 1),
+                    pages_read=[], held_back=[
+                        HeldBackOut(page=h.number, why=h.why) for h in reading.held_back
+                    ],
+                    decline_reason=None, estimated_cost="0", model="",
+                    spend=_spend_out(spend.this_month(
+                        session, cap=settings_now.cap, max_calls=settings_now.max_calls
+                    )),
+                )
+                session.commit()
+                return out
+            shape_changed = True
+
         try:
             got = client.read_report(
                 session, store=_store(request), sealed=paths.sealed_keys_file,
@@ -539,6 +590,7 @@ def read_report(
                 for r in got.rows
             ],
             pages_read=list(got.pages_read),
+            shape_changed=shape_changed,
             held_back=[HeldBackOut(page=h.number, why=h.why) for h in got.held_back],
             decline_reason=got.decline_reason,
             estimated_cost=None if got.estimated_cost is None else str(got.estimated_cost),
@@ -604,6 +656,21 @@ def confirm_read(
             actor_subject=principal.subject, action="ai_report_accepted",
             resource_type="property", resource_id=body.property_id[:64],
         ))
+
+        # Learn how this shape is read, from exactly what the person accepted.
+        # Kept only if a recipe reproduces every row and the date.
+        learned = False
+        staged_pdf = paths.uploads / body.file
+        if staged_pdf.is_file():
+            pages = safe_pages(staged_pdf, names=forbidden_names(session)).kept
+            recipe = recipes.infer(
+                pages,
+                [recipes.Row(r.code, r.description, Decimal(r.amount)) for r in body.rows],
+                body.business_date,
+            )
+            if recipe is not None:
+                report_recipes.save(session, body.property_id, recipe, principal.subject)
+                learned = True
         session.commit()
 
     read = paths.read_folder
@@ -614,5 +681,5 @@ def confirm_read(
     return ConfirmReadOut(
         property_id=body.property_id, business_date=body.business_date,
         staged=len(records), unmapped=result.unmapped,
-        ledger=outcome.message or outcome.status,
+        ledger=outcome.message or outcome.status, learned=learned,
     )

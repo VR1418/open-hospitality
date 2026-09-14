@@ -486,3 +486,41 @@ def test_checking_the_connection_asks_one_fixed_question_and_records_it(world: W
         )).one()
     assert purpose == PURPOSE_TEST
     assert prompt_hash == sha256(TEST_PROMPT.encode()).hexdigest()
+
+
+def test_a_confirmed_reading_is_remembered_and_the_next_report_needs_no_ai(world: World) -> None:
+    """Memory, step 3: the app learns how this report is laid out from the rows
+    the owner accepted, and reads the next one itself — no model, no cost."""
+    world.use_mock()
+    other = _other_hotel(world)
+
+    def read(**extra: str) -> dict[str, object]:
+        with SAMPLE.open("rb") as fh:
+            r = world.client.post(
+                "/api/desktop/ai/read", headers=world.headers,
+                files={"file": (SAMPLE.name, fh, "application/pdf")},
+                data={"property": other, **extra},
+            )
+        assert r.status_code == 200, r.text
+        return r.json()  # type: ignore[no-any-return]
+
+    first = read(ask_ai="true")
+    assert first["learned"] is None and first["pages_read"]
+    applied = world.post("/api/desktop/ai/read/confirm", {
+        "property_id": other, "file": first["file"],
+        "business_date": first["business_date"], "rows": first["rows"],
+    }).json()  # type: ignore[attr-defined]
+    assert applied["learned"] is True
+
+    calls = world.get("/api/desktop/ai").json()["spend"]["calls"]  # type: ignore[attr-defined]
+    second = read()
+    # Read from memory: the same rows and night, nothing sent anywhere.
+    assert second["learned"] is not None and second["learned"]["reads"] == 1
+    assert second["rows"] == first["rows"]
+    assert second["business_date"] == first["business_date"]
+    assert second["pages_read"] == [] and second["estimated_cost"] == "0"
+    assert world.get("/api/desktop/ai").json()["spend"]["calls"] == calls  # type: ignore[attr-defined]
+
+    # The owner can still ask the AI helper instead.
+    third = read(ask_ai="true")
+    assert third["learned"] is None and third["pages_read"]

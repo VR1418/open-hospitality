@@ -32,6 +32,7 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from usali.desktop import report_recipes
 from usali.desktop.mapping_decisions import decisions_for
 from usali.desktop.saved_reports import Hotel, hotels
 from usali.models import IngestionCoverage, PmsDailyFinancialStage, Property
@@ -99,6 +100,29 @@ def hotel_note(session: Session, hotel: Hotel, pms_source: str) -> str:
             f"| {_cell(kind.replace('_', ' ').capitalize())} | {n} | {first} | {latest} |"
             for kind, n, first, latest in reports
         ]
+    else:
+        lines.append("None yet.")
+    lines.append("")
+
+    learned = report_recipes.for_property(session, hotel.property_id)
+    lines += ["## Report layouts learned", ""]
+    if learned:
+        lines += [
+            "Read without the AI helper, the way you confirmed them. A report whose layout "
+            "changes is sent to the AI helper again, and you are told.",
+            "",
+            "| Page title | Line layout | Amount column | Date printed after | Confirmed | Reports read |",
+            "|---|---|---|---|---|---:|",
+        ]
+        for s_ in learned:
+            r = s_.recipe
+            column = "last" if r.amount_index == -1 else (
+                f"{r.amount_index + 1}" if r.amount_index >= 0 else f"{-r.amount_index} from the end")
+            lines.append(
+                f"| {_cell(r.title)} | {_cell(r.layout)} | {column} "
+                f"| {_cell(r.date_label) or 'first date on the page'} "
+                f"| {s_.confirmed_at:%Y-%m-%d} | {s_.reads} |"
+            )
     else:
         lines.append("None yet.")
     lines.append("")

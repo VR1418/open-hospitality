@@ -38,6 +38,8 @@ const READING: AiReading = {
     month_start: '2026-07-01', calls: 2, estimated_cost: '0.02', unpriced_calls: 0,
     cap: '10.00', max_calls: 500, stopped: false,
   },
+  learned: null,
+  shape_changed: false,
 }
 
 function renderPage() {
@@ -67,8 +69,46 @@ describe('ReadWithAiPage', () => {
     vi.mocked(readReportWithAi).mockReset().mockResolvedValue(READING)
     vi.mocked(confirmAiReading).mockReset().mockResolvedValue({
       property_id: 'HR', business_date: '2026-07-07', staged: 2, unmapped: 2,
-      ledger: 'posted',
+      ledger: 'posted', learned: false,
     })
+  })
+
+  it('a report read from memory says no AI was asked, and can still go to the AI', async () => {
+    vi.mocked(readReportWithAi).mockResolvedValue({
+      ...READING, pages_read: [], held_back: [], estimated_cost: '0', model: '',
+      learned: { confirmed_at: '2026-09-12', reads: 3 },
+    })
+    renderPage()
+    await pickAndRead()
+    const memory = await screen.findByRole('region', { name: 'Read from memory' })
+    expect(within(memory).getByText(/the way you confirmed on 2026-09-12/)).toBeInTheDocument()
+    expect(within(memory).getByText(/3 reports read this way/)).toBeInTheDocument()
+    // Not "0 pages went to …": no model was involved at all.
+    expect(screen.queryByRole('region', { name: 'What it was shown' })).toBeNull()
+    await userEvent.click(
+      within(memory).getByRole('button', { name: 'Ask the AI helper to read it instead' }),
+    )
+    expect(vi.mocked(readReportWithAi).mock.calls.at(-1)?.[2]).toBe(true)
+  })
+
+  it('says when the layout no longer matches what was remembered', async () => {
+    vi.mocked(readReportWithAi).mockResolvedValue({ ...READING, shape_changed: true })
+    renderPage()
+    await pickAndRead()
+    expect(await screen.findByText(/doesn’t look like the ones you confirmed before/))
+      .toBeInTheDocument()
+  })
+
+  it('says when it learned the layout from the rows that went in', async () => {
+    vi.mocked(confirmAiReading).mockResolvedValue({
+      property_id: 'HR', business_date: '2026-07-07', staged: 2, unmapped: 0,
+      ledger: 'posted', learned: true,
+    })
+    renderPage()
+    await pickAndRead()
+    await userEvent.click(await screen.findByRole('button', { name: 'Put these in the books' }))
+    expect(await screen.findByText(/Next time it is read without the AI helper/))
+      .toBeInTheDocument()
   })
 
   it('says what will and will not be sent, before anything is', async () => {
