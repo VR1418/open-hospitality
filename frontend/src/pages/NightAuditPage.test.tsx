@@ -110,7 +110,7 @@ describe('NightAuditPage state display', () => {
     expect(within(rollCard).getByText('00:00–05:00')).toBeInTheDocument()
     expect(within(rollCard).getByText(/America\/Costa_Rica/)).toBeInTheDocument()
     expect(within(rollCard).getByText('01:12')).toBeInTheDocument()
-    expect(within(rollCard).getByText(/\(open\)/)).toBeInTheDocument()
+    expect(within(rollCard).queryByText(/not yet/)).toBeNull() // the window is open
   })
 
   it('renders the no-property empty state when no property exists', async () => {
@@ -462,7 +462,7 @@ describe('NightAuditPage roll', () => {
     renderPage() // default state: manager_flash missing, can_roll false
     const card = await screen.findByRole('region', { name: 'roll date' })
     expect(
-      within(card).getByRole('button', { name: 'Roll to next business date →' }),
+      within(card).getByRole('button', { name: 'Move to the next day →' }),
     ).toBeDisabled()
     expect(
       within(card).getByText(/reports still missing: Manager Flash/),
@@ -479,8 +479,8 @@ describe('NightAuditPage roll', () => {
     )
     renderPage()
     const card = await screen.findByRole('region', { name: 'roll date' })
-    expect(await within(card).findByText(/checks above are failing/)).toBeInTheDocument()
-    expect(within(card).getByText(/the roll window is closed/)).toBeInTheDocument()
+    expect(await within(card).findByText(/a check above is failing/)).toBeInTheDocument()
+    expect(within(card).getByText(/outside the hours for it/)).toBeInTheDocument()
     expect(within(card).queryByText(/reports still missing/)).not.toBeInTheDocument()
   })
 
@@ -504,7 +504,7 @@ describe('NightAuditPage roll', () => {
     )
     renderPage()
     const card = await screen.findByRole('region', { name: 'roll date' })
-    const button = within(card).getByRole('button', { name: 'Roll to next business date →' })
+    const button = within(card).getByRole('button', { name: 'Move to the next day →' })
     expect(button).toBeEnabled()
     fireEvent.click(button)
 
@@ -523,7 +523,7 @@ describe('NightAuditPage roll', () => {
     )
     renderPage()
     const card = await screen.findByRole('region', { name: 'roll date' })
-    fireEvent.click(within(card).getByRole('button', { name: 'Roll to next business date →' }))
+    fireEvent.click(within(card).getByRole('button', { name: 'Move to the next day →' }))
     expect(await within(card).findByText('the roll window closed at 05:00')).toBeInTheDocument()
   })
 })

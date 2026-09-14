@@ -26,9 +26,9 @@ import { errorMessage } from '../lib/errors'
 // The four core KPIs, keyed by the metric name the delta/recon maps use.
 const KPIS: { key: keyof CoreMetrics; label: string; kind: 'pct' | 'money' }[] = [
   { key: 'occupancy', label: 'Occupancy', kind: 'pct' },
-  { key: 'adr', label: 'ADR', kind: 'money' },
-  { key: 'revpar', label: 'RevPAR', kind: 'money' },
-  { key: 'trevpar', label: 'TRevPAR', kind: 'money' },
+  { key: 'adr', label: 'Average rate (ADR)', kind: 'money' },
+  { key: 'revpar', label: 'Revenue per room (RevPAR)', kind: 'money' },
+  { key: 'trevpar', label: 'Total revenue per room (TRevPAR)', kind: 'money' },
 ]
 
 function formatValue(value: string | null, kind: 'pct' | 'money'): string {
@@ -36,6 +36,13 @@ function formatValue(value: string | null, kind: 'pct' | 'money'): string {
   const n = Number(value)
   if (Number.isNaN(n)) return '—'
   return kind === 'pct' ? `${(n * 100).toFixed(1)}%` : `$${n.toFixed(2)}`
+}
+
+/** Desktop edition: a figure an owner reads, not the full 28-digit decimal. */
+function rounded(value: string | null | undefined): string {
+  if (value === null || value === undefined) return '—'
+  const n = Number(value)
+  return Number.isNaN(n) ? value : n.toLocaleString('en-US', { maximumFractionDigits: 2 })
 }
 
 function formatHours(value: string | null): string {
@@ -105,7 +112,7 @@ export default function PerformancePage() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Occupancy and rates"
-        subtitle="Occupancy, ADR, RevPAR, and TRevPAR for the window — each against its prior period and prior year, with the PMS reconciliation."
+        subtitle="Occupancy, average rate and revenue per room for the dates chosen — against the period before, and the same period last year."
       />
 
       <Card role="region" aria-label="performance window">
@@ -223,11 +230,11 @@ function PerformanceBody({ data }: { data: PerformanceResponse }) {
             </div>
           )}
           <div>
-            <dt className="text-xs font-medium text-ink-muted">ADR room basis</dt>
-            <dd className="text-ink">{data.adr_room_basis}</dd>
+            <dt className="text-xs font-medium text-ink-muted">Rooms counted for the average rate</dt>
+            <dd className="text-ink">{data.adr_room_basis.replace(/_/g, ' ')}</dd>
           </div>
           <div>
-            <dt className="text-xs font-medium text-ink-muted">Days excluded</dt>
+            <dt className="text-xs font-medium text-ink-muted">Days left out</dt>
             <dd className="text-ink">{data.days_excluded}</dd>
           </div>
         </dl>
@@ -266,28 +273,29 @@ function PerformanceBody({ data }: { data: PerformanceResponse }) {
       </Card>
 
       <Card role="region" aria-label="reconciliation">
-        <h2 className="mb-3 text-sm font-semibold text-ink">PMS reconciliation</h2>
+        <h2 className="mb-3 text-sm font-semibold text-ink">Checked against the report’s own figures</h2>
         {divergent.length > 0 ? (
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <Badge tone="danger">Divergence</Badge>
+            <Badge tone="danger">They differ</Badge>
             <span className="text-sm text-ink-muted">
-              Computed and ingested figures disagree on {divergent.map(([m]) => m).join(', ')}.
+              Our figures and the ones printed on the report disagree on{' '}
+              {divergent.map(([m]) => m.replace(/_/g, ' ')).join(', ')}.
             </span>
           </div>
         ) : (
           <p className="mb-3 text-sm text-ink-muted">
-            Computed figures agree with the ingested PMS statistics.
+            Our figures agree with the ones printed on the report.
           </p>
         )}
         <ul className="flex flex-col gap-1 text-sm">
           {Object.entries(data.reconciliation).map(([metric, line]) => (
             <li key={metric} className="flex items-center gap-2">
-              <span className="w-24 capitalize text-ink-muted">{metric}</span>
+              <span className="w-32 capitalize text-ink-muted">{metric.replace(/_/g, ' ')}</span>
               <span className="text-ink">
-                computed {line.computed ?? '—'} vs ingested {line.ingested ?? '—'}
+                ours {rounded(line.computed)} · the report’s {rounded(line.ingested)}
               </span>
               {line.agrees === false && (
-                <span className="text-xs font-semibold text-danger-red">does not reconcile</span>
+                <span className="text-xs font-semibold text-danger-red">differ</span>
               )}
             </li>
           ))}

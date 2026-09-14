@@ -318,7 +318,7 @@ export default function SchedulePage() {
           <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight text-ink">Schedule</h1>
             <p className="mt-1 text-sm text-ink-muted">
-              Build the week from shift templates on the payroll Monday grid.
+              Who works when. Drag a shift onto a day, or press + on a cell.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -801,8 +801,8 @@ function StandardsPanel({
     <Card role="region" aria-label="labor standards" className="print:hidden">
       <PageHeader
         level={2}
-        title="Labor standards"
-        subtitle="One standard per department — targets are hours-only by design."
+        title="Target hours"
+        subtitle="How many hours each department should need, so the week can be checked against rooms sold. One per department."
       />
       {(standards.data ?? []).length === 0 ? (
         <p className="text-sm text-ink-muted">No standards yet for {propertyId}.</p>

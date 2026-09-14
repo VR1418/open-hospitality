@@ -24,6 +24,14 @@ const TITLES: Record<string, string> = {
   demand_feed: 'Demand feed',
 }
 
+// Desktop edition: what each connection is for, before a form of bare keys.
+const WHAT_FOR: Record<string, string> = {
+  payroll:
+    'Your payroll provider (Gusto or ADP), so what was actually paid can be set beside the estimate. The keys come from your account on their website.',
+  accounting: 'Sends each month’s figures to QuickBooks Online, ready for your accountant.',
+  demand_feed: 'Group and event bookings from Delphi or Tripleseat, for the demand forecast.',
+}
+
 /** Renders whatever fields the spec named. It has no list of its own — that
  * is the point of serving the specs.
  *
@@ -192,6 +200,9 @@ function IntegrationCard({
   return (
     <Card>
       <h2 className="text-sm font-semibold">{title}</h2>
+      {WHAT_FOR[item.integration] !== undefined && (
+        <p className="mt-1 text-xs text-ink-muted">{WHAT_FOR[item.integration]}</p>
+      )}
       {note !== undefined && <p className="mt-2 text-sm">{note}</p>}
       {error !== undefined && <p className="mt-2 text-sm text-danger-red">{error}</p>}
       {item.connected ? (

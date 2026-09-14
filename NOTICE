@@ -69,8 +69,10 @@ Modified upstream files:
     frontend/src/pages/SchedulePage.tsx
     frontend/src/pages/SosPage.tsx
     frontend/src/pages/UploadPage.tsx
+    src/usali/checklist.py
     src/usali/gl_api.py
     src/usali/ingestion.py
+    src/usali/night_audit.py
     src/usali/onboarding.py
     src/usali/gl_posting.py
     src/usali/reporting.py

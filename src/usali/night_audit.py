@@ -231,8 +231,9 @@ def ledger_checks(
             LedgerCheck(
                 name="ledger_block",
                 status="skipped",
-                detail="no ledger balances on file for this date (report family "
-                "carries no ledger block, or the trial balance has not landed)",
+                # Desktop edition: said in the owner's words.
+                detail="no balances on file for this night yet — this kind of "
+                "report carries none, or it hasn't been read yet",
             )
         ]
 

@@ -124,12 +124,12 @@ describe('PerformancePage', () => {
 
   it('states the ADR room basis', async () => {
     renderPage()
-    expect(await screen.findByText(/as_reported/i)).toBeInTheDocument()
+    expect(await screen.findByText(/as reported/i)).toBeInTheDocument()
   })
 
   it('flags a reconciliation divergence when a metric does not agree', async () => {
     renderPage()
-    expect(await screen.findByText(/divergence/i)).toBeInTheDocument()
+    expect(await screen.findByText(/they differ/i)).toBeInTheDocument()
   })
 
   it('renders the labor productivity section with hours and cost per occupied room', async () => {

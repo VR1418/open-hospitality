@@ -193,16 +193,19 @@ effect on the *property's* business date. Onboarding now stamps that date
 (`src/usali/onboarding.py`, listed in NOTICE). A night auditor adding staff is
 exactly who hits this.
 
-| Still to do — a wording pass, one PR the group can review for tone | |
+| The wording pass — done the same day, one commit the group can review for tone | |
 |---|---|
-| Setup checklist | "PMS report", "USALI statement", "sellable room inventory", "ADR and RevPAR divide by this", "4-4-5", "gross-to-net", "journal entry"; the demand-feed item leads nowhere in this edition and should be hidden. |
-| Close the day | "Roll window 00:00–05:00 America/Chicago", "ledger block", "trial balance has not landed". The drop folder already closes the day; shrink this page to *Last night: read ✓ · balances tie ✓*. |
-| Books | "trial balance"; period tiles "2026-P01…" → "January 2026 …". |
-| Occupancy and rates | "TRevPAR", "ADR room basis as_reported", a 28-digit reconciliation figure. Round; tuck reconciliation under Details. |
-| Report codes (Coverage) | Developer notes on screen — "staged codes", "GL mapping 21/21", "cf. AutoClerk ROOM\|LATE_CHECK_OUT", "confirm on real sample". Hide from owners. |
-| Staff and labour | "California pays overtime…" shown to every hotel regardless of state; "Schedule 14", "FTE", a "Pay runs page" not in the menu. |
-| Schedule, Add Employee | "payroll Monday grid", "hours-only by design"; "Onboarding into RTI22. An operator role provisions a login…", roles "Org Admin / Payroll Admin / Property GM". |
-| Chrome | A search box that says "(soon)", "build dev" in the footer, an Ops tab where every item says SOON, an Integrations page of bare "API token / Client secret" fields. |
+| Setup checklist | "Add your first night audit", "Tell us how many rooms you have", "Choose your financial year"; the demand-feed item says plainly it isn't in this version. |
+| Close the day | "The books move to the next day between 00:00–05:00; it is 23:37 there now — not yet"; **Move to the next day →**; a missing balance is "not read yet", not "no ledger block". |
+| Books | Months named as months ("July 2026", the period key small beside it); "Pick a month to see its balances." |
+| Occupancy and rates | "Average rate (ADR)", "Revenue per room (RevPAR)"; figures rounded; "Checked against the report's own figures — ours 115.06 · the report's 115.06". |
+| Staff and labour | Overtime note no longer assumes California; "the labour line on the profit and loss"; "full-time equivalents". |
+| Schedule, Staff | "Who works when. Drag a shift onto a day, or press + on a cell."; "Target hours"; "Add a person", "Hotel manager (signs in)", "No login (most staff)". |
+| Chrome | The disabled "(soon)" search box is gone; the build stamp reads "build v0.1.0" on a packaged copy; each Integrations card says what it is for. |
+
+Left as they are, on purpose: the Ops tab (five "Soon" items — upstream's way
+of showing where it is going, and its tests say so), and the Report codes
+page under Settings (the accountant's view; owners have Codes to confirm).
 
 | And then — guidance for the first week | |
 |---|---|

@@ -53,7 +53,7 @@ export default function ChecklistPage() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Setup checklist"
-        subtitle="What is left to configure. The checklist never blocks you — the required items are what reporting needs."
+        subtitle="What's left to set up. Nothing here stops you; the required items are what the reports need."
       />
 
       {summary !== null && <p className="text-sm text-ink-muted">{summary.title}</p>}

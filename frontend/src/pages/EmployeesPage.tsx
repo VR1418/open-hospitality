@@ -74,10 +74,11 @@ import { errorMessage } from '../lib/errors'
 // The VALUE is the wire identifier the backend gates on and never changes; the
 // label is only what a human reads in the picker.
 const OPERATOR_ROLES: { value: string; label: string }[] = [
-  { value: 'property_gm', label: 'Property GM' },
-  { value: 'accountant', label: 'Accountant' },
-  { value: 'payroll_admin', label: 'Payroll Admin' },
-  { value: 'org_admin', label: 'Org Admin' },
+  // Desktop edition: roles in the owner's words; each of these signs in.
+  { value: 'property_gm', label: 'Hotel manager (signs in)' },
+  { value: 'accountant', label: 'Bookkeeper or accountant (signs in)' },
+  { value: 'payroll_admin', label: 'Payroll (signs in)' },
+  { value: 'org_admin', label: 'Owner or administrator (signs in)' },
 ]
 
 /** Titles a wire value for display. `pay_type` travels as 'hourly' | 'salary'
@@ -376,7 +377,7 @@ export default function EmployeesPage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight text-ink">Staff</h1>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
-            <span>Workforce Roster</span>
+            <span>Everyone who works here</span>
             {selected !== undefined && (
               <>
                 <span aria-hidden="true" className="text-ink-faint">
@@ -400,7 +401,7 @@ export default function EmployeesPage() {
           className="flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-accent-contrast shadow-sm transition-opacity hover:opacity-90"
         >
           <PeopleIcon width={16} height={16} />
-          Add Employee
+          Add a person
         </button>
       </Card>
 
@@ -1122,9 +1123,9 @@ function OnboardModal({
 
   return (
     <Modal
-      title="Add Employee"
+      title="Add a person"
       size="md"
-      subtitle={`Onboarding into ${propertyId}. An operator role provisions a login and requires an email.`}
+      subtitle={`Adding someone at ${propertyId}. Anyone who needs to sign in gets a login — that needs an email.`}
       onClose={onClose}
     >
       <form
@@ -1163,7 +1164,7 @@ function OnboardModal({
               onChange={(e) => setRole(e.target.value)}
               aria-label="Role"
             >
-              <option value="">No Login (Hourly Staff)</option>
+              <option value="">No login (most staff)</option>
               {OPERATOR_ROLES.map((r) => (
                 <option key={r.value} value={r.value}>{r.label}</option>
               ))}
@@ -1204,12 +1205,12 @@ function OnboardModal({
             disabled={onboard.isPending || fullName === ''}
             className={submitButtonClass}
           >
-            Onboard
+            Add this person
           </button>
         </ModalActions>
       </form>
       {onboard.isError && (
-        <p className="mt-3 text-sm text-danger-red">Onboard failed: {errorMessage(onboard.error)}</p>
+        <p className="mt-3 text-sm text-danger-red">Couldn’t add them: {errorMessage(onboard.error)}</p>
       )}
     </Modal>
   )

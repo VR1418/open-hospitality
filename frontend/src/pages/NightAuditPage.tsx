@@ -58,15 +58,15 @@ export default function NightAuditPage() {
       audit.data.verification.some((c) => c.status === 'fail') ||
       audit.data.segments?.status === 'fail'
     )
-      rollBlockers.push('checks above are failing')
-    if (!audit.data.window.open) rollBlockers.push('the roll window is closed')
+      rollBlockers.push('a check above is failing')
+    if (!audit.data.window.open) rollBlockers.push('it is outside the hours for it')
   }
 
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Close the day"
-        subtitle="Upload the night's reports, verify the close ties to the last one, then roll the property to the next business date."
+        subtitle="Last night's reports, checked against the night before, then the books move to the next day. The Drop reports here folder does this for you; this page is for doing it by hand."
       />
 
       {property === undefined && (
@@ -182,10 +182,10 @@ export default function NightAuditPage() {
           <Card role="region" aria-label="roll date">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="text-sm text-ink-muted">
-                Roll window: <b className="text-ink">{audit.data.window.hours}</b>{' '}
-                {audit.data.window.timezone} — property time is now{' '}
-                <b className="text-ink">{audit.data.window.local_time}</b>
-                {audit.data.window.open ? ' (open)' : ' (closed)'}
+                The books move to the next day between{' '}
+                <b className="text-ink">{audit.data.window.hours}</b> ({audit.data.window.timezone});
+                it is <b className="text-ink">{audit.data.window.local_time}</b> there now
+                {audit.data.window.open ? '' : ' — not yet'}
               </div>
               <button
                 type="button"
@@ -193,13 +193,13 @@ export default function NightAuditPage() {
                 onClick={() => roll.mutate()}
                 className="rounded-control bg-accent px-4 py-2 text-sm font-medium text-accent-contrast disabled:opacity-40"
               >
-                Roll to next business date →
+                Move to the next day →
               </button>
             </div>
             {!audit.data.can_roll && (
               <p className="mt-2 text-sm text-ink-muted">
-                Roll unavailable —{' '}
-                {rollBlockers.length > 0 ? rollBlockers.join('; ') : 'the server refuses the roll'}.
+                Can’t move to the next day yet —{' '}
+                {rollBlockers.length > 0 ? rollBlockers.join('; ') : 'the books refused it'}.
               </p>
             )}
             {roll.isError && (
@@ -392,7 +392,7 @@ function PackDropCard({ propertyId, packLabel, slots, onUploaded }: {
     <Card role="region" aria-label="audit pack">
       <h2 className="mb-1 text-sm font-semibold text-ink">Night-audit pack</h2>
       <p className="mb-3 text-sm text-ink-muted">
-        {packLabel} — one upload; the pack is split report-by-report on the server.
+        {packLabel} — one upload; we split it into its reports.
       </p>
 
       <div className="flex flex-wrap items-center gap-3">

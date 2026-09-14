@@ -202,35 +202,36 @@ def _probe_team(session: Session) -> bool:
 
 ITEMS: tuple[ChecklistItem, ...] = (
     ChecklistItem(
-        key="first_report", title="Upload your first PMS report",
-        description="Drop a night-audit export to see your USALI statement.",
+        # Desktop edition: titles and descriptions in the owner's words.
+        key="first_report", title="Add your first night audit",
+        description="Drop a night audit PDF in and your profit and loss appears.",
         required=True, where="/upload", probe=_probe_first_report,
     ),
     ChecklistItem(
-        key="room_inventory", title="Set sellable room inventory",
-        description="Occupancy, ADR and RevPAR divide by this — they cannot be "
-                    "computed without it.",
+        key="room_inventory", title="Tell us how many rooms you have",
+        description="Occupancy and average rate are worked out from this. It is "
+                    "read from the first night audit when the report says it.",
         required=True, where="/property-config", probe=_probe_room_inventory,
     ),
     ChecklistItem(
-        key="fiscal_calendar", title="Define the fiscal calendar",
-        description="Calendar-month or 4-4-5, per property.",
+        key="fiscal_calendar", title="Choose your financial year",
+        description="Calendar months for most hotels; 4-4-5 if your accountant asks for it.",
         required=True, where="/property-config", probe=_probe_fiscal_calendar,
     ),
     ChecklistItem(
         key="payroll", title="Connect payroll",
-        description="Optional. Compare estimated labor cost against the actual "
-                    "gross-to-net from your provider.",
+        description="Optional. Compare the labour cost we estimate with what your "
+                    "payroll provider actually paid.",
         required=False, where="/integrations", probe=_probe_payroll,
     ),
     ChecklistItem(
         key="accounting", title="Connect QuickBooks Online",
-        description="Optional. Push the journal entry behind your statement.",
+        description="Optional. Send each month's figures to QuickBooks.",
         required=False, where="/integrations", probe=_probe_accounting,
     ),
     ChecklistItem(
         key="demand_feed", title="Connect a demand feed",
-        description="Optional. Pull group and event demand from Delphi or Tripleseat.",
+        description="Optional. Group and event bookings from Delphi or Tripleseat.",
         # The one integration item WITHOUT a connect surface, and deliberately
         # (OH-17, D-OH17.16). Credentials alone do not connect a demand feed:
         # verification and every real pull need a property `crm_ref`, and the
@@ -247,14 +248,14 @@ ITEMS: tuple[ChecklistItem, ...] = (
         # fails until both halves move together.
         required=False, where=None, probe=_probe_demand_feed,
         unavailable_reason=(
-            "Needs a Delphi or Tripleseat property reference, which nothing in "
-            "the app can set yet — contact us to have it added."
+            "Not available in this version: it needs a Delphi or Tripleseat "
+            "property reference that nothing in the app can set yet."
         ),
     ),
     ChecklistItem(
         key="team", title="Invite your team",
-        description="Optional. Add a second operator so you are not the only "
-                    "person who can log in.",
+        description="Optional. Add a manager or bookkeeper so you are not the only "
+                    "person who can sign in.",
         required=False, where="/employees", probe=_probe_team,
     ),
 )

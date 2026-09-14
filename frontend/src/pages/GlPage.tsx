@@ -10,6 +10,7 @@ import { getRouteApi } from '@tanstack/react-router'
 
 import { ApiError, getMe } from '../api/client'
 import { getGlPeriods, getJournalEntries, getTrialBalance } from '../api/gl'
+import type { GlPeriod } from '../api/types'
 import BalanceSheetCard from '../components/BalanceSheetCard'
 import JournalDrillPanel from '../components/JournalDrillPanel'
 import PeriodDetailCard from '../components/PeriodDetailCard'
@@ -27,6 +28,18 @@ const routeApi = getRouteApi('/gl')
 // so never fires a fetch.
 const FISCAL_YEAR_MIN = 2000
 const FISCAL_YEAR_MAX = 2100
+
+/** "July 2026" when the period is exactly a calendar month, else its key. */
+function periodLabel(p: GlPeriod): string {
+  const from = new Date(`${p.date_from}T00:00:00`)
+  const to = new Date(`${p.date_to}T00:00:00`)
+  const wholeMonth =
+    from.getDate() === 1 &&
+    to.getMonth() === from.getMonth() &&
+    to.getFullYear() === from.getFullYear() &&
+    new Date(to.getFullYear(), to.getMonth() + 1, 0).getDate() === to.getDate()
+  return wholeMonth ? from.toLocaleString('en-US', { month: 'long', year: 'numeric' }) : p.period_key
+}
 
 /** The drilled account: its code keys the fetch, its name titles the panel. */
 type DrillTarget = { code: string; name: string }
@@ -141,7 +154,7 @@ export default function GlPage() {
     <div className="space-y-4">
       <PageHeader
         title="Books"
-        subtitle="The trial balance and the books' periods, from the journal."
+        subtitle="Every account's balance for the month, from the journal — for you and your accountant."
       />
 
       {property === undefined ? (
@@ -199,7 +212,10 @@ export default function GlPage() {
                         : 'text-ink-muted hover:bg-surface-sunken hover:text-ink'
                     }`}
                   >
-                    <span>{p.period_key}</span>
+                    {/* Desktop edition: a calendar month is named as one; the
+                        period key stays beside it for the accountant. */}
+                    <span>{periodLabel(p)}</span>
+                    <span className="text-[10px] opacity-70">{p.period_key}</span>
                     {p.state === 'closed' && <Badge tone="neutral">Closed</Badge>}
                   </button>
                 ))}
@@ -208,7 +224,7 @@ export default function GlPage() {
           </Card>
 
           {period === undefined ? (
-            <p className="text-sm text-ink-muted">Pick a period to view its trial balance.</p>
+            <p className="text-sm text-ink-muted">Pick a month to see its balances.</p>
           ) : (
             <>
               {selectedPeriod !== undefined && (

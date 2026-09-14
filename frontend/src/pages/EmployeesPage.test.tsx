@@ -98,10 +98,10 @@ describe('EmployeesPage', () => {
     renderPage()
     await screen.findByRole('table', { name: 'Employees' })
     // Onboarding lives in a modal now — open it first.
-    await userEvent.click(screen.getByRole('button', { name: 'Add Employee' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add a person' }))
     await userEvent.type(screen.getByLabelText('Full Name'), 'New Op')
     await userEvent.type(screen.getByLabelText('Email'), 'op@x.com')
-    await userEvent.click(screen.getByRole('button', { name: 'Onboard' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add this person' }))
     await waitFor(() =>
       expect(onboardEmployee).toHaveBeenCalledWith(
         expect.objectContaining({ full_name: 'New Op', email: 'op@x.com' }),
@@ -245,7 +245,7 @@ describe('EmployeesPage', () => {
     vi.mocked(getMe).mockResolvedValue({ subject: 's', username: 'u', roles: ['accountant'] })
     renderPage()
     await screen.findByRole('table', { name: 'Employees' })
-    await userEvent.click(screen.getByRole('button', { name: 'Add Employee' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add a person' }))
     expect(screen.getByLabelText('Pay Rate')).toBeDisabled()
     expect(setPayRate).not.toHaveBeenCalled()
   })
@@ -255,7 +255,7 @@ describe('EmployeesPage', () => {
     vi.mocked(getMe).mockResolvedValue({ subject: 's', username: 'u', roles: ['property_gm'] })
     renderPage()
     await screen.findByRole('table', { name: 'Employees' })
-    await userEvent.click(screen.getByRole('button', { name: 'Add Employee' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add a person' }))
     expect(screen.getByLabelText('Pay Rate')).toBeEnabled()
   })
 
@@ -267,10 +267,10 @@ describe('EmployeesPage', () => {
       employee_id: 2, keycloak_subject: null, property_id: 'HISJ', full_name: 'New Op' })
     renderPage()
     await screen.findByRole('table', { name: 'Employees' })
-    await userEvent.click(screen.getByRole('button', { name: 'Add Employee' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add a person' }))
     await userEvent.type(screen.getByLabelText('Full Name'), 'New Op')
     await userEvent.type(screen.getByLabelText('Pay Rate'), '24.50')
-    await userEvent.click(screen.getByRole('button', { name: 'Onboard' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add this person' }))
     // '24.5', not '24.50': a number input normalises the trailing zero away.
     // Harmless — the server takes a Decimal and 2dp is a maximum, not a shape.
     await waitFor(() => expect(setPayRate).toHaveBeenCalledWith(2, { pay_rate: '24.5' }))

@@ -53,7 +53,6 @@ import {
   MoonIcon,
   PeopleIcon,
   ReportsIcon,
-  SearchIcon,
   StatementIcon,
   SyncIcon,
   TrendUpIcon,
@@ -634,20 +633,10 @@ export default function Layout() {
           >
             <MenuIcon />
           </button>
-          {/* Search is a visual stub until a search API exists. */}
-          <div className="relative max-w-md flex-1">
-            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-ink-faint">
-              <SearchIcon />
-            </span>
-            <input
-              type="search"
-              disabled
-              aria-label="Search"
-              title="Search is coming soon"
-              placeholder="Search staff, reports… (soon)"
-              className="w-full rounded-full border border-line bg-surface py-1.5 pl-10 pr-4 text-sm text-ink placeholder:text-ink-faint disabled:cursor-not-allowed"
-            />
-          </div>
+          {/* Desktop edition: no search box until there is a search — a
+              disabled control that says "(soon)" is a question every owner
+              asks. The space is kept so the pickers stay on the right. */}
+          <div className="max-w-md flex-1" />
           {/* Active org then property — the two selectors that scope every
               page, outermost first: an org switch invalidates the property. */}
           <div className="ml-auto flex items-center gap-3">

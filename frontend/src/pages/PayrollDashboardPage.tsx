@@ -600,7 +600,7 @@ export default function PayrollDashboardPage() {
             <Kpi
               label="Overtime"
               value={hrs(cur.ot)}
-              hint={`${pct(cur.otShare)} of all hours · FTE ${a.fte ?? '—'}`}
+              hint={`${pct(cur.otShare)} of all hours · ${a.fte ?? '—'} full-time equivalents`}
               current={cur.ot} prior={pri.ot} good="down"
               format={hrs}
               icon={cur.ot > 0 ? <AlertIcon width={20} height={20} /> : <ClockIcon width={20} height={20} />}
@@ -658,9 +658,9 @@ export default function PayrollDashboardPage() {
             >
               <RowBars rows={otByWeekday} format={hrs} ariaLabel="Overtime hours by day of week" />
               <p className="mt-3 text-xs text-ink-muted">
-                California pays overtime past 8 hours in a day, past 40 in a week, and on a
-                seventh consecutive day — so a cluster late in the week usually means someone is
-                working six or seven days, not long ones.
+                Overtime rules depend on your state — past 40 hours in a week most places, and
+                in California past 8 hours in a day too — but a cluster late in the week usually
+                means someone is working six or seven days, not long ones.
               </p>
             </ChartFrame>
           </div>
@@ -754,9 +754,9 @@ export default function PayrollDashboardPage() {
                 </p>
               )}
               <p>
-                Estimates, from approved timecards — the same facts behind Schedule 14 on the{' '}
-                <Link to="/sos" className="text-accent underline">statement</Link>. Actual payroll
-                lands on the Pay runs page once a run is processed.
+                Estimates, from approved timecards — the same figures behind the labour line on
+                the <Link to="/sos" className="text-accent underline">profit and loss</Link>.
+                Actual payroll appears once a pay run is processed.
               </p>
             </div>
           </Card>
