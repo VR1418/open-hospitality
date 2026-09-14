@@ -213,6 +213,25 @@ page under Settings (the accountant's view; owners have Codes to confirm).
 | **Just read** on Add reports | The last eight files from the intake's own record: hotel and night, or the reason it was set aside; and the count of codes waiting, with the link. Polled every five seconds while the page is open, so a dropped file is seen to land. |
 | A ? on each page into INSTALL.md | Not done: the portal has no markdown renderer, and a bare link to a .md file is not help for this owner. The sections are numbered to match the pages; a Help page that renders INSTALL.md is the next small piece. |
 
+## Update, 14 September (afternoon) — public
+
+- **ophosp.com** now shows the app: eight screenshots from the demo books
+  (taken by Playwright at a neutral path, so no user name appears), the
+  install steps as they are now, the current zip's size and SHA-256, and a
+  *For the team* section with the repository link and a Copy button.
+- **The public repository is up:** https://github.com/VR1418/ophosp-desktop,
+  default branch `desktop/m1`. Every commit of ours is authored as
+  `VR1418 <VR1418@users.noreply.github.com>`; upstream's commits and hashes
+  are untouched. `scripts/desktop/publish.py` keeps it in step with this
+  checkout, and refuses to push if a private word is anywhere in the history
+  (the word list is an ignored local file). The private working repo stays
+  where it is.
+- **Deploying the site is one command** once the AWS CLI is signed in:
+  `uv run python scripts/site/deploy.py` (page, favicon, screens, zip,
+  CloudFront invalidation). The CLI is installed; the sign-in is the owner's.
+- A tester's real hotel code was used as the example in the docs and code;
+  it is the demo hotel's now.
+
 ## 6. Send the three upstream changes back — *half a day*
 
 [UPSTREAM.md](UPSTREAM.md) has three, two of them written and tested here: the

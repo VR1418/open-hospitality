@@ -78,3 +78,4 @@ models/
 
 # ophosp.com deploy: the CloudFront distribution id stays off the public record
 site/.deploy.local.json
+scripts/desktop/.publish.local.json
