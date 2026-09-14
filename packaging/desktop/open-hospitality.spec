@@ -72,14 +72,26 @@ a = Analysis(  # noqa: F821
 # path is the src/ layout above.
 a.pure = [entry for entry in a.pure if not (entry[0] == "usali" or entry[0].startswith("usali."))]
 pyz = PYZ(a.pure)  # noqa: F821
+
+# The program's own icon — what the desktop shortcut, the Start menu and the
+# taskbar show — made from the brand kit's app icon (docs/brand/logo).
+ICON = ROOT / "build" / "open-hospitality.ico"
+ICON.parent.mkdir(parents=True, exist_ok=True)
+from PIL import Image  # noqa: E402
+
+Image.open(ROOT / "docs" / "brand" / "logo" / "open-hospitality-app-icon.png").save(
+    ICON, sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
+)
 exe = EXE(  # noqa: F821
     pyz,
     a.scripts,
     [],
     exclude_binaries=True,
     name="Open Hospitality",
-    # M1 builds are unsigned and for reviewers: a console window shows the
-    # log as it happens. M3 (signing) turns this off.
+    icon=str(ICON),
+    # Unsigned builds keep a console: it shows the start, and any refusal to
+    # start, in words. Once the tray icon is up the app hides it
+    # (app._hide_console). M3 (signing) turns this off.
     console=True,
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="Open Hospitality")  # noqa: F821

@@ -36,14 +36,19 @@ To continue: click **More info**, then **Run anyway**.
 You will see it on the first run. If it bothers you, say so — it is the
 single thing most likely to stop a real owner, and that's worth knowing.
 
-A black window opens and stays open while the app runs. That is deliberate
-for now: it shows what the app is doing, which helps when something goes
-wrong.
+A black window shows the app starting. If something stops it starting, the
+reason is written there. Once it is running, the black window tucks itself
+away and the ◆ icon near the clock (bottom-right) is how you reach the app.
+
+The first time it runs, it also puts an **Open Hospitality** icon on your
+Desktop and in the Start menu. Use that from now on. Opening it again while
+the app is already running just brings up its window.
 
 ## 3. Setting up your books
 
-Your browser opens by itself. If it doesn't, look for the ◆ icon near the
-clock (bottom-right), click it and choose **Open my books**.
+The app opens in its own window: no tabs and no address bar. It uses Microsoft
+Edge behind the scenes, which every copy of Windows has. If the window
+doesn't appear, click the ◆ icon near the clock and choose **Open my books**.
 
 1. **Create your account** — your name, the email you'll sign in with, and a
    password. Nothing is sent anywhere; this is all on your computer.
@@ -54,10 +59,22 @@ clock (bottom-right), click it and choose **Open my books**.
 3. **Five short questions:** your hotel group's name; your first hotel; its
    financial year; where backups go; and which parts of the app you want.
 
-On the hotel question, one field matters more than it looks: **the hotel's
-name as it appears at the top of your night audit reports**. That is how the
-app knows which hotel a report belongs to. Type it exactly as printed —
-capital letters don't matter.
+For each hotel it asks for three things: the **ownership entity** (the
+company that owns the hotel), the **hotel name**, and the **hotel code**. The
+code is the one printed at the top of your night audit reports next to
+"Property Code", for example NM236. That code is how the app knows which
+hotel a report belongs to, so type it exactly.
+
+It doesn't ask how many rooms the hotel has: it reads that from your first
+night audit.
+
+If your front-desk system prints the hotel's name on reports instead of a code
+(OPERA and AutoClerk do), you're also asked for the name exactly as printed.
+
+**Got "these reports are for a hotel that isn't set up here yet"?** The
+message names the hotel and its code. Go to **Overview › Add a hotel**, enter
+that code, then drop the report in again. You'll find it in **Reports we
+couldn't read**.
 
 ## 4. Give it your reports
 
@@ -96,10 +113,22 @@ you could not work out yourself is worth telling us about.**
 Off unless you turn it on, under **Modules**. It is the only part of the app
 that can reach the internet, and only with your own AI account.
 
-If you switch it on, go to **AI helper**, choose who you have an account with
-— OpenRouter, OpenAI, Anthropic, or a model running on your own computer —
-and paste the key they gave you. There is a **practice mode** that answers
-offline and costs nothing, if you just want to see what it does.
+If you switch it on, go to **AI helper**:
+
+1. **Who you have an account with.** OpenRouter, Anthropic, OpenAI, or a model
+   running on your own computer. The screen fills in the web address for you.
+2. **Which model.** Pick one from the list. On OpenRouter, Claude is under
+   **Anthropic (Claude)**, and **Claude Sonnet 5** is marked recommended. Each
+   model shows its price, and picking one fills in the prices, so the monthly
+   limit counts dollars.
+3. **Paste your key.** The screen says where to get one (on OpenRouter: open
+   **Keys** and create one; it starts with `sk-or-`). Then press **Save**.
+4. **Press "Check it works".** It asks your model one fixed question that
+   contains nothing about your hotel, and tells you whether it answered and
+   what that cost (a fraction of a cent).
+
+There is a **practice mode** that answers offline and costs nothing, if you
+just want to see what it does.
 
 Then "Ask the AI" appears next to each code you are confirming. It suggests a
 line and says why, or it tells you it won't guess — on tax questions it is

@@ -22,7 +22,6 @@ import subprocess
 import sys
 import threading
 import time
-import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -57,6 +56,7 @@ from usali.desktop.identity import DesktopUser, LocalIssuer
 from usali.desktop.intake import ReportIntake
 from usali.desktop.modules import mount_predicate, resolve
 from usali.desktop.paths import DesktopPaths
+from usali.desktop.window import SingleInstance, ensure_shortcuts, open_window
 from usali.desktop.pg_runtime import (
     PgCluster,
     PostgresFailed,
@@ -325,8 +325,23 @@ def _run_tray(open_books: Callable[[], None], show_reports: Callable[[], None]) 
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit Open Hospitality", lambda icon: icon.stop()),
     )
+    # Only once the tray is certainly there: it is then how the app is reached.
+    _hide_console()
     pystray.Icon("open-hospitality", _icon_image(), "Open Hospitality", menu).run()
     return True
+
+
+def _hide_console() -> None:
+    """Put away the console window a packaged copy starts with, once the app
+    is up and the tray icon is how it is reached. It stays for the start —
+    where a refusal is printed — and for `--no-tray` runs, which live in it."""
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+    import ctypes
+
+    console = ctypes.windll.kernel32.GetConsoleWindow()
+    if console:
+        ctypes.windll.user32.ShowWindow(console, 0)  # SW_HIDE
 
 
 def _run_console(base_url: str) -> None:
@@ -362,6 +377,22 @@ def run(args: argparse.Namespace) -> int:
     store = OsKeyStore()
     if args.restore is not None:
         return _restore(paths, Path(args.restore), args.recovery_code, store)
+    # Before anything touches the database: a second copy on the same folder
+    # would try to start a second server on it. It asks the running copy to
+    # open a window instead (usali.desktop.window).
+    instance = SingleInstance(paths.system_root)
+    if not instance.acquire():
+        _LOG.info("already running; asked it to open a window")
+        return 0
+    try:
+        return _serve(args, paths, store, instance)
+    finally:
+        instance.release()
+
+
+def _serve(
+    args: argparse.Namespace, paths: DesktopPaths, store: KeyStore, instance: SingleInstance,
+) -> int:
     resources = resource_root()
     # Upstream resolves some mapping paths against the working directory
     # (scripts/e2e_backend.py does the same chdir, for the same reason).
@@ -438,7 +469,10 @@ def run(args: argparse.Namespace) -> int:
         base_url = f"http://127.0.0.1:{api_port}"
 
         def open_books() -> None:
-            webbrowser.open(f"{base_url}{SIGNIN_PATH}#code={codes.issue()}")
+            # Its own window, not a browser tab (usali.desktop.window).
+            open_window(
+                f"{base_url}{SIGNIN_PATH}#code={codes.issue()}", paths.system_root / "window"
+            )
 
         _LOG.info("ready at %s; reports folder %s", base_url, paths.drop_folder)
         if args.no_browser:
@@ -449,6 +483,10 @@ def run(args: argparse.Namespace) -> int:
                   flush=True)
         else:
             open_books()
+        instance.serve(open_books)
+        threading.Thread(
+            target=ensure_shortcuts, args=(paths.system_root,), name="shortcuts", daemon=True
+        ).start()
         try:
             if args.no_tray or not _run_tray(open_books, lambda: _reveal(paths.owner_root)):
                 _run_console(base_url)
