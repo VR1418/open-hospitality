@@ -620,16 +620,45 @@ def main(argv: list[str] | None = None) -> int:
         paths = DesktopPaths.default()
         _configure_logging(paths.logs)
         return uninstall.run(paths, OsKeyStore(), Path(sys.executable))
+    refusals = (PostgresNotFound, PostgresFailed, KeysMissing, KeychainUnavailable,
+                backup.BackupError)
     try:
-        return run(args)
-    except (
-        PostgresNotFound, PostgresFailed, KeysMissing, KeychainUnavailable, NeedsUpgradeConsent,
-        backup.BackupError,
-    ) as exc:
+        try:
+            return run(args)
+        except NeedsUpgradeConsent as needs:
+            # A newer version meeting older books. Reported from a tester's
+            # machine: the console said so and closed before anyone could
+            # read it, so the app "didn't open". Now it asks, and goes ahead
+            # on a Yes — the backup runs first, as on every start.
+            if args.upgrade_database or not _ask(
+                "Update your books?",
+                f"{needs}\n\nUpdate them now? A backup is taken first when backups are set up.",
+                args,
+            ):
+                raise
+            args.upgrade_database = True
+            return run(args)
+    except (*refusals, NeedsUpgradeConsent) as exc:
         # Expected refusals: the message already names the next step.
         _LOG.error("%s", exc)
         print(f"\n{exc}\n", file=sys.stderr)
+        _tell("Open Hospitality couldn't start", str(exc), args)
         return 1
+
+
+def _dialogs(args: argparse.Namespace) -> bool:
+    """A packaged copy started from an icon has no console anyone reads;
+    a --no-tray run (developers, the end-to-end walk) does."""
+    return sys.platform == "win32" and bool(getattr(sys, "frozen", False)) and not args.no_tray
+
+
+def _ask(title: str, text: str, args: argparse.Namespace) -> bool:
+    return uninstall.ask(title, text) if _dialogs(args) else False
+
+
+def _tell(title: str, text: str, args: argparse.Namespace) -> None:
+    if _dialogs(args):
+        uninstall.tell(title, text)
 
 
 if __name__ == "__main__":

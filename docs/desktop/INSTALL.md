@@ -270,6 +270,13 @@ Restoring is a command for now, on a computer with no books on it yet:
 It asks for your recovery code, and it refuses to write over books that are
 already there.
 
+## 7b. Installing a newer version
+
+Unzip the new version and run it. If your books need updating for it, it
+asks — **Update your books?** — and goes ahead on Yes, taking a backup first
+when backups are set up. Your reports, saved reports and settings are kept.
+The old folder can be deleted once the new one is running.
+
 ## 8. Stopping and starting
 
 Click the ◆ icon near the clock and choose **Quit**. Your books stay where
