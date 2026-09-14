@@ -223,3 +223,30 @@ def test_process_upload_still_returns_one_report_for_one_report(db_session, tmp_
         db_session, drop, processed_dir=tmp_path / "d", failed_dir=tmp_path / "f"
     )
     assert (only.pms_source, only.report_type) == ("OPERA", "trial_balance")
+
+
+def test_a_pack_for_a_hotel_not_set_up_yet_is_still_a_pack(db_session, tmp_path, founding_org):
+    """Reported from a tester's install: a second hotel's Standard Audit Pack
+    failed with "could not detect report type from PDF header". The file was
+    fine — `is_pack` asked `detect`, which also needs the PROPERTY, so a hotel
+    not yet set up made the pack read as one report. Now the file decides, and
+    the refusal names the hotel to add."""
+    seed_schedules(db_session, "mapping/usali_schedules.yaml")
+    load_mappings(db_session, "mapping/skytouch.yaml")
+    db_session.commit()
+
+    assert ingestion.is_pack(db_session, SAMPLE) is True
+
+    drop = tmp_path / SAMPLE.name
+    shutil.copy(SAMPLE, drop)
+    with pytest.raises(ProcessingError) as raised:
+        ingestion.process_upload(
+            db_session, drop, processed_dir=tmp_path / "d", failed_dir=tmp_path / "f"
+        )
+    message = str(raised.value)
+    assert "could not detect report type" not in message
+    assert "isn't set up here yet" in message
+    # The code is what to register by; the name is how the owner recognises it.
+    assert "property code TEST1" in message and "typing TEST1" in message
+    assert "“Redstone Test Inn”" in message
+    assert (tmp_path / "f" / SAMPLE.name).exists()

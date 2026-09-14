@@ -18,6 +18,7 @@ under a shared transaction, producing one IngestBatch per recognized section on 
 
 import dataclasses
 import hashlib
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
@@ -36,7 +37,7 @@ from usali.adaptors import skytouch_hotel_journal as sky_journal
 from usali.adaptors import skytouch_hotel_statistics as sky_stats
 from usali.adaptors.pack import split_pack
 from usali.adaptors.pdf import Word, extract_pages, extract_words
-from usali.detect import Detection, detect, load_registry
+from usali.detect import Detection, detect, detect_report_signature, load_registry
 from usali import gl_posting
 from usali.ledger_promote import promote_ledgers
 from usali.ledger_stage import stage_ledgers
@@ -351,6 +352,7 @@ def process_pack(
         sections = split_pack(extract_pages(path))
         registry = load_registry(session)
         results: list[ProcessResult] = []
+        unregistered: list[Word] | None = None
         for section in sections:
             try:
                 # Pass the section TITLE: it, not the 120-word header window,
@@ -359,13 +361,20 @@ def process_pack(
                 # AutoClerk `rate_plan` signature (issue #78).
                 det = detect(section.words, registry, section.title)
             except ValueError:
-                continue  # unknown report or unresolved property (housekeeping/filler)
+                # Unknown report (housekeeping/filler), or a report we read for
+                # a hotel no registry row resolves — remembered, so an all-skipped
+                # pack can say which hotel is missing instead of "unrecognised".
+                if unregistered is None and _is_readable(section.words, section.title):
+                    unregistered = section.words
+                continue
             if (det.pms_source, det.report_type) not in _PIPELINES:
                 continue
             results.append(
                 _process_section(session, section.words, det, path, file_hash, edition)
             )
         if not results:
+            if unregistered is not None:
+                raise ValueError(_unregistered_hotel_message(unregistered))
             raise ValueError("no recognized report sections in pack")
         session.commit()
     except Exception as exc:
@@ -391,6 +400,45 @@ def _record_failure(session: Session, path: Path, exc: Exception) -> None:
     session.commit()
 
 
+def _is_readable(words: list[Word], title: str | None) -> bool:
+    sig = detect_report_signature(words, title)
+    return sig is not None and sig in _PIPELINES
+
+
+# How a SkyTouch page header names its hotel:
+#   "Property Name: Rodeway Inn Date Range: 9/12/2026 - ... Property Code: NM236"
+_PRINTED_NAME = re.compile(r"PROPERTY NAME:\s*(.+?)\s+(?:BUSINESS DATE|DATE RANGE|PROPERTY CODE):")
+_PRINTED_CODE = re.compile(r"PROPERTY CODE:\s*([A-Z0-9-]+)")
+
+
+def _unregistered_hotel_message(words: list[Word]) -> str:
+    """Say which hotel a readable pack is for, so the owner can set it up.
+
+    The CODE is what to register by: a name like "Rodeway Inn" prints on many
+    hotels' reports, and a registry phrase that matched them all would file one
+    hotel's figures under another. A code is unique to the property.
+    """
+    header = " ".join(w.text for w in words[:40])
+    upper = header.upper()
+    code = _PRINTED_CODE.search(upper)
+    name = _PRINTED_NAME.search(upper)
+    if code is None:
+        return (
+            "these reports are readable, but no hotel set up here matches the name "
+            "printed at the top of them. Add the hotel, then upload the file again."
+        )
+    # Recover the name as printed (not shouted) from the same offsets.
+    printed = header[name.start(1):name.end(1)] if name and len(upper) == len(header) else None
+    hotel = f"property code {code.group(1)}"
+    if printed:
+        hotel = f"“{printed}”, {hotel}"
+    return (
+        f"these reports are for a hotel that isn't set up here yet ({hotel}). "
+        f"Add the hotel, typing {code.group(1)} as the name its reports print, "
+        "then upload the file again."
+    )
+
+
 def is_pack(session: Session, pdf_path: str | Path) -> bool:
     """Does this PDF hold several reports rather than one?
 
@@ -405,17 +453,19 @@ def is_pack(session: Session, pdf_path: str | Path) -> bool:
     any section is a report from a PMS that delivers packs. Read-only —
     nothing is staged or moved — so a wrong "no" still ends in `process_file`'s
     loud quarantine, never in a guess.
+
+    The SIGNATURE alone decides, not `detect`: `detect` also resolves the
+    property, so a pack for a hotel this install has not set up yet used to
+    answer "no" — and was then read as one report, failing with "could not
+    detect report type", which blamed a file that is perfectly readable.
+    `process_pack` is where a missing hotel is named.
     """
     from usali.night_audit import PACK_UPLOAD
 
     try:
-        registry = load_registry(session)
         for section in split_pack(extract_pages(Path(pdf_path))):
-            try:
-                det = detect(section.words, registry, section.title)
-            except ValueError:
-                continue  # filler, or a property this install has not registered
-            if det.pms_source.upper() in PACK_UPLOAD:
+            sig = detect_report_signature(section.words, section.title)
+            if sig is not None and sig[0].upper() in PACK_UPLOAD:
                 return True
     except Exception:
         # Unreadable here means unreadable in `process_file` too, which says so
