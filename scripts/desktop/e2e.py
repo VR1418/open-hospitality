@@ -279,11 +279,16 @@ def run(exe: Path | None, keep: bool) -> int:
                 for item in codes["items"]:
                     if item["status"] == "confirmed":
                         continue
-                    suggestion = owner.post("/api/desktop/ai/suggest", {
-                        "property_id": h.code, "pms_source": h.pms, "code": item["code"],
-                    })
-                    line = suggestion.json().get("line") if suggestion.status_code == 200 else None
-                    choice = line or item.get("current") or choices[0]
+                    # A code the dictionary already guesses is confirmed as it
+                    # stands; only a code nothing decides is put to the AI —
+                    # whose practice mode picks the first line it is offered.
+                    line = None
+                    if item.get("current") is None:
+                        suggestion = owner.post("/api/desktop/ai/suggest", {
+                            "property_id": h.code, "pms_source": h.pms, "code": item["code"],
+                        })
+                        line = suggestion.json().get("line") if suggestion.status_code == 200 else None
+                    choice = item.get("current") or line or choices[0]
                     ok(owner.put(f"/api/desktop/codes/{item['code']}", {
                         "property_id": h.code, "pms_source": h.pms,
                         "line": {k: choice.get(k) for k in
