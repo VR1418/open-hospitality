@@ -100,7 +100,7 @@ describe('OverviewPage', () => {
     vi.mocked(getModules).mockResolvedValue({ modules: [], reloading: false })
     vi.mocked(getWelcome).mockResolvedValue({
       finished: true, backup_folder_set: true, group_name: 'G', group_named: true,
-      properties: [], pms_choices: [],
+      properties: [], pms_choices: [], jurisdictions: [],
     })
     vi.mocked(getPortfolio).mockReset().mockResolvedValue(PORTFOLIO)
     vi.mocked(getBackupStatus).mockReset().mockResolvedValue({

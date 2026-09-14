@@ -60,7 +60,7 @@ from usali.assignments import (
     is_exempt_on,
     property_ids_on,
 )
-from usali.overtime_rules import rules_for
+from usali.overtime_rules import UnknownJurisdictionError, rules_for
 from usali.rates import HourlyRates, RateError, hourly_rates_on
 from usali.schedule_projection import (
     ScheduledShift,
@@ -771,7 +771,10 @@ def week_projection(
         sched_property = session.get(Property, sched.property_id)
         if sched_property is None:
             raise HTTPException(status_code=404, detail="unknown property")
-        ot_rules = rules_for(sched_property.wage_jurisdiction)
+        try:
+            ot_rules = rules_for(sched_property.wage_jurisdiction)
+        except UnknownJurisdictionError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from None
 
         result = project_week(
             scheduled,

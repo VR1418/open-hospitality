@@ -263,6 +263,8 @@ export type WelcomeState = {
   backup_folder_set: boolean
   properties: WelcomeProperty[]
   pms_choices: PmsChoice[]
+  /** Whose overtime rules the engine knows; "US" is the federal floor. */
+  jurisdictions: { id: string; name: string }[]
 }
 
 /** The wizard's progress. Null on a hosted deployment, which has no such
@@ -300,6 +302,8 @@ export type NewHotel = {
    *  means the code (or the name). */
   report_name: string
   pms_source: string
+  /** The state whose overtime rules apply to the staff ("US" = federal). */
+  wage_jurisdiction: string
   timezone: string
   fiscal: FiscalChoice
 }

@@ -61,7 +61,7 @@ HOTELS: tuple[Hotel, ...] = (
 class Person:
     full_name: str
     department: str
-    pay_type: str  # hourly | salaried
+    pay_type: str  # hourly | salary (the payroll vocabulary)
     role: str | None = None  # an operator role gets a sign-in
 
 
@@ -82,7 +82,7 @@ _POSTS: tuple[tuple[str, str, str | None], ...] = (
     ("Housekeeping", "hourly", None),
     ("Breakfast", "hourly", None),
     ("Maintenance", "hourly", None),
-    ("Front desk", "salaried", "property_gm"),
+    ("Front desk", "salary", "property_gm"),
 )
 
 

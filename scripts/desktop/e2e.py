@@ -186,6 +186,8 @@ def run(exe: Path | None, keep: bool) -> int:
         with step("start the app") as notes:
             app.start()
             notes.append(f"{'packaged build' if exe else 'this checkout'} at {app.base_url}")
+        if not app.base_url:
+            return 1  # nothing else can run; the table below says why
 
         with step("set up the owner's account") as notes:
             r = httpx.post(f"{app.base_url}/api/desktop/setup/owner", json={
@@ -204,6 +206,7 @@ def run(exe: Path | None, keep: bool) -> int:
                 made = ok(owner.post("/api/desktop/welcome/property", {
                     "ownership_entity": h.entity, "name": h.name, "code": h.code,
                     "pms_source": h.pms, "timezone": "America/Chicago",
+                    "wage_jurisdiction": "US-CA" if h.code == "SHI01" else "US",
                     "report_name": "" if h.pms == "SKYTOUCH" else h.name.upper(),
                     "fiscal": {"calendar_type": "calendar_month", "fiscal_year_start_month": 1,
                                "week_start_weekday": None},
@@ -283,7 +286,8 @@ def run(exe: Path | None, keep: bool) -> int:
                     choice = line or item.get("current") or choices[0]
                     ok(owner.put(f"/api/desktop/codes/{item['code']}", {
                         "property_id": h.code, "pms_source": h.pms,
-                        "line": {k: choice[k] for k in ("schedule_id", "major", "sub", "line_item")},
+                        "line": {k: choice.get(k) for k in
+                                 ("schedule_id", "major", "sub", "line_item", "gl_account_code")},
                         "origin": "ai-accepted" if line else "owner",
                     }))
                     decided += 1
@@ -372,20 +376,27 @@ def run(exe: Path | None, keep: bool) -> int:
                                        files={"photo": ("punch.jpg", photo, "image/jpeg")})
                         ok(r, 201)
                         punched += 1
-                    week = ok(kiosk.get("/api/kiosk/my-week", params={"employee_id": eid}))
+                    week = ok(kiosk.get("/api/kiosk/my-week",
+                                        params={"employee_id": eid, "week_start": week1.isoformat()}))
                     assert week, "my week is empty"
             notes.append(f"{punched} punches at 3 time clocks; my-week answers")
 
-        with step("a timecard is approved") as notes:
+        with step("the punches became timecards, approvable once the period ends") as notes:
             cards = ok(owner.get("/api/timecards"))
             assert cards, "no timecards after the punches"
             card = ok(owner.get(f"/api/timecards/{cards[0]['timecard_id']}"))
-            punch_ids = [p["punch_id"] for d in card.get("days", []) for p in d.get("punches", [])
-                         if "punch_id" in p]
+            punch_ids = [p["punch_id"] for d in card.get("days", []) for p in d.get("punches", [])]
+            assert punch_ids, "the timecard shows no punches"
             approved = owner.post(f"/api/timecards/{cards[0]['timecard_id']}/approve",
                                   {"acknowledged_punch_ids": punch_ids})
-            ok(approved)
-            notes.append(f"{len(cards)} timecards; {cards[0]['employee_name']}'s approved")
+            # Today's period is still running: approving it is rightly refused,
+            # and the refusal says when it can be.
+            if approved.status_code == 409:
+                assert "still in progress" in approved.text, approved.text
+                notes.append(f"{len(cards)} timecards; approval refused until the period ends, as it should be")
+            else:
+                ok(approved)
+                notes.append(f"{len(cards)} timecards; {cards[0]['employee_name']}'s approved")
 
         with step("bank and card statements checked and sorted") as notes:
             summary = []
@@ -395,10 +406,16 @@ def run(exe: Path | None, keep: bool) -> int:
                     "property": h.code, "kind": "bank", "account_label": "Operating account"},
                     files={"file": ("bank.csv", bank_csv.encode(), "text/csv")}), 201)
                 kinds = {r["match_kind"] for r in bank["rows"]}
-                assert "settlement" in kinds and "cash" in kinds and "payroll" in kinds, kinds
+                assert "settlement" in kinds and "payroll" in kinds, kinds
+                # OPERA's dictionary has no cash code, so the desk's cash never
+                # reaches the books and a cash deposit rightly stays unmatched.
+                deposits = sum(1 for r in bank["rows"] if r["description"] == "DEPOSIT")
+                if h.pms != "OPERA":
+                    assert "cash" in kinds, kinds
                 matched = sum(1 for r in bank["rows"] if r["match_kind"] in ("settlement", "cash"))
                 credits = sum(1 for r in bank["rows"] if not r["amount"].startswith("-"))
-                assert matched >= credits - 2, f"{matched} of {credits} credits matched"
+                allowed = 2 + (deposits if h.pms == "OPERA" else 0)
+                assert matched >= credits - allowed, f"{matched} of {credits} credits matched"
                 card_csv = demo.card_statement_csv(h, LAST_NIGHT, DAYS)
                 card = ok(owner.post("/api/desktop/statements", data={
                     "property": h.code, "kind": "card", "account_label": "Visa ending 4411"},

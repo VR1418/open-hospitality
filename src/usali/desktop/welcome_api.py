@@ -49,6 +49,7 @@ from usali.desktop.rota_api import seed_starter_shifts
 from usali.desktop.settings import read_setting, write_setting
 from usali.detect import supported_pms_sources
 from usali.mapping.property_registry import _DEFAULT_ORG
+from usali.overtime_rules import _RULES as WAGE_RULES
 from usali.models import (
     AuditEvent,
     FiscalCalendar,
@@ -126,6 +127,25 @@ class WelcomeProperty(BaseModel):
     has_rooms: bool
 
 
+class JurisdictionChoice(BaseModel):
+    id: str
+    name: str
+
+
+def jurisdiction_choices() -> list[JurisdictionChoice]:
+    """The places whose overtime rules the engine knows, from its own table
+    (overtime_rules), and the federal floor for everywhere else."""
+    states = sorted(j for j in WAGE_RULES if j != "US")
+    return [
+        *(JurisdictionChoice(id=j, name=_STATE_NAMES.get(j, j)) for j in states),
+        JurisdictionChoice(id="US", name="Another US state — federal overtime rules"),
+    ]
+
+
+_STATE_NAMES = {"US-CA": "California", "US-TX": "Texas", "US-NM": "New Mexico", "US-NY": "New York",
+                "US-WA": "Washington", "US-CO": "Colorado", "US-NV": "Nevada", "US-AK": "Alaska"}
+
+
 class WelcomeOut(BaseModel):
     finished: bool
     # PRD I-6: backups are set up DURING setup, not afterwards in a
@@ -135,6 +155,7 @@ class WelcomeOut(BaseModel):
     group_named: bool
     properties: list[WelcomeProperty]
     pms_choices: list[PmsChoice]
+    jurisdictions: list[JurisdictionChoice]
 
 
 router = APIRouter(dependencies=[Depends(require_operator), Depends(require_active_org)])
@@ -168,6 +189,7 @@ def progress(request: Request, _: Principal = Depends(_owner)) -> WelcomeOut:
             for p in props
         ],
         pms_choices=pms_choices(),
+        jurisdictions=jurisdiction_choices(),
     )
 
 
@@ -224,6 +246,9 @@ class PropertyIn(BaseModel):
     pms_source: str = Field(min_length=1, max_length=20)
     #: No longer asked: the first statistics report carries it (ingestion).
     total_rooms: int | None = Field(default=None, gt=0, le=100_000)
+    #: Whose overtime rules apply to its staff. "US" is the federal floor;
+    #: the engine's own table names the states with rules of their own.
+    wage_jurisdiction: str = Field(default="US", max_length=20)
     # The owner's computer's IANA zone, sent by the browser. Optional: a bad
     # or missing one leaves upstream's column default in place.
     timezone: str = Field(default="", max_length=50)
@@ -271,6 +296,8 @@ def add_property(
             status_code=422,
             detail="Open Hospitality can't read reports from that system yet.",
         )
+    if body.wage_jurisdiction not in WAGE_RULES:
+        raise HTTPException(status_code=422, detail="Pick the state from the list.")
     if code and not _CODE.match(code):
         raise HTTPException(
             status_code=422,
@@ -318,6 +345,7 @@ def add_property(
         zone = _valid_zone(body.timezone)
         session.add(Property(
             property_id=property_id, name=name, pms_source=pms,
+            wage_jurisdiction=body.wage_jurisdiction,
             **({"timezone": zone} if zone is not None else {}),
         ))
         # The dependants' composite FKs reference the property row.

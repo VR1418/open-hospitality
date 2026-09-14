@@ -368,7 +368,7 @@ describe('app shell — desktop edition', () => {
     vi.mocked(getMe).mockResolvedValue({ subject: 'o', username: 'o', roles: ['org_admin'] })
     vi.mocked(getWelcome).mockResolvedValue({
       finished: true, backup_folder_set: true, group_name: 'G', group_named: true,
-      properties: [], pms_choices: [],
+      properties: [], pms_choices: [], jurisdictions: [],
     })
   })
 

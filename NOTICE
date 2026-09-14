@@ -72,6 +72,7 @@ Modified upstream files:
     src/usali/ingestion.py
     src/usali/gl_posting.py
     src/usali/reporting.py
+    src/usali/schedule_api.py
     src/usali/server.py
     src/usali/stats_promote.py
     src/usali/transform.py

@@ -51,6 +51,10 @@ const FRESH: WelcomeState = {
     { id: 'OPERA', name: 'Oracle OPERA', prints_code: false },
     { id: 'OTHER', name: 'Something else — read with help from your AI helper', prints_code: true },
   ],
+  jurisdictions: [
+    { id: 'US-CA', name: 'California' },
+    { id: 'US', name: 'Another US state — federal overtime rules' },
+  ],
 }
 
 function mod(overrides: Partial<DesktopModule>): DesktopModule {
@@ -112,6 +116,7 @@ describe('WelcomePage', () => {
     await type('Hotel name', 'Redstone Inn')
     await type('Hotel code', 'tx901')
     await userEvent.selectOptions(screen.getByLabelText('Front-desk system (PMS)'), 'SKYTOUCH')
+    await userEvent.selectOptions(screen.getByLabelText('State'), 'US-CA')
     // choiceADVANTAGE prints the code, so the printed name is not asked for.
     expect(screen.queryByLabelText('The hotel’s name on your reports')).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
@@ -131,6 +136,7 @@ describe('WelcomePage', () => {
         // Recognised by its code; the server builds the phrase.
         report_name: '',
         pms_source: 'SKYTOUCH',
+        wage_jurisdiction: 'US-CA',
         fiscal: { calendar_type: '445', fiscal_year_start_month: 4, week_start_weekday: 6 },
       }),
     )

@@ -226,6 +226,7 @@ SIGNUP = {
     "name": "Redstone Lodge",
     "code": " tx901 ",
     "pms_source": "SKYTOUCH",
+    "wage_jurisdiction": "US",
     "timezone": "America/Chicago",
     "fiscal": {"calendar_type": "calendar_month", "fiscal_year_start_month": 1,
                "week_start_weekday": None},
@@ -240,10 +241,16 @@ def test_signup_asks_for_the_owning_company_the_name_and_the_code(world: World) 
     # The code the owner typed is the hotel's code everywhere — not one made up.
     assert r.json() == {"property_id": "TX901", "name": "Redstone Lodge"}  # type: ignore[attr-defined]
 
-    hotels = world.get("/api/desktop/welcome").json()["properties"]  # type: ignore[attr-defined]
-    [hotel] = [h for h in hotels if h["property_id"] == "TX901"]
+    welcome = world.get("/api/desktop/welcome").json()  # type: ignore[attr-defined]
+    [hotel] = [h for h in welcome["properties"] if h["property_id"] == "TX901"]
     assert hotel["ownership_entity"] == "Redstone Hospitality LLC"
     assert hotel["has_rooms"] is False
+    # Whose overtime rules apply: the engine's own list, federal last, and
+    # the hotel carries the choice so schedules can be costed from day one.
+    assert welcome["jurisdictions"][-1]["id"] == "US"
+    assert {"id": "US-CA", "name": "California"} in welcome["jurisdictions"]
+    with world.org_sessions() as s:  # type: ignore[operator]
+        assert s.scalar(select(Property.wage_jurisdiction).where(Property.property_id == "TX901")) == "US"
 
     # A choiceADVANTAGE report is matched by the code it prints, so a report
     # naming a different hotel of the same brand is not claimed.
@@ -262,6 +269,9 @@ def test_a_code_is_set_up_once_and_looks_like_a_code(world: World) -> None:
     assert again.status_code == 409 and "TX901" in again.json()["detail"]  # type: ignore[attr-defined]
     bad = world.post("/api/desktop/welcome/property", {**SIGNUP, "code": "TX 9/01!"})
     assert bad.status_code == 422 and "letters and numbers" in bad.json()["detail"]  # type: ignore[attr-defined]
+    elsewhere = world.post("/api/desktop/welcome/property",
+                           {**SIGNUP, "code": "TX902", "wage_jurisdiction": "FR"})
+    assert elsewhere.status_code == 422 and "state" in elsewhere.json()["detail"]  # type: ignore[attr-defined]
 
 
 def test_the_folders_holding_the_reports_are_listed_and_can_be_opened(world: World) -> None:

@@ -34,7 +34,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 
 from usali import fiscal, gl_posting
 from usali.auth import (
@@ -322,11 +322,27 @@ def confirm(
 
         before = _fact_count(session, stage_ids)
         if stage_ids:
+            # A fact that has been posted is referenced by its journal lines
+            # (fk_journal_line_fact) and cannot be deleted — nor should it be:
+            # the line is how a posted amount traces back to the report. So a
+            # fact that exists is RE-CLASSIFIED in place; its id, amount and
+            # provenance stay, and the ledger sees a changed day and reposts
+            # (a reversal plus a fresh entry). Only rows that never became a
+            # fact — the unmapped ones, held as exceptions — are transformed
+            # afresh, once their exception row (what marks a stage row
+            # "already processed") is gone.
+            c = body.line.classification()
             session.execute(
-                delete(UsaliFinancialFact).where(UsaliFinancialFact.stage_id.in_(stage_ids))
+                update(UsaliFinancialFact)
+                .where(UsaliFinancialFact.stage_id.in_(stage_ids))
+                .values(
+                    usali_schedule_id=c.usali_schedule_id,
+                    usali_major_category=c.usali_major_category,
+                    usali_sub_category=c.usali_sub_category,
+                    usali_line_item=c.usali_line_item,
+                    gl_account_code=c.gl_account_code,
+                )
             )
-            # The exception row is what marks a stage row "already processed"
-            # (transform.py's union), so it has to go or no fact is ever made.
             session.execute(
                 delete(MappingException).where(MappingException.stage_id.in_(stage_ids))
             )

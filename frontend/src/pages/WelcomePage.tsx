@@ -43,6 +43,7 @@ type HotelDraft = {
   code: string
   report_name: string
   pms_source: string
+  wage_jurisdiction: string
 }
 
 const MONTHS = [
@@ -268,6 +269,7 @@ function HotelStep({
   const [code, setCode] = useState(draft?.code ?? '')
   const [reportName, setReportName] = useState(draft?.report_name ?? '')
   const [pms, setPms] = useState(draft?.pms_source ?? state.pms_choices[0]?.id ?? '')
+  const [jurisdiction, setJurisdiction] = useState(draft?.wage_jurisdiction ?? 'US')
 
   if (!adding) {
     return (
@@ -313,6 +315,7 @@ function HotelStep({
             code: cleanCode,
             report_name: printsCode ? '' : reportName.trim() || name.trim(),
             pms_source: pms,
+            wage_jurisdiction: jurisdiction,
           })
         }}
       >
@@ -383,6 +386,23 @@ function HotelStep({
             />
           </Label>
         )}
+        <Label
+          text="State"
+          hint="Which state's overtime rules apply to the staff. Pick the state if it's listed; otherwise the federal rules apply."
+        >
+          <select
+            aria-label="State"
+            className={controlLargeClass}
+            value={jurisdiction}
+            onChange={(e) => setJurisdiction(e.target.value)}
+          >
+            {state.jurisdictions.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.name}
+              </option>
+            ))}
+          </select>
+        </Label>
         <p className="text-xs text-ink-muted">
           No need to count rooms — Open Hospitality reads the room count from your first night
           audit.

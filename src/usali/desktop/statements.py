@@ -29,7 +29,7 @@ The file itself is not kept.
 import csv
 import io
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -220,6 +220,23 @@ class Match:
     matched_amount: Decimal | None = None
 
 
+@dataclass(frozen=True)
+class Candidate:
+    start: date
+    end: date
+    total: Decimal
+    fee: Decimal  # total - amount; 0 when exact
+    lag: int  # days from the last night to the posting
+
+    @property
+    def rate(self) -> Decimal:
+        return (self.fee / self.total).quantize(Decimal("0.0001")) if self.total else Decimal("0")
+
+    @property
+    def span(self) -> str:
+        return _fmt(self.start) if self.start == self.end else f"{_fmt(self.start)}–{_fmt(self.end)}"
+
+
 def _settlements(session: Session, property_id: str, start: date, end: date) -> dict[tuple[date, str], Decimal]:
     """Settled money per night and line, as a positive figure."""
     rows = session.execute(
@@ -241,51 +258,98 @@ def _brand_lines(description: str) -> tuple[str, tuple[str, ...]] | None:
     return None
 
 
-def _windows(posted: date, max_nights: int) -> list[tuple[date, date]]:
-    """Runs of consecutive nights ending on or before the posting day,
-    nearest first."""
-    out: list[tuple[date, date]] = []
-    for back in range(0, _LOOKBACK_DAYS + 1):
-        end = posted - timedelta(days=back)
-        for nights in range(1, max_nights + 1):
-            out.append((end - timedelta(days=nights - 1), end))
-    return out
-
-
 def _fmt(d: date) -> str:
     return f"{d.month}/{d.day}"
 
 
-def match_credit(amount: Decimal, posted: date, lines: tuple[str, ...], label: str,
-                 settled: dict[tuple[date, str], Decimal], used: set[tuple[date, str]],
-                 max_nights: int = _MAX_NIGHTS) -> Match | None:
-    best: tuple[Decimal, tuple[date, date]] | None = None
-    for start, end in _windows(posted, max_nights):
-        days = [start + timedelta(days=i) for i in range((end - start).days + 1)]
-        keys = [(d, line) for d in days for line in lines]
-        if any(k in used for k in keys):
-            continue
-        # A run of nights is anchored on nights that settled something: a
-        # window padded with empty days is the same money under a wider label.
-        if not any((start, line) in settled for line in lines):
-            continue
+def candidates(amount: Decimal, posted: date, lines: tuple[str, ...],
+               settled: dict[tuple[date, str], Decimal], used: set[tuple[date, str]],
+               *, max_nights: int = _MAX_NIGHTS, allow_fee: bool = True) -> list[Candidate]:
+    """Every run of consecutive nights, anchored on nights that settled
+    something, whose total is the amount — or, when a fee is allowed, up to a
+    fee's worth above it."""
+    out: list[Candidate] = []
+    for back in range(0, _LOOKBACK_DAYS + 1):
+        end = posted - timedelta(days=back)
         if not any((end, line) in settled for line in lines):
             continue
-        total = sum((settled.get(k, Decimal("0")) for k in keys), Decimal("0"))
-        if total == amount:
-            used.update(k for k in keys if k in settled)
-            span = _fmt(start) if start == end else f"{_fmt(start)}–{_fmt(end)}"
-            return Match("settlement", f"{label} settled {span}", total)
-        fee = total - amount
-        if Decimal("0") < fee <= total * _FEE_CEILING and (best is None or fee < best[0]):
-            best = (fee, (start, end))
-    if best is not None:
-        fee, (start, end) = best
-        days = [start + timedelta(days=i) for i in range((end - start).days + 1)]
-        used.update((d, line) for d in days for line in lines if (d, line) in settled)
-        span = _fmt(start) if start == end else f"{_fmt(start)}–{_fmt(end)}"
-        return Match("settlement", f"{label} settled {span}, less ${fee:,.2f} in fees", amount + fee)
-    return None
+        for nights in range(1, max_nights + 1):
+            start = end - timedelta(days=nights - 1)
+            if not any((start, line) in settled for line in lines):
+                continue
+            days = [start + timedelta(days=i) for i in range(nights)]
+            keys = [(d, line) for d in days for line in lines]
+            if any(k in used for k in keys):
+                continue
+            total = sum((settled.get(k, Decimal("0")) for k in keys), Decimal("0"))
+            fee = total - amount
+            if fee == 0 or (allow_fee and Decimal("0") < fee <= total * _FEE_CEILING):
+                out.append(Candidate(start, end, total, fee, back))
+    return out
+
+
+def _take(c: Candidate, lines: tuple[str, ...], settled: dict[tuple[date, str], Decimal],
+          used: set[tuple[date, str]]) -> None:
+    for i in range((c.end - c.start).days + 1):
+        for line in lines:
+            key = (c.start + timedelta(days=i), line)
+            if key in settled:
+                used.add(key)
+
+
+def _choose(found: list[Candidate], usual_rate: Decimal | None) -> Candidate | None:
+    """An exact run nearest the posting wins. Otherwise the run whose implied
+    fee is the processor's usual rate (learned from this statement's other
+    payouts), nearest the posting; with no usual rate known, the nearest run
+    whose fee looks like a card fee (about 1–3.5%) — a payout is not a
+    random night that happens to be close."""
+    exact = [c for c in found if c.fee == 0]
+    if exact:
+        return min(exact, key=lambda c: (c.lag, c.end - c.start))
+    if not found:
+        return None
+    if usual_rate is not None:
+        return min(found, key=lambda c: (abs(c.rate - usual_rate), c.lag, c.end - c.start))
+    return min(found, key=lambda c: (abs(c.rate - Decimal("0.025")), c.lag, c.end - c.start))
+
+
+def match_credit(amount: Decimal, posted: date, lines: tuple[str, ...], label: str,
+                 settled: dict[tuple[date, str], Decimal], used: set[tuple[date, str]],
+                 max_nights: int = _MAX_NIGHTS, *, allow_fee: bool = True,
+                 usual_rate: Decimal | None = None) -> Match | None:
+    chosen = _choose(candidates(amount, posted, lines, settled, used,
+                                max_nights=max_nights, allow_fee=allow_fee), usual_rate)
+    if chosen is None:
+        return None
+    _take(chosen, lines, settled, used)
+    if chosen.fee == 0:
+        return Match("settlement", f"{label} settled {chosen.span}", chosen.total)
+    return Match("settlement", f"{label} settled {chosen.span}, less ${chosen.fee:,.2f} in fees",
+                 chosen.total)
+
+
+_CARD_LABELS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Visa/MasterCard", ("Visa", "MasterCard")),
+    ("American Express", ("American Express",)),
+    ("Discover", ("Discover",)),
+)
+
+
+def _usual_rates(lines: list[ParsedLine], settled: dict[tuple[date, str], Decimal]) -> dict[str, Decimal]:
+    """The processor's fee per brand, as the statement itself shows it: the
+    most common implied rate among every plausible run for every payout of
+    that brand. Learned before any night is spoken for."""
+    seen: dict[str, Counter[Decimal]] = defaultdict(Counter)
+    for line in lines:
+        if line.amount <= 0:
+            continue
+        brand = _brand_lines(line.description)
+        if brand is None:
+            continue
+        for c in candidates(line.amount, line.posted_on, brand[1], settled, set()):
+            if c.fee > 0:
+                seen[brand[0]][c.rate.quantize(Decimal("0.001"))] += 1
+    return {label: counts.most_common(1)[0][0] for label, counts in seen.items() if counts}
 
 
 def match_lines(session: Session, property_id: str, lines: list[ParsedLine]) -> list[Match]:
@@ -294,35 +358,37 @@ def match_lines(session: Session, property_id: str, lines: list[ParsedLine]) -> 
     first = min(line.posted_on for line in lines) - timedelta(days=_LOOKBACK_DAYS + _MAX_CASH_NIGHTS)
     last = max(line.posted_on for line in lines)
     settled = _settlements(session, property_id, first, last)
+    usual = _usual_rates(lines, settled)
     used: set[tuple[date, str]] = set()
-    out: list[Match] = []
-    for line in sorted(lines, key=lambda ln: (ln.posted_on, -abs(ln.amount))):
-        out.append(_match_one(line, settled, used))
-    # Back in the caller's order.
-    order = {id(ln): i for i, ln in enumerate(sorted(lines, key=lambda ln: (ln.posted_on, -abs(ln.amount))))}
-    return [out[order[id(ln)]] for ln in lines]
+    order = sorted(range(len(lines)), key=lambda i: (lines[i].posted_on, -abs(lines[i].amount)))
+    out: list[Match | None] = [None] * len(lines)
+    for i in order:
+        out[i] = _match_one(lines[i], settled, used, usual)
+    return [m for m in out if m is not None]
 
 
 def _match_one(line: ParsedLine, settled: dict[tuple[date, str], Decimal],
-               used: set[tuple[date, str]]) -> Match:
+               used: set[tuple[date, str]], usual: dict[str, Decimal] | None = None) -> Match:
+    usual = usual or {}
     if line.amount > 0:
         brand = _brand_lines(line.description)
         if brand is not None:
-            found = match_credit(line.amount, line.posted_on, brand[1], brand[0], settled, used)
+            found = match_credit(line.amount, line.posted_on, brand[1], brand[0], settled, used,
+                                 usual_rate=usual.get(brand[0]))
             if found is not None:
                 return found
             return Match("unmatched", f"No {brand[0]} settlement adds up to this in the week before.")
         if _CASH.search(line.description.upper()):
+            # A bank takes no fee on cash: the deposit is the desk's takings exactly.
             found = match_credit(line.amount, line.posted_on, ("Cash", "Check"), "Cash and checks",
-                                 settled, used, max_nights=_MAX_CASH_NIGHTS)
+                                 settled, used, max_nights=_MAX_CASH_NIGHTS, allow_fee=False)
             if found is not None:
                 return Match("cash", found.note, found.matched_amount)
             return Match("unmatched", "No cash taken at the desk adds up to this deposit.")
         # An unnamed credit: try every card brand, then say so.
-        for pattern_label, lines in (("Visa/MasterCard", ("Visa", "MasterCard")),
-                                     ("American Express", ("American Express",)),
-                                     ("Discover", ("Discover",))):
-            found = match_credit(line.amount, line.posted_on, lines, pattern_label, settled, used)
+        for label, lines_ in _CARD_LABELS:
+            found = match_credit(line.amount, line.posted_on, lines_, label, settled, used,
+                                 usual_rate=usual.get(label))
             if found is not None:
                 return found
         return Match("unmatched", "Money in that nothing in the night audits accounts for.")
