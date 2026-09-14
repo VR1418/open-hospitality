@@ -148,7 +148,7 @@ const TABS: NavTab[] = [
       { to: '/schedule', label: 'Schedule', icon: CalendarIcon, show: isScheduler },
       { to: '/timecards', label: 'Timecards', icon: ClockIcon, show: isScheduler },
       { to: '/payroll', label: 'Pay runs', icon: BanknoteIcon, show: isPayroll },
-      { to: '/kiosk-devices', label: 'Time clock tablets', icon: KioskIcon, show: isScheduler },
+      { to: '/kiosk-devices', label: 'Time clock', icon: KioskIcon, show: isScheduler },
       { to: '/kiosk', label: 'Time clock screen', icon: KioskIcon },
     ],
   },

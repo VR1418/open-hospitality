@@ -76,6 +76,15 @@
   ul.plain { padding-left: 20px; margin: 0 0 14px; }
   ul.plain li { margin-bottom: 7px; }
 
+  .shots { display: grid; gap: 22px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin: 8px 0 0; }
+  .shots figure { margin: 0; }
+  .shots img { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); }
+  .shots figcaption { font-size: 14px; color: var(--muted); margin-top: 8px; }
+  .repo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0 6px; }
+  .repo code { background: var(--raised); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-size: 14px; word-break: break-all; }
+  .repo button { background: var(--teal); color: #fff; border: 0; border-radius: 8px; padding: 9px 14px; font: inherit; font-weight: 650; cursor: pointer; }
+  .repo button:hover { background: #0b8a86; }
+
   footer { margin: 64px 0 48px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
   footer a { color: var(--muted); }
 
@@ -122,8 +131,8 @@
     <span class="btn soon" aria-disabled="true">Mac — coming soon</span>
   </div>
   <p class="meta">
-    Windows 10 or 11 · 115&nbsp;MB · about 5&nbsp;GB free disk space · free and open source<br>
-    <span class="small">SHA-256 <code id="sha">bbd5e820b060482eda57ee1a9e28021f45d34e180087ccd512f65d9797ff2b14</code></span>
+    Windows 10 or 11 · 121&nbsp;MB · about 5&nbsp;GB free disk space · free and open source<br>
+    <span class="small">SHA-256 <code id="sha">df126ef0dbc8492a7e6a5e45284bbf625dd73f8af523f887dc927d5c958d73bf</code></span>
   </p>
 </section>
 
@@ -160,6 +169,43 @@
   </div>
 </div>
 
+<h2>See it</h2>
+<p class="muted">The real app on three demo hotels, as it looks after a month of night audits.</p>
+<div class="shots">
+  <figure>
+    <img src="/screens/overview.png" width="2040" height="1290" loading="lazy" alt="The Overview: This morning with four ticks, and What's connected for every hotel">
+    <figcaption><strong>This morning.</strong> Last night's reports in, codes confirmed, bank checked, backed up — four ticks, then What's connected.</figcaption>
+  </figure>
+  <figure>
+    <img src="/screens/add-reports.png" width="2040" height="1290" loading="lazy" alt="Add reports: drag and drop, and Just read listing each night audit as it lands">
+    <figcaption><strong>Add reports.</strong> Drop a PDF in; Just read shows each night audit as it lands, or why one couldn't be read.</figcaption>
+  </figure>
+  <figure>
+    <img src="/screens/codes.png" width="2040" height="1290" loading="lazy" alt="Codes to confirm: what the hotel calls each charge and where it goes">
+    <figcaption><strong>Codes to confirm.</strong> What your system calls each charge and where it goes — guesses confirmed in one press, changed any time, and every day worked out again.</figcaption>
+  </figure>
+  <figure>
+    <img src="/screens/profit-and-loss.png" width="2040" height="1290" loading="lazy" alt="The profit and loss statement for the last night read">
+    <figcaption><strong>Profit and loss.</strong> The statement from the journal, opened on the last night read; click a line to see the charges behind it.</figcaption>
+  </figure>
+  <figure>
+    <img src="/screens/schedule.png" width="2040" height="1290" loading="lazy" alt="The schedule: who works when, week by week">
+    <figcaption><strong>Schedule.</strong> Standard shifts, "9:00 AM – Done" for housekeeping, drag onto a day, copy the week, print it.</figcaption>
+  </figure>
+  <figure>
+    <img src="/screens/bank.png" width="2040" height="1290" loading="lazy" alt="The bank statement checked against the night audits">
+    <figcaption><strong>Check against your bank.</strong> A statement CSV matched to the card payouts and cash the front desk recorded.</figcaption>
+  </figure>
+  <figure>
+    <img src="/screens/email.png" width="2040" height="1290" loading="lazy" alt="Reports by email: the mailbox and when to look">
+    <figcaption><strong>Reports by email.</strong> It looks in a mailbox on your schedule and takes only PDFs from senders you allow.</figcaption>
+  </figure>
+  <figure>
+    <img src="/screens/ai.png" width="2040" height="1290" loading="lazy" alt="The AI helper settings: your own account, a spending limit">
+    <figcaption><strong>AI helper.</strong> Your own account, a monthly limit, and never shown a guest's name or a card number.</figcaption>
+  </figure>
+</div>
+
 <h2>Installing it</h2>
 <ol class="steps">
   <li>
@@ -170,8 +216,9 @@
   </li>
   <li>
     <strong>Double-click <code>Open Hospitality.exe</code>.</strong>
-    <span class="muted">Your browser opens by itself, and a ◆ icon appears near the
-    clock. First start takes under a minute while it creates your database.</span>
+    <span class="muted">It opens in its own window, a ◆ icon appears near the clock,
+    and a Desktop icon is made for next time. First start takes under a minute
+    while it creates your database.</span>
   </li>
   <li>
     <strong>Create your account and save the recovery code.</strong>
@@ -181,7 +228,8 @@
   </li>
   <li>
     <strong>Put your night audit PDFs in “Drop reports here”.</strong>
-    <span class="muted">Each is read within a few seconds. Then open Overview.</span>
+    <span class="muted">Each is read within a few seconds — or let it collect them
+    from your email every morning. Then open Overview.</span>
   </li>
 </ol>
 
@@ -192,8 +240,7 @@
     signed yet, because signing means buying a certificate and that has not been done
     during testing. It is not a virus warning — Windows is saying it does not
     recognise the publisher. Click <strong>More info</strong>, then <strong>Run
-    anyway</strong>. A black window stays open while the app runs; that is deliberate
-    for now, so you can see what it is doing.
+    anyway</strong>. It only happens once.
   </p>
 </div>
 
@@ -213,8 +260,8 @@
 <ul class="plain">
   <li><strong>Mac.</strong> Windows only for now.</li>
   <li><strong>Signing.</strong> Hence the warning above.</li>
-  <li><strong>Reading your email.</strong> Reports go in the folder by hand today.</li>
-  <li><strong>Bank feeds and payroll filing.</strong> Neither exists.</li>
+  <li><strong>Live bank feeds and payroll filing.</strong> You download a statement and
+      it checks it; it prepares a pay period and hands it to your payroll provider.</li>
   <li><strong>Tax.</strong> This is not a tax product and will not advise on tax.</li>
 </ul>
 <p class="small muted">
@@ -222,6 +269,30 @@
   wrong, the log it keeps holds no guest names and no money — only what the app
   did — and sending it is the most useful thing you can do.
 </p>
+
+<h2>For the team</h2>
+<p>
+  The code is open, under the Apache 2.0 licence. Share this with anyone working on it:
+</p>
+<div class="repo">
+  <code id="repo">https://github.com/VR1418/open-hospitality</code>
+  <button type="button" id="copy" aria-label="Copy the GitHub link">Copy link</button>
+  <a href="https://github.com/VR1418/open-hospitality">Open on GitHub</a>
+</div>
+<p class="small muted">
+  Start with <code>docs/desktop/INSTALL.md</code> for what it does, and
+  <code>docs/desktop/NEXT-STEPS.md</code> for what is next. One command runs every check:
+  <code>uv run python scripts/desktop/check.py</code>.
+</p>
+<script>
+  document.getElementById('copy').addEventListener('click', function () {
+    var b = this, t = document.getElementById('repo').textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(
+      function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy link'; }, 1500); },
+      function () { window.getSelection().selectAllChildren(document.getElementById('repo')); }
+    );
+  });
+</script>
 
 <footer>
   <p>

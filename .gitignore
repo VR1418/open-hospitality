@@ -75,3 +75,6 @@ models/
 # Git bundles from the fork's own setup. One was swept into a commit by a
 # `git add -A` and had to be amended out; 4.5 MB of it.
 *.bundle
+
+# ophosp.com deploy: the CloudFront distribution id stays off the public record
+site/.deploy.local.json

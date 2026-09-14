@@ -18,6 +18,21 @@ www. ───────┘
 
 ---
 
+## The short way, once it has been done by hand
+
+Everything below is the console, step by step, and it is how the site went up
+the first time. After that, one command does the upload — page, favicon,
+screenshots and the build zip — and tells CloudFront to refresh:
+
+```
+uv run python scripts/site/deploy.py
+```
+
+It needs the AWS CLI signed in on the computer (`aws sts get-caller-identity`
+answers), and the distribution id in `site/.deploy.local.json`
+(`{"distribution_id": "…"}`, ignored by git) or in `OPHOSP_DISTRIBUTION_ID`.
+It refuses to upload a zip whose SHA-256 differs from the one on the page.
+
 ## Before you start
 
 You need:
