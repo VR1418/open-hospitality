@@ -73,6 +73,7 @@ Modified upstream files:
     src/usali/gl_posting.py
     src/usali/reporting.py
     src/usali/server.py
+    src/usali/stats_promote.py
     src/usali/transform.py
     tests/test_gl_api.py
     tests/test_gl_posting.py

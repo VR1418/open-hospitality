@@ -81,6 +81,8 @@ _PAYROLL = re.compile(r"\bPAYROLL\b|\bGUSTO\b|\bADP\b|\bPAYCHEX\b|\bWAGES\b|\bDI
 _FEE_CEILING = Decimal("0.045")
 _LOOKBACK_DAYS = 7
 _MAX_NIGHTS = 4
+#: Cash is banked less often than cards pay out — a week's takings at once.
+_MAX_CASH_NIGHTS = 7
 
 
 class StatementError(ValueError):
@@ -239,13 +241,13 @@ def _brand_lines(description: str) -> tuple[str, tuple[str, ...]] | None:
     return None
 
 
-def _windows(posted: date) -> list[tuple[date, date]]:
-    """Runs of one to four consecutive nights ending on or before the posting
-    day, nearest first."""
+def _windows(posted: date, max_nights: int) -> list[tuple[date, date]]:
+    """Runs of consecutive nights ending on or before the posting day,
+    nearest first."""
     out: list[tuple[date, date]] = []
     for back in range(0, _LOOKBACK_DAYS + 1):
         end = posted - timedelta(days=back)
-        for nights in range(1, _MAX_NIGHTS + 1):
+        for nights in range(1, max_nights + 1):
             out.append((end - timedelta(days=nights - 1), end))
     return out
 
@@ -255,9 +257,10 @@ def _fmt(d: date) -> str:
 
 
 def match_credit(amount: Decimal, posted: date, lines: tuple[str, ...], label: str,
-                 settled: dict[tuple[date, str], Decimal], used: set[tuple[date, str]]) -> Match | None:
+                 settled: dict[tuple[date, str], Decimal], used: set[tuple[date, str]],
+                 max_nights: int = _MAX_NIGHTS) -> Match | None:
     best: tuple[Decimal, tuple[date, date]] | None = None
-    for start, end in _windows(posted):
+    for start, end in _windows(posted, max_nights):
         days = [start + timedelta(days=i) for i in range((end - start).days + 1)]
         keys = [(d, line) for d in days for line in lines]
         if any(k in used for k in keys):
@@ -288,7 +291,7 @@ def match_credit(amount: Decimal, posted: date, lines: tuple[str, ...], label: s
 def match_lines(session: Session, property_id: str, lines: list[ParsedLine]) -> list[Match]:
     if not lines:
         return []
-    first = min(line.posted_on for line in lines) - timedelta(days=_LOOKBACK_DAYS + _MAX_NIGHTS)
+    first = min(line.posted_on for line in lines) - timedelta(days=_LOOKBACK_DAYS + _MAX_CASH_NIGHTS)
     last = max(line.posted_on for line in lines)
     settled = _settlements(session, property_id, first, last)
     used: set[tuple[date, str]] = set()
@@ -311,7 +314,7 @@ def _match_one(line: ParsedLine, settled: dict[tuple[date, str], Decimal],
             return Match("unmatched", f"No {brand[0]} settlement adds up to this in the week before.")
         if _CASH.search(line.description.upper()):
             found = match_credit(line.amount, line.posted_on, ("Cash", "Check"), "Cash and checks",
-                                 settled, used)
+                                 settled, used, max_nights=_MAX_CASH_NIGHTS)
             if found is not None:
                 return Match("cash", found.note, found.matched_amount)
             return Match("unmatched", "No cash taken at the desk adds up to this deposit.")

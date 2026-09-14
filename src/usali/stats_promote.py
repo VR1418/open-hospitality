@@ -12,7 +12,12 @@ from usali.models import PmsDailyStatisticStage, UsaliStatisticFact
 # Canonical reporting periods. Anything not listed (Yesterday, Tomorrow, ...) stays
 # stage-only by design — the model is lenient, these are KPIs not ledger data.
 _CANONICAL_PERIODS = {"DAY": "DAY", "Today": "DAY", "MONTH": "MTD", "MTD": "MTD",
-                      "YEAR": "YTD", "YTD": "YTD"}
+                      "YEAR": "YTD", "YTD": "YTD",
+                      # SkyTouch's Hotel Statistics: the night's own column, period
+                      # to date, and last year's — the prior-year flag tells the
+                      # two PTD/YTD columns apart. Without these a choiceADVANTAGE
+                      # hotel promoted only YTD, and its dashboard had no night.
+                      "ACTUAL": "DAY", "PTD": "MTD", "LY_PTD": "MTD", "LY_YTD": "YTD"}
 
 
 class MetricMapping(BaseModel):
