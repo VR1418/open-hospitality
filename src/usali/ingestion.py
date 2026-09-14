@@ -406,7 +406,7 @@ def _is_readable(words: list[Word], title: str | None) -> bool:
 
 
 # How a SkyTouch page header names its hotel:
-#   "Property Name: Rodeway Inn Date Range: 9/12/2026 - ... Property Code: NM236"
+#   "Property Name: Redstone Test Inn Business Date: 6/21/2026 Property Code: TEST1"
 _PRINTED_NAME = re.compile(r"PROPERTY NAME:\s*(.+?)\s+(?:BUSINESS DATE|DATE RANGE|PROPERTY CODE):")
 _PRINTED_CODE = re.compile(r"PROPERTY CODE:\s*([A-Z0-9-]+)")
 
@@ -414,7 +414,7 @@ _PRINTED_CODE = re.compile(r"PROPERTY CODE:\s*([A-Z0-9-]+)")
 def _unregistered_hotel_message(words: list[Word]) -> str:
     """Say which hotel a readable pack is for, so the owner can set it up.
 
-    The CODE is what to register by: a name like "Rodeway Inn" prints on many
+    The CODE is what to register by: a brand name like "Comfort Inn" prints on many
     hotels' reports, and a registry phrase that matched them all would file one
     hotel's figures under another. A code is unique to the property.
     """
