@@ -8,6 +8,7 @@ import { Fragment, useRef, useState } from 'react'
 
 import { postIngest } from '../api/client'
 import type { IngestReport, IngestResult } from '../api/types'
+import FoldersCard from '../components/FoldersCard'
 import { Card, PageHeader } from '../components/ui'
 import { errorMessage } from '../lib/errors'
 
@@ -121,6 +122,9 @@ export default function UploadPage() {
       {items.map((item) => (
         <ResultCard key={item.id} item={item} />
       ))}
+
+      {/* Desktop edition only: where read reports, and the saved ones, go. */}
+      <FoldersCard />
     </div>
   )
 }

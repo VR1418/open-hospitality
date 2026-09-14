@@ -257,3 +257,35 @@ def test_the_intake_reads_every_sample_report_including_packs(
         assert sos.total_operating_revenue > 0
     finally:
         serving.dispose()
+
+
+def test_every_night_read_saves_a_daily_summary_and_the_months_accountant_pack(
+    running: tuple[PgCluster, int, DesktopKeys, Path], tmp_path: Path,
+) -> None:
+    """Runs after the intake test above, on the books it filled. Asked for by
+    the owner: reports that save themselves as files."""
+    from openpyxl import load_workbook
+
+    from usali.desktop import saved_reports
+
+    _, port, keys, _ = running
+    serving = make_engine(app_url(port, keys))
+    sessions = OrgBoundSessionFactory(make_session_factory(serving), FOUNDING_ORG_ID)
+    root = tmp_path / "Saved reports"
+    try:
+        written = saved_reports.save_new(sessions, root)
+        # The Opera hotel's night of 7 July: a PDF for the day and the month's pack.
+        hotel = saved_reports.Hotel("HISJ", "Holiday Inn & Suites San Jose", None)
+        pdf = saved_reports.daily_summary_path(root, hotel, date(2026, 7, 7))
+        xlsx = saved_reports.accountant_pack_path(root, hotel, date(2026, 7, 7))
+        assert pdf in written and xlsx in written
+        assert pdf.parent == root / "HISJ – Holiday Inn & Suites San Jose" / "2026-07"
+        assert pdf.read_bytes().startswith(b"%PDF")
+        book = load_workbook(xlsx)
+        assert book.sheetnames == ["Summary", "Sales", "Taxes", "Ledgers"]
+        assert book["Summary"]["B3"].value == "HISJ"
+        assert book["Sales"].max_row > 2  # lines, then the total
+        # Nothing is written twice: the watermark moved past what was saved.
+        assert saved_reports.save_new(sessions, root) == []
+    finally:
+        serving.dispose()

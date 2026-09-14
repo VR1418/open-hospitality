@@ -86,6 +86,19 @@ those to us, they're the most useful thing you can report.
 Then open **Overview**: every hotel, last night's figures, and anything the
 audit turned up.
 
+**Reports save themselves.** After every night audit, the app writes two files
+for that hotel into **Documents › Open Hospitality › Saved reports › (hotel) ›
+(month)**:
+
+- **Daily summary (PDF):** rooms, occupancy, ADR, RevPAR and revenue for the
+  day, month and year, plus revenue by department, taxes and payments;
+- **Accountant pack (Excel):** the month so far (sales, taxes, and the guest,
+  city and deposit ledgers), refreshed every night.
+
+**Where everything is:** Overview and **Add reports** both have a **Your report
+folders** card listing each folder, how many files it holds, and an **Open
+folder** button. The ◆ icon near the clock has **Show my saved reports** too.
+
 ## 5. Codes to confirm — the one job only you can do
 
 Your front-desk system labels every charge with a short code of its own.

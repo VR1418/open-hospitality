@@ -45,6 +45,8 @@ datas = [
     (str(ROOT / "NOTICE"), "."),
 ]
 datas += collect_data_files("pdfminer")  # font metrics + CMaps pdfplumber reads
+# The saved reports (usali.desktop.saved_reports): reportlab's font metrics.
+datas += collect_data_files("reportlab")
 # keyring finds its OS backends through entry points, which need the
 # package's metadata in the bundle (ADR-D5).
 datas += copy_metadata("keyring")

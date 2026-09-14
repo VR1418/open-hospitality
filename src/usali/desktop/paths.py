@@ -80,6 +80,12 @@ class DesktopPaths:
     def unreadable_folder(self) -> Path:
         return self.owner_root / "Reports we couldn't read"
 
+    @property
+    def saved_reports_folder(self) -> Path:
+        """Daily summaries and accountant packs the app writes itself
+        (usali.desktop.saved_reports)."""
+        return self.owner_root / "Saved reports"
+
     # -- the system folder ---------------------------------------------------
 
     @property
@@ -135,6 +141,7 @@ class DesktopPaths:
             self.drop_folder,
             self.read_folder,
             self.unreadable_folder,
+            self.saved_reports_folder,
             self.system_root,
             self.logs,
             self.uploads,

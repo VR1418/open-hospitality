@@ -262,3 +262,27 @@ def test_a_code_is_set_up_once_and_looks_like_a_code(world: World) -> None:
     assert again.status_code == 409 and "TX901" in again.json()["detail"]  # type: ignore[attr-defined]
     bad = world.post("/api/desktop/welcome/property", {**SIGNUP, "code": "TX 9/01!"})
     assert bad.status_code == 422 and "letters and numbers" in bad.json()["detail"]  # type: ignore[attr-defined]
+
+
+def test_the_folders_holding_the_reports_are_listed_and_can_be_opened(world: World) -> None:
+    """Asked for by the owner: "show which folder has all reports"."""
+    opened: list[object] = []
+    app = world.client.app
+    original = app.state.desktop_folders_reveal  # type: ignore[attr-defined]
+    app.state.desktop_folders_reveal = opened.append  # type: ignore[attr-defined]
+    try:
+        body = world.get("/api/desktop/folders").json()  # type: ignore[attr-defined]
+        ids = [f["id"] for f in body["folders"]]
+        # The app's own saved reports come first; then the report folders.
+        assert ids[:4] == ["saved", "drop", "read", "unreadable"]
+        saved = body["folders"][0]
+        assert saved["name"] == "Saved reports" and saved["path"].startswith(body["root"])
+        assert "accountant pack" in saved["what"]
+
+        assert world.post("/api/desktop/folders/saved/open").status_code == 204  # type: ignore[attr-defined]
+        assert [str(p) for p in opened] == [saved["path"]]
+        # Only the fixed folders, by name — never a path from the request.
+        assert world.post("/api/desktop/folders/..%2F..%2FWindows/open").status_code == 404  # type: ignore[attr-defined]
+    finally:
+        app.state.desktop_folders_reveal = original  # type: ignore[attr-defined]
+    assert world.client.get("/api/desktop/folders").status_code == 401

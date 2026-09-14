@@ -17,6 +17,7 @@ import {
   type PortfolioHotel,
   type TrendPoint,
 } from '../api/desktop'
+import FoldersCard from '../components/FoldersCard'
 import { barRampCss } from '../lib/chartBars'
 import {
   Badge,
@@ -312,6 +313,8 @@ export default function OverviewPage() {
           </div>
         )}
       </Card>
+
+      <FoldersCard only={['saved', 'read', 'unreadable']} />
 
       <section aria-label="Totals" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Metric

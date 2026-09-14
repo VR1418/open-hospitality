@@ -436,6 +436,33 @@ export type BackupStatus = {
   files: BackupFile[]
 }
 
+// --- The owner's folders (src/usali/desktop/folders_api.py) -----------------
+
+export type OwnerFolder = {
+  id: string
+  name: string
+  path: string
+  /** What it holds, in the owner's words. */
+  what: string
+  files: number
+}
+
+export type OwnerFolders = { root: string; folders: OwnerFolder[] }
+
+/** Null outside the desktop edition, where there are no folders to show. */
+export async function getFolders(): Promise<OwnerFolders | null> {
+  const res = await fetch('/api/desktop/folders', { headers: await authHeaders() })
+  if (res.status === 404) return null
+  if (res.status === 401) redirectToLogin()
+  if (!res.ok) throw new Error(await detail(res))
+  return (await res.json()) as OwnerFolders
+}
+
+/** Opens the folder in File Explorer, on this computer. */
+export async function openFolder(id: string): Promise<void> {
+  await signedIn(`/api/desktop/folders/${encodeURIComponent(id)}/open`, { method: 'POST' })
+}
+
 export async function getBackupStatus(): Promise<BackupStatus | null> {
   const res = await fetch('/api/desktop/backup', { headers: await authHeaders() })
   if (res.status === 404) return null

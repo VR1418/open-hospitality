@@ -34,6 +34,7 @@ from usali.desktop import (
     ai_api,
     backup_api,
     codes_api,
+    folders_api,
     modules_api,
     portfolio_api,
     session_api,
@@ -56,6 +57,7 @@ from usali.desktop.identity import DesktopUser, LocalIssuer
 from usali.desktop.intake import ReportIntake
 from usali.desktop.modules import mount_predicate, resolve
 from usali.desktop.paths import DesktopPaths
+from usali.desktop.saved_reports import SavedReports
 from usali.desktop.window import SingleInstance, ensure_shortcuts, open_window
 from usali.desktop.pg_runtime import (
     PgCluster,
@@ -184,6 +186,7 @@ def build_app(
     if "ai" in enabled:
         ai_api.install(app, paths=paths, store=store or MemoryKeyStore())
     update_api.install(app)
+    folders_api.install(app, paths=paths)
     backup_api.install(app, paths=paths, store=store or MemoryKeyStore(), sessions=sessions)
     if dist.is_dir():
         app.mount("/", _SpaStaticFiles(directory=dist, html=True), name="spa")
@@ -313,7 +316,10 @@ def _icon_image() -> Any:
     return big.resize((size, size), Image.Resampling.LANCZOS)
 
 
-def _run_tray(open_books: Callable[[], None], show_reports: Callable[[], None]) -> bool:
+def _run_tray(
+    open_books: Callable[[], None], show_reports: Callable[[], None],
+    show_saved: Callable[[], None],
+) -> bool:
     """Blocks until Quit. False when no tray library is installed."""
     try:
         import pystray  # type: ignore[import-untyped]  # LGPL-3.0; see NOTICE
@@ -322,6 +328,7 @@ def _run_tray(open_books: Callable[[], None], show_reports: Callable[[], None]) 
     menu = pystray.Menu(
         pystray.MenuItem("Open my books", lambda: open_books(), default=True),
         pystray.MenuItem("Show my reports folder", lambda: show_reports()),
+        pystray.MenuItem("Show my saved reports", lambda: show_saved()),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit Open Hospitality", lambda icon: icon.stop()),
     )
@@ -465,6 +472,12 @@ def _serve(
             unreadable_folder=paths.unreadable_folder,
         )
         intake.start()
+        # Every night read becomes a daily summary PDF and the month's
+        # accountant pack, whichever way the report arrived.
+        saved = SavedReports(
+            OrgBoundSessionFactory(serving_sessions, FOUNDING_ORG_ID), paths.saved_reports_folder
+        )
+        saved.start()
 
         base_url = f"http://127.0.0.1:{api_port}"
 
@@ -488,9 +501,13 @@ def _serve(
             target=ensure_shortcuts, args=(paths.system_root,), name="shortcuts", daemon=True
         ).start()
         try:
-            if args.no_tray or not _run_tray(open_books, lambda: _reveal(paths.owner_root)):
+            if args.no_tray or not _run_tray(
+                open_books, lambda: _reveal(paths.owner_root),
+                lambda: _reveal(paths.saved_reports_folder),
+            ):
                 _run_console(base_url)
         finally:
+            saved.stop()
             intake.stop()
             portal.stop()
             serving_engine.dispose()
