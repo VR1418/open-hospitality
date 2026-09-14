@@ -20,6 +20,47 @@ of a real profit and loss).
 
 ---
 
+## Update, 13 September (evening)
+
+Built since the morning, all on `desktop/m1`, each with its own tests:
+
+| | |
+|---|---|
+| **Upload** | A pack for a hotel not set up yet says which hotel to add, by code. |
+| **Setup** | Ownership entity, hotel name, hotel code, state; rooms read from the first audit. |
+| **AI helper** | A service picked by name, the model from a list with prices, "Check it works". |
+| **Own window, icon, uninstall** | Edge app mode; Desktop and Start menu icons; one copy at a time; Settings › Apps uninstall that keeps the books unless told otherwise. |
+| **Saved reports** | A daily summary PDF and the month's accountant pack (Excel) after every audit; a folders card that opens each folder. |
+| **AI memory** | Notes an Obsidian vault opens; reading guides the model is given; layouts learned from confirmed readings, replayed with no model call. |
+| **Schedule** | Standard shifts, "until done", everything editable, times as people say them, copy a week, printable. |
+| **Reports by email** | The built-in IMAP client on the owner's schedule; senders allowed one by one. |
+| **Bank and card** | Statement CSVs checked against the audits' settlements (fee rate learned from the statement), card purchases sorted with the merchant remembered. |
+| **Demo world and the walk** | Three hotels, thirty staff, ninety audits, statements that line up; `scripts/desktop/e2e.py` walks the real app end to end — **18 of 18 steps** on this checkout — and `check.py` runs it as its ninth check. |
+
+The walk found three bugs no layer's tests had: a posted day could not be
+restated (facts are referenced by journal lines — now re-classified in
+place), the hours projection was a 500 for any hotel made by the wizard (no
+wage jurisdiction — the wizard now asks the state), and the bank matcher
+picked wrong nights when thirty nights looked alike (it now learns the
+processor's fee rate from the statement).
+
+**Not shipped to the tester yet, on purpose:** the owner's decision is to ship
+once the full testing is done — the packaged build's own walk and the nine
+checks — not before.
+
+Still open, in the order they matter:
+
+1. **Signing** (money, then an afternoon) — unchanged below.
+2. **Email against a real mailbox.** Tested only with a stand-in; the first
+   real Gmail app password will be the real test.
+3. **Timecard approval across a period boundary** — the walk can only show
+   the refusal ("period still running"); approving needs punches from a
+   closed period.
+4. **OPERA has no cash code** in its dictionary, so an OPERA hotel's cash
+   deposits stay unmatched. Needs a real OPERA trial balance with cash on it.
+5. **The printed rota** is styled but has not been looked at on paper.
+6. **CI still does not dispatch** on GitHub — the account-level question below.
+
 ## 1. Get the current build to the tester — *hours*
 
 The zip they are running predates **fifteen commits**, including the fix for
