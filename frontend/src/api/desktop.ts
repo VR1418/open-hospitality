@@ -601,6 +601,44 @@ export type AiSettings = {
   local: boolean
   spend: AiSpend
   providers: AiProviderChoice[]
+  /** Which of `services` the saved choice is; null until set up. */
+  service: string | null
+  services: AiService[]
+}
+
+/** A service the owner recognises, and what it fixes for them. */
+export type AiService = {
+  id: string
+  name: string
+  provider: string
+  base_url: string | null
+  address_editable: boolean
+  needs_key: boolean
+  key_hint: string
+  lists_models: boolean
+}
+
+export type AiModel = {
+  id: string
+  name: string
+  maker: string
+  price_in: string | null
+  price_out: string | null
+}
+
+export type AiModels = {
+  models: AiModel[]
+  /** False when OpenRouter's public list couldn't be reached and this is
+   *  the short built-in one, with no prices. */
+  live: boolean
+  recommended: string | null
+}
+
+export type AiConnectionCheck = {
+  model: string
+  said: string
+  estimated_cost: string | null
+  spend: AiSpend
 }
 
 export type AiSettingsIn = {
@@ -645,6 +683,16 @@ export async function saveAiSettings(body: AiSettingsIn): Promise<AiSettings> {
     body: JSON.stringify(body),
   })
   return (await res.json()) as AiSettings
+}
+
+export async function getAiModels(service: string): Promise<AiModels> {
+  const res = await signedIn(`/api/desktop/ai/models?service=${encodeURIComponent(service)}`)
+  return (await res.json()) as AiModels
+}
+
+export async function checkAiConnection(): Promise<AiConnectionCheck> {
+  const res = await signedIn('/api/desktop/ai/test', { method: 'POST' })
+  return (await res.json()) as AiConnectionCheck
 }
 
 export async function forgetAiKey(): Promise<void> {

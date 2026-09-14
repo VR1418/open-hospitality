@@ -13,6 +13,7 @@ person's click, which goes through the same endpoint their own choice does.
 from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -457,3 +458,31 @@ def test_something_that_is_not_a_pdf_is_refused_before_anything_is_asked(
     )
     assert r.status_code == 422 and "isn't a PDF" in r.json()["detail"]
     assert len(world.calls()) == before, "nothing was asked, so nothing was charged"
+
+
+def test_the_services_are_offered_and_a_saved_choice_names_its_own(world: World) -> None:
+    world.use_mock()
+    body = world.get("/api/desktop/ai").json()  # type: ignore[attr-defined]
+    ids = [s["id"] for s in body["services"]]
+    assert ids[0] == "openrouter" and {"anthropic", "local", "mock"} <= set(ids)
+    assert body["service"] == "mock"
+    unknown = world.get("/api/desktop/ai/models?service=some-startup")
+    assert unknown.status_code == 404  # type: ignore[attr-defined]
+
+
+def test_checking_the_connection_asks_one_fixed_question_and_records_it(world: World) -> None:
+    from usali.desktop.ai.client import PURPOSE_TEST, TEST_PROMPT
+
+    world.use_mock()
+    before = world.get("/api/desktop/ai").json()["spend"]["calls"]  # type: ignore[attr-defined]
+    r = world.post("/api/desktop/ai/test", None)
+    assert r.status_code == 200, r.text  # type: ignore[attr-defined]
+    assert r.json()["model"] == "practice"  # type: ignore[attr-defined]
+    # It costs a question like any other, and the record says what it was.
+    assert r.json()["spend"]["calls"] == before + 1  # type: ignore[attr-defined]
+    with world.sessions() as s:  # type: ignore[operator]
+        purpose, prompt_hash = s.execute(text(
+            "SELECT purpose, payload_sha256 FROM desktop.ai_call ORDER BY call_id DESC LIMIT 1"
+        )).one()
+    assert purpose == PURPOSE_TEST
+    assert prompt_hash == sha256(TEST_PROMPT.encode()).hexdigest()

@@ -41,6 +41,13 @@ from usali.models import AuditEvent
 
 PURPOSE_CLASSIFY = "classify_code"
 PURPOSE_READ = "read_report"
+PURPOSE_TEST = "connection_test"
+
+_NO_KEY = "Your AI helper has no key saved on this computer. Add it in AI settings."
+
+#: The whole of what a connection check sends. Fixed, and about nothing: the
+#: owner is checking the key and the model name, not asking a question.
+TEST_PROMPT = "This is a connection check from Open Hospitality. Reply with the single word OK."
 
 
 @dataclass(frozen=True)
@@ -84,6 +91,7 @@ def _record_and_commit(
     prompt: str,
     outcome: str,
     message: str,
+    purpose: str = PURPOSE_CLASSIFY,
 ) -> None:
     """Keep the record of a call that ended badly, and nothing else.
 
@@ -95,11 +103,22 @@ def _record_and_commit(
     session.rollback()
     spend.record(
         session, actor_subject=actor_subject, provider=settings.provider or "?",
-        model=settings.model, purpose=PURPOSE_CLASSIFY, property_id=property_id,
+        model=settings.model, purpose=purpose, property_id=property_id,
         usage=Usage(None, None), prices=settings.prices, prompt=prompt,
         outcome=outcome, message=message,
     )
     session.commit()
+
+
+def _key(settings: config.AiSettings, store: KeyStore, sealed: Path, missing: str) -> str:
+    """The saved key, or "" where none is needed: practice mode, and a model
+    on this computer (Ollama and LM Studio ignore it)."""
+    found = config.read_key(store, sealed)
+    if settings.provider == "mock" or settings.prices.local:
+        return found or ""
+    if not found:
+        raise NotConfigured(missing)
+    return found
 
 
 def suggest_line_for_code(
@@ -118,14 +137,7 @@ def suggest_line_for_code(
         raise NotConfigured(
             "No AI helper is set up yet. Choose one in AI settings first."
         )
-    key = ""
-    if settings.provider != "mock":
-        found = config.read_key(store, sealed)
-        if not found:
-            raise NotConfigured(
-                "Your AI helper has no key saved on this computer. Add it in AI settings."
-            )
-        key = found
+    key = _key(settings, store, sealed, _NO_KEY)
 
     spend.check(spend.this_month(session, cap=settings.cap, max_calls=settings.max_calls))
 
@@ -220,14 +232,7 @@ def read_report(
     settings = config.read(session)
     if not settings.ready or settings.provider is None:
         raise NotConfigured("No AI helper is set up yet. Choose one in AI settings first.")
-    key = ""
-    if settings.provider != "mock":
-        found = config.read_key(store, sealed)
-        if not found:
-            raise NotConfigured(
-                "Your AI helper has no key saved on this computer. Add it in AI settings."
-            )
-        key = found
+    key = _key(settings, store, sealed, _NO_KEY)
 
     spend.check(spend.this_month(session, cap=settings.cap, max_calls=settings.max_calls))
 
@@ -283,4 +288,53 @@ def read_report(
         held_back=reading.held_back,
         estimated_cost=cost,
         model=settings.model,
+    )
+
+
+@dataclass(frozen=True)
+class ConnectionCheck:
+    model: str
+    #: The first few words it said — enough to see it answered.
+    said: str
+    estimated_cost: Decimal | None
+
+
+def test_connection(
+    session: Session,
+    *,
+    store: KeyStore,
+    sealed: Path,
+    actor_subject: str,
+    adapter: Adapter | None = None,
+) -> ConnectionCheck:
+    """Ask the saved helper one fixed, content-free question.
+
+    The same gates as any call — set up, key present, under the cap — and the
+    same record afterwards, because it costs the owner money like any other
+    (AI-2, AI-5). What it proves is what setup cannot: that the service
+    accepts this key and knows this model's name.
+    """
+    settings = config.read(session)
+    if not settings.ready or settings.provider is None:
+        raise NotConfigured("Save a helper and a model first, then check it.")
+    key = _key(settings, store, sealed, "There is no key saved on this computer yet.")
+    spend.check(spend.this_month(session, cap=settings.cap, max_calls=settings.max_calls))
+
+    use = adapter or adapter_for(settings.provider)
+    provider = Provider(kind=settings.provider, model=settings.model, base_url=settings.base_url)
+    try:
+        text, usage = _said(use.ask(provider=provider, key=key, prompt=TEST_PROMPT))
+    except AiError as failed:
+        _record_and_commit(
+            session, settings=settings, actor_subject=actor_subject, property_id=None,
+            prompt=TEST_PROMPT, outcome="failed", message=str(failed), purpose=PURPOSE_TEST,
+        )
+        raise
+    cost = spend.record(
+        session, actor_subject=actor_subject, provider=settings.provider,
+        model=settings.model, purpose=PURPOSE_TEST, property_id=None, usage=usage,
+        prices=settings.prices, prompt=TEST_PROMPT, outcome="answered",
+    )
+    return ConnectionCheck(
+        model=settings.model, said=" ".join(text.split())[:60], estimated_cost=cost
     )

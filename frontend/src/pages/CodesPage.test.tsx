@@ -71,6 +71,8 @@ const AI_ON: AiSettings = {
     cap: '10.00', max_calls: 500, stopped: false,
   },
   providers: [],
+  service: 'mock',
+  services: [],
 }
 
 const SUGGESTED: AiSuggestion = {

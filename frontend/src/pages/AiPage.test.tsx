@@ -8,15 +8,52 @@ vi.mock('../api/desktop', async (importOriginal) => ({
   getAiSettings: vi.fn(),
   saveAiSettings: vi.fn(),
   forgetAiKey: vi.fn(),
+  getAiModels: vi.fn(),
+  checkAiConnection: vi.fn(),
 }))
 
 import {
+  checkAiConnection,
   forgetAiKey,
+  getAiModels,
   getAiSettings,
   saveAiSettings,
+  type AiModels,
+  type AiService,
   type AiSettings,
 } from '../api/desktop'
 import AiPage from './AiPage'
+
+function svc(over: Partial<AiService> & { id: string }): AiService {
+  return {
+    name: over.id, provider: 'openai_compatible', base_url: null, address_editable: false,
+    needs_key: true, key_hint: 'Your key.', lists_models: false, ...over,
+  }
+}
+
+const SERVICES: AiService[] = [
+  svc({ id: 'openrouter', name: 'OpenRouter — one account for Claude, GPT, Gemini and more',
+        base_url: 'https://openrouter.ai/api/v1', lists_models: true,
+        key_hint: 'On openrouter.ai, open Keys and create one.' }),
+  svc({ id: 'anthropic', name: 'Anthropic (Claude) — directly', provider: 'anthropic',
+        lists_models: true }),
+  svc({ id: 'local', name: 'A model on this computer (Ollama or LM Studio)',
+        base_url: 'http://localhost:11434/v1', address_editable: true, needs_key: false }),
+  svc({ id: 'mock', name: 'Practice mode', provider: 'mock', needs_key: false }),
+]
+
+const OPENROUTER_MODELS: AiModels = {
+  live: true,
+  recommended: 'anthropic/claude-sonnet-5',
+  models: [
+    { id: 'anthropic/claude-sonnet-5', name: 'Claude Sonnet 5', maker: 'Anthropic (Claude)',
+      price_in: '2.00', price_out: '10.00' },
+    { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5', maker: 'Anthropic (Claude)',
+      price_in: '1.00', price_out: '5.00' },
+    { id: 'openai/gpt-5.6-sol', name: 'GPT-5.6 Sol', maker: 'OpenAI (GPT)',
+      price_in: '2.00', price_out: '10.00' },
+  ],
+}
 
 const SETTINGS: AiSettings = {
   provider: 'anthropic',
@@ -39,6 +76,8 @@ const SETTINGS: AiSettings = {
     { id: 'mock', name: 'Practice mode (answers offline, costs nothing)',
       needs_address: false, needs_key: false },
   ],
+  service: 'anthropic',
+  services: SERVICES,
 }
 
 function renderPage() {
@@ -55,6 +94,98 @@ describe('AiPage', () => {
     vi.mocked(getAiSettings).mockReset().mockResolvedValue(SETTINGS)
     vi.mocked(saveAiSettings).mockReset().mockResolvedValue(SETTINGS)
     vi.mocked(forgetAiKey).mockReset().mockResolvedValue(undefined)
+    vi.mocked(getAiModels).mockReset().mockImplementation(async (service) =>
+      service === 'openrouter'
+        ? OPENROUTER_MODELS
+        : {
+            live: true,
+            recommended: 'claude-test',
+            models: [{ id: 'claude-test', name: 'Claude Test', maker: 'Anthropic (Claude)',
+                       price_in: '2.00', price_out: '10.00' }],
+          },
+    )
+    vi.mocked(checkAiConnection).mockReset().mockResolvedValue({
+      model: 'claude-test', said: 'OK', estimated_cost: '0.0001', spend: SETTINGS.spend,
+    })
+  })
+
+  it('an OpenRouter owner picks Claude from a list, and its address and price fill themselves', async () => {
+    // Reported: the owner had an OpenRouter key and no idea how to choose
+    // Anthropic's model on it.
+    vi.mocked(getAiSettings).mockResolvedValue({
+      ...SETTINGS, provider: null, model: '', service: null, key_saved: false,
+    })
+    renderPage()
+    await userEvent.selectOptions(
+      await screen.findByLabelText(/Who you have an account with/), 'openrouter',
+    )
+    const pick = await screen.findByLabelText('Which model')
+    await waitFor(() =>
+      expect(within(pick).getByText(/Claude Sonnet 5 \(recommended\)/)).toBeInTheDocument(),
+    )
+    // Grouped by maker, with the price on the line.
+    expect(within(pick).getByRole('group', { name: 'Anthropic (Claude)' })).toBeInTheDocument()
+    expect(within(pick).getAllByText(/\$2\.00 in \/ \$10\.00 out per million/).length).toBeGreaterThan(0)
+    // No web address to type for a hosted service, and where the key comes from.
+    expect(screen.queryByLabelText(/web address/)).toBeNull()
+    expect(screen.getByText(/On openrouter.ai, open Keys/)).toBeInTheDocument()
+
+    await userEvent.selectOptions(pick, 'anthropic/claude-sonnet-5')
+    await userEvent.type(screen.getByLabelText(/The key your provider gave you/), 'sk-or-typed')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(saveAiSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'openai_compatible',
+          base_url: 'https://openrouter.ai/api/v1',
+          model: 'anthropic/claude-sonnet-5',
+          price_in: '2.00',
+          price_out: '10.00',
+          key: 'sk-or-typed',
+        }),
+      ),
+    )
+  })
+
+  it('a model that is not listed can still be typed', async () => {
+    vi.mocked(getAiSettings).mockResolvedValue({
+      ...SETTINGS, service: null, provider: null, model: '',
+    })
+    renderPage()
+    await userEvent.selectOptions(
+      await screen.findByLabelText(/Who you have an account with/), 'openrouter',
+    )
+    const pick = await screen.findByLabelText('Which model')
+    await waitFor(() => expect(pick).toBeEnabled())
+    await userEvent.selectOptions(pick, '__typed__')
+    await userEvent.type(screen.getByLabelText(/The model’s name/), 'meta/llama-9')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(saveAiSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'meta/llama-9', price_in: null, price_out: null }),
+      ),
+    )
+  })
+
+  it('says when the up-to-date list could not be reached', async () => {
+    vi.mocked(getAiModels).mockResolvedValue({ ...OPENROUTER_MODELS, live: false })
+    renderPage()
+    expect(await screen.findByText(/couldn’t reach the up-to-date list/)).toBeInTheDocument()
+  })
+
+  it('checks the saved helper really answers, and says what that cost', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Check it works' }))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      /It works — claude-test answered “OK”.*about \$0\.0001/,
+    )
+  })
+
+  it('shows why the check failed, in the service’s words', async () => {
+    vi.mocked(checkAiConnection).mockRejectedValue(new Error('The service refused the key.'))
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: 'Check it works' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('refused the key')
   })
 
   it('shows what it has cost this month against the limit (AI-3)', async () => {
@@ -132,14 +263,13 @@ describe('AiPage', () => {
 
   it('an address is asked for only by the helper that needs one', async () => {
     renderPage()
-    await screen.findByLabelText(/Which model/)
+    await screen.findByLabelText('Which model')
     expect(screen.queryByLabelText(/web address/)).toBeNull()
-    await userEvent.selectOptions(
-      screen.getByLabelText(/Who you have an account with/),
-      'openai_compatible',
-    )
+    await userEvent.selectOptions(screen.getByLabelText(/Who you have an account with/), 'local')
     expect(await screen.findByLabelText(/web address/)).toBeInTheDocument()
     expect(screen.getByText(/localhost:11434/)).toBeInTheDocument()
+    // A model on this computer needs no key.
+    expect(screen.queryByLabelText(/The key your provider gave you/)).toBeNull()
   })
 
   it('the owner can make it forget the key', async () => {

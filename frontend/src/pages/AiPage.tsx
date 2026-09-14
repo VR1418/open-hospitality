@@ -11,9 +11,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 
 import {
+  checkAiConnection,
   forgetAiKey,
+  getAiModels,
   getAiSettings,
   saveAiSettings,
+  type AiModel,
   type AiSettings,
   type AiSpend,
 } from '../api/desktop'
@@ -26,6 +29,8 @@ const buttonClass =
 const primaryButtonClass =
   'rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
 const fieldClass = 'flex flex-col gap-1 text-sm'
+/** The model picker's "type it yourself" choice. */
+const TYPED = '__typed__'
 const labelClass = 'text-xs font-medium text-ink-muted'
 
 function SpendCard({ spend, local }: { spend: AiSpend; local: boolean }) {
@@ -72,26 +77,129 @@ function SpendCard({ spend, local }: { spend: AiSpend; local: boolean }) {
   )
 }
 
+function ModelPicker({
+  models,
+  live,
+  loading,
+  recommended,
+  value,
+  typing,
+  onPick,
+  onType,
+}: {
+  models: AiModel[]
+  live: boolean
+  loading: boolean
+  recommended: string | null
+  value: string
+  typing: boolean
+  onPick: (m: AiModel | null) => void
+  onType: (model: string) => void
+}) {
+  const listed = models.some((m) => m.id === value)
+  const selected = typing || (value !== '' && !listed && !loading) ? TYPED : value
+  const makers = [...new Set(models.map((m) => m.maker))]
+  const price = (m: AiModel) =>
+    m.price_in !== null && m.price_out !== null
+      ? ` — $${Number(m.price_in).toFixed(2)} in / $${Number(m.price_out).toFixed(2)} out per million`
+      : ''
+  return (
+    <div className="flex flex-col gap-2">
+      <label className={fieldClass} htmlFor="ai-model-pick">
+        <span className={labelClass}>Which model</span>
+        <select
+          id="ai-model-pick"
+          className={controlClass}
+          value={selected}
+          disabled={loading}
+          onChange={(e) =>
+            onPick(
+              e.target.value === TYPED
+                ? null
+                : (models.find((m) => m.id === e.target.value) ?? null),
+            )
+          }
+        >
+          <option value="" disabled>
+            {loading ? 'Loading the list…' : 'Choose a model'}
+          </option>
+          {makers.map((maker) => (
+            <optgroup key={maker || 'models'} label={maker || 'Models'}>
+              {models
+                .filter((m) => m.maker === maker)
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                    {m.id === recommended ? ' (recommended)' : ''}
+                    {price(m)}
+                  </option>
+                ))}
+            </optgroup>
+          ))}
+          <option value={TYPED}>Another model — type its name</option>
+        </select>
+        {!live && (
+          <span className="text-xs text-ink-muted">
+            We couldn’t reach the up-to-date list, so this is a short one without prices.
+          </span>
+        )}
+      </label>
+      {selected === TYPED && (
+        <label className={fieldClass} htmlFor="ai-model">
+          <span className={labelClass}>The model’s name, exactly as the service writes it</span>
+          <input
+            id="ai-model"
+            className={controlClass}
+            value={value}
+            onChange={(e) => onType(e.target.value)}
+          />
+        </label>
+      )}
+    </div>
+  )
+}
+
 export default function AiPage() {
   const queryClient = useQueryClient()
   const ai = useQuery({ queryKey: ['ai'], queryFn: getAiSettings, retry: false })
   const [form, setForm] = useState<Partial<AiSettings> & { key?: string }>({})
   const [saved, setSaved] = useState(false)
+  const [typing, setTyping] = useState(false)
+
+  const check = useMutation({
+    mutationFn: checkAiConnection,
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ['ai'] }),
+  })
 
   const settings = ai.data
   const value = <K extends keyof AiSettings>(field: K): AiSettings[K] | undefined =>
     (form[field] as AiSettings[K] | undefined) ?? settings?.[field]
   const set = (patch: Partial<AiSettings> & { key?: string }) => {
     setSaved(false)
+    check.reset()
     setForm({ ...form, ...patch })
   }
+
+  const serviceId = value('service') ?? null
+  const service = settings?.services.find((x) => x.id === serviceId)
+  const models = useQuery({
+    queryKey: ['ai-models', serviceId],
+    queryFn: () => getAiModels(serviceId as string),
+    enabled: service?.lists_models === true,
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  })
 
   const save = useMutation({
     mutationFn: () =>
       saveAiSettings({
-        provider: String(value('provider') ?? ''),
+        // The service decides the adapter and, for hosted ones, the address:
+        // the owner never types either.
+        provider: service?.provider ?? String(value('provider') ?? ''),
         model: String(value('model') ?? ''),
-        base_url: value('base_url') ?? null,
+        base_url: service?.address_editable
+          ? (value('base_url') ?? service.base_url)
+          : (service?.base_url ?? value('base_url') ?? null),
         cap: String(value('cap') ?? '10.00'),
         max_calls: Number(value('max_calls') ?? 500),
         price_in: value('price_in') ?? null,
@@ -137,7 +245,6 @@ export default function AiPage() {
     )
   }
 
-  const chosen = settings.providers.find((p) => p.id === value('provider'))
   const submit = (e: FormEvent) => {
     e.preventDefault()
     save.mutate()
@@ -157,53 +264,92 @@ export default function AiPage() {
           <section aria-label="Your helper" className="flex flex-col gap-4">
             <h2 className={sectionHeadClass}>Your helper</h2>
 
-            <label className={fieldClass} htmlFor="ai-provider">
+            <label className={fieldClass} htmlFor="ai-service">
               <span className={labelClass}>Who you have an account with</span>
               <select
-                id="ai-provider"
+                id="ai-service"
                 className={controlClass}
-                value={value('provider') ?? ''}
-                onChange={(e) => set({ provider: e.target.value })}
+                value={serviceId ?? ''}
+                onChange={(e) => {
+                  const next = settings.services.find((x) => x.id === e.target.value)
+                  setTyping(false)
+                  set({
+                    service: e.target.value,
+                    provider: next?.provider ?? null,
+                    base_url: next?.base_url ?? null,
+                    model: next?.id === 'mock' ? 'practice' : '',
+                    price_in: null,
+                    price_out: null,
+                  })
+                }}
               >
                 <option value="" disabled>
                   Choose one
                 </option>
-                {settings.providers.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
+                {settings.services.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
                   </option>
                 ))}
               </select>
             </label>
 
-            <label className={fieldClass} htmlFor="ai-model">
-              <span className={labelClass}>Which model, exactly as they write it</span>
-              <input
-                id="ai-model"
-                className={controlClass}
-                value={value('model') ?? ''}
-                onChange={(e) => set({ model: e.target.value })}
+            {service?.lists_models && (
+              <ModelPicker
+                models={models.data?.models ?? []}
+                live={models.data?.live ?? true}
+                loading={models.isLoading}
+                recommended={models.data?.recommended ?? null}
+                value={String(value('model') ?? '')}
+                typing={typing}
+                onPick={(m) => {
+                  if (m === null) {
+                    setTyping(true)
+                    set({ model: '', price_in: null, price_out: null })
+                    return
+                  }
+                  setTyping(false)
+                  // A listed model brings its price, so the monthly limit
+                  // counts dollars from the first question.
+                  set({ model: m.id, price_in: m.price_in, price_out: m.price_out })
+                }}
+                onType={(model) => set({ model })}
               />
-            </label>
+            )}
 
-            {chosen?.needs_address && (
-              <label className={fieldClass} htmlFor="ai-address">
-                <span className={labelClass}>The web address their service answers on</span>
+            {service !== undefined && !service.lists_models && service.id !== 'mock' && (
+              <label className={fieldClass} htmlFor="ai-model">
+                <span className={labelClass}>Which model, exactly as the service writes it</span>
                 <input
-                  id="ai-address"
+                  id="ai-model"
                   className={controlClass}
-                  placeholder="https://openrouter.ai/api/v1"
-                  value={value('base_url') ?? ''}
-                  onChange={(e) => set({ base_url: e.target.value })}
+                  placeholder={service.id === 'local' ? 'llama3.1' : ''}
+                  value={value('model') ?? ''}
+                  onChange={(e) => set({ model: e.target.value })}
                 />
-                <span className="text-xs text-ink-muted">
-                  A model running on this computer goes here too — usually
-                  http://localhost:11434/v1. Nothing then leaves the building.
-                </span>
               </label>
             )}
 
-            {chosen?.needs_key && (
+            {service?.address_editable && (
+              <label className={fieldClass} htmlFor="ai-address">
+                <span className={labelClass}>The web address it answers on</span>
+                <input
+                  id="ai-address"
+                  className={controlClass}
+                  placeholder={service.base_url ?? 'https://…/v1'}
+                  value={value('base_url') ?? ''}
+                  onChange={(e) => set({ base_url: e.target.value })}
+                />
+                {service.id === 'local' && (
+                  <span className="text-xs text-ink-muted">
+                    Ollama answers on http://localhost:11434/v1 and LM Studio on
+                    http://localhost:1234/v1. Nothing then leaves the building.
+                  </span>
+                )}
+              </label>
+            )}
+
+            {service?.needs_key && (
               <label className={fieldClass} htmlFor="ai-key">
                 <span className={labelClass}>
                   The key your provider gave you
@@ -218,8 +364,8 @@ export default function AiPage() {
                   onChange={(e) => set({ key: e.target.value })}
                 />
                 <span className="text-xs text-ink-muted">
-                  It is kept in this computer’s password store, never in your books and never
-                  in a backup. We can’t show it back to you, and we never send it anywhere
+                  {service.key_hint} It is kept in this computer’s password store, never in
+                  your books and never in a backup. We can’t show it back to you, and we never send it anywhere
                   but your provider.
                 </span>
               </label>
@@ -290,10 +436,34 @@ export default function AiPage() {
             </p>
           )}
 
-          <div className="flex gap-2">
+          {check.isSuccess && (
+            <p role="status" className="text-sm text-ink">
+              It works — {check.data.model} answered
+              {check.data.said ? ` “${check.data.said}”` : ''}.
+              {check.data.estimated_cost !== null &&
+                ` That check cost about $${Number(check.data.estimated_cost).toFixed(4)}.`}
+            </p>
+          )}
+          {check.isError && (
+            <p role="alert" className="text-sm text-danger-red">
+              {errorMessage(check.error)}
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-2">
             <button type="submit" className={primaryButtonClass} disabled={save.isPending}>
               {save.isPending ? 'Saving…' : 'Save'}
             </button>
+            {settings.provider !== null && Object.keys(form).length === 0 && (
+              <button
+                type="button"
+                className={buttonClass}
+                disabled={check.isPending}
+                onClick={() => check.mutate()}
+              >
+                {check.isPending ? 'Checking…' : 'Check it works'}
+              </button>
+            )}
             {settings.key_saved && (
               <button
                 type="button"

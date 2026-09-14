@@ -3,6 +3,8 @@
     GET    /api/desktop/ai          what's set up, and what this month has cost
     PUT    /api/desktop/ai          choose a provider, a model, and the limits
     DELETE /api/desktop/ai/key      forget the key
+    GET    /api/desktop/ai/models   the models a service offers, with prices
+    POST   /api/desktop/ai/test     one fixed, content-free question to the saved helper
     POST   /api/desktop/ai/suggest  ask where one charge code belongs
 
 **No secret is ever returned.** The GET says whether a key is saved and
@@ -41,7 +43,7 @@ from usali.auth import (
     require_grants,
     require_operator,
 )
-from usali.desktop.ai import client, config, spend
+from usali.desktop.ai import catalog, client, config, spend
 from usali.desktop.ai.allowlist import BlockedContent, CodeQuestion, LineChoice
 from usali.desktop.ai.port import AiError, NotConfigured, SpendCapReached
 from usali.desktop.ai.report import OTHER_SOURCE, REPORT_TYPE
@@ -72,6 +74,31 @@ class ProviderChoice(BaseModel):
     needs_key: bool
 
 
+class ServiceOut(BaseModel):
+    id: str
+    name: str
+    provider: str
+    base_url: str | None
+    address_editable: bool
+    needs_key: bool
+    key_hint: str
+    lists_models: bool
+
+
+class ModelOut(BaseModel):
+    id: str
+    name: str
+    maker: str
+    price_in: str | None
+    price_out: str | None
+
+
+class ModelsOut(BaseModel):
+    models: list[ModelOut]
+    live: bool
+    recommended: str | None
+
+
 class SpendOut(BaseModel):
     month_start: str
     calls: int
@@ -97,6 +124,9 @@ class AiOut(BaseModel):
     local: bool
     spend: SpendOut
     providers: list[ProviderChoice]
+    #: Which of `services` the saved choice is; None when not set up.
+    service: str | None
+    services: list[ServiceOut]
 
 
 class AiIn(BaseModel):
@@ -189,6 +219,8 @@ def settings(request: Request, _: Principal = Depends(_owner)) -> AiOut:
                 spend.this_month(session, cap=got.cap, max_calls=got.max_calls)
             ),
             providers=_providers(),
+            service=catalog.infer_service(got),
+            services=[ServiceOut(**s.__dict__) for s in catalog.SERVICES],
         )
 
 
@@ -229,6 +261,56 @@ def save(body: AiIn, request: Request, _: Principal = Depends(_owner)) -> AiOut:
                 raise HTTPException(status_code=503, detail=str(exc)) from None
         session.commit()
     return settings(request)
+
+
+class TestOut(BaseModel):
+    model: str
+    said: str
+    estimated_cost: str | None
+    spend: SpendOut
+
+
+@router.get("/api/desktop/ai/models")
+def list_models(service: str, _: Principal = Depends(_owner)) -> ModelsOut:
+    """Nothing about the hotel and no key goes in this request — see
+    `catalog`. It lives here so the page never talks to a third party itself."""
+    if catalog.service(service) is None:
+        raise HTTPException(status_code=404, detail="That isn't a service we know.")
+    got = catalog.models(service)
+    return ModelsOut(
+        models=[
+            ModelOut(id=m.id, name=m.name, maker=m.maker,
+                     price_in=None if m.price_in is None else str(m.price_in),
+                     price_out=None if m.price_out is None else str(m.price_out))
+            for m in got.models
+        ],
+        live=got.live, recommended=got.recommended,
+    )
+
+
+@router.post("/api/desktop/ai/test")
+def check_connection(request: Request, principal: Principal = Depends(_owner)) -> TestOut:
+    with request_session_factory(request)() as session:
+        try:
+            checked = client.test_connection(
+                session, store=_store(request), sealed=_paths(request).sealed_keys_file,
+                actor_subject=principal.subject,
+            )
+        except SpendCapReached as stopped:
+            raise HTTPException(status_code=429, detail=str(stopped)) from None
+        except NotConfigured as missing:
+            raise HTTPException(status_code=409, detail=str(missing)) from None
+        except AiError as failed:
+            raise HTTPException(status_code=502, detail=str(failed)) from None
+        session.commit()
+        settings = config.read(session)
+        return TestOut(
+            model=checked.model, said=checked.said,
+            estimated_cost=None if checked.estimated_cost is None else str(checked.estimated_cost),
+            spend=_spend_out(
+                spend.this_month(session, cap=settings.cap, max_calls=settings.max_calls)
+            ),
+        )
 
 
 @router.delete("/api/desktop/ai/key", status_code=204)
