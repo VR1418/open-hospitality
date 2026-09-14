@@ -97,8 +97,12 @@ function ModelPicker({
   onType: (model: string) => void
 }) {
   const listed = models.some((m) => m.id === value)
-  const selected = typing || (value !== '' && !listed && !loading) ? TYPED : value
+  // A saved model that is not on the shortlist (an older one, or one from a
+  // maker not listed) stays selected under its own name rather than looking
+  // lost; "Another model" is only for typing a new one.
+  const selected = typing ? TYPED : value
   const makers = [...new Set(models.map((m) => m.maker))]
+  const current = value !== '' && !listed && !typing && !loading ? value : null
   const price = (m: AiModel) =>
     m.price_in !== null && m.price_out !== null
       ? ` — $${Number(m.price_in).toFixed(2)} in / $${Number(m.price_out).toFixed(2)} out per million`
@@ -123,6 +127,7 @@ function ModelPicker({
           <option value="" disabled>
             {loading ? 'Loading the list…' : 'Choose a model'}
           </option>
+          {current !== null && <option value={current}>{current} (your current choice)</option>}
           {makers.map((maker) => (
             <optgroup key={maker || 'models'} label={maker || 'Models'}>
               {models

@@ -168,6 +168,20 @@ describe('AiPage', () => {
     )
   })
 
+  it('keeps a saved model that is not on the shortlist as the current choice', async () => {
+    vi.mocked(getAiSettings).mockResolvedValue({
+      ...SETTINGS, service: 'openrouter', provider: 'openai_compatible',
+      base_url: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-4.5',
+    })
+    renderPage()
+    const pick = await screen.findByLabelText('Which model')
+    await waitFor(() => expect(pick).toBeEnabled())
+    expect(pick).toHaveValue('anthropic/claude-sonnet-4.5')
+    expect(within(pick).getByText(/claude-sonnet-4.5 \(your current choice\)/)).toBeInTheDocument()
+    // Not dropped into "type its name": the box for that is absent.
+    expect(screen.queryByLabelText(/The model’s name/)).toBeNull()
+  })
+
   it('says when the up-to-date list could not be reached', async () => {
     vi.mocked(getAiModels).mockResolvedValue({ ...OPENROUTER_MODELS, live: false })
     renderPage()
