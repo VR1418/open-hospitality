@@ -293,6 +293,26 @@ read two ways on two mornings. So the AI's job is to work out the recipe
 Two tables, both following the `mapping_decision` pattern already proven in
 Phase 1: keyed naturally, carrying who decided and when, never deleted.
 
+### Built (13 September 2026): what changed from the table above
+
+- **Fetch.** The built-in IMAP client (`usali.desktop.mail`), not Himalaya.
+  Himalaya is a separate binary to fetch, pin, ship and sign, wants the
+  password in its account file or in a command that prints it, and its OAuth
+  flows need an app registration no owner will do. `imaplib` does the one
+  thing needed — list new messages, take their PDFs, read-only — and the
+  password stays in the OS keychain. The mailbox is behind a port, so another
+  fetcher can be dropped in.
+- **When.** The owner chooses: every morning at a time, or every N hours. The
+  app looks in the background while it is running; "Look now" on the page.
+- **Whose hotel.** Not learned from the sender after all: every night audit
+  prints its hotel's name or code, and the intake already resolves it (and
+  says which hotel to add when it is not set up). The sender decides only
+  whether a report is TAKEN: senders the owner has allowed are read, anyone
+  else's PDFs are held and listed with an "Allow this sender" button.
+- **How to read it.** Learned recipes (step 3 above) apply to emailed reports
+  exactly as to dropped ones, because emailed reports go through the drop
+  folder.
+
 ### What this is not
 
 Email is a door into the machine. The mailbox is read-only, attachments are

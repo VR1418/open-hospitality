@@ -133,7 +133,7 @@ def delete_books(paths: DesktopPaths, store: KeyStore) -> None:
             logging.root.removeHandler(handler)
     iid = install_id(paths.sealed_keys_file)
     if iid is not None:
-        for name in (entry_name(iid), f"ai-key:{iid}"):
+        for name in (entry_name(iid), f"ai-key:{iid}", f"mail-password:{iid}"):
             try:
                 store.delete(name)
             except Exception:  # an entry already gone is what we want

@@ -35,6 +35,7 @@ from usali.desktop import (
     backup_api,
     codes_api,
     folders_api,
+    mail_api,
     modules_api,
     portfolio_api,
     rota_api,
@@ -43,6 +44,7 @@ from usali.desktop import (
     welcome_api,
 )
 from usali.desktop import backup
+from usali.desktop.mail import MailIntake
 from usali.desktop.accounts import LocalAccountAdmin, SessionFactory
 from usali.desktop.keystore import KeychainUnavailable, KeyStore, MemoryKeyStore, OsKeyStore, open_keys
 from usali.desktop.bootstrap import (
@@ -149,6 +151,8 @@ def build_app(
     # The keychain the accounts API arms backups through (ADR-D4). Tests that
     # are not about backups leave it out and get one that forgets.
     store: KeyStore | None = None,
+    # Reports by email (usali.desktop.mail). None in tests that are not about it.
+    mail_intake: MailIntake | None = None,
 ) -> FastAPI:
     # Upstream's own SPA static handler, reused rather than copied.
     from usali.server import _SpaStaticFiles, create_app
@@ -192,6 +196,7 @@ def build_app(
         ai_api.install(app, paths=paths, store=store or MemoryKeyStore())
     update_api.install(app)
     folders_api.install(app, paths=paths)
+    mail_api.install(app, paths=paths, store=store or MemoryKeyStore(), intake=mail_intake)
     backup_api.install(app, paths=paths, store=store or MemoryKeyStore(), sessions=sessions)
     if dist.is_dir():
         app.mount("/", _SpaStaticFiles(directory=dist, html=True), name="spa")
@@ -487,6 +492,12 @@ def _serve(
         checker = accounts_api.SessionChecker(serving_sessions)
         dist = resources / "frontend" / "dist-desktop"
 
+        # Reports by email land in the drop folder the intake below watches.
+        mail_intake = MailIntake(
+            OrgBoundSessionFactory(serving_sessions, FOUNDING_ORG_ID), paths.drop_folder,
+            store=store, sealed=paths.sealed_keys_file,
+        )
+
         def build() -> FastAPI:
             # Read on every (re)build: the stored choice is what gets mounted.
             with serving_sessions() as session:
@@ -495,6 +506,7 @@ def _serve(
             return build_app(
                 paths, issuer, codes, dist, enabled=enabled, reload=portal.reload,
                 sessions=serving_sessions, checker=checker, store=store,
+                mail_intake=mail_intake,
             )
 
         portal = _Portal(build, api_port)
@@ -509,6 +521,7 @@ def _serve(
             unreadable_folder=paths.unreadable_folder,
         )
         intake.start()
+        mail_intake.start()
         # Every night read becomes a daily summary PDF and the month's
         # accountant pack, whichever way the report arrived.
         saved = SavedReports(
@@ -560,6 +573,7 @@ def _serve(
             ):
                 _run_console(base_url, stopping)
         finally:
+            mail_intake.stop()
             memory.stop()
             saved.stop()
             intake.stop()

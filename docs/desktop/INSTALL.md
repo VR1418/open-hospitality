@@ -121,6 +121,28 @@ Expect ten or twenty minutes, once. It is the most useful thing you can do
 with this app, and the most useful thing you can report back on: **any code
 you could not work out yourself is worth telling us about.**
 
+## 5b. Reports by email, if your system emails them
+
+Most front-desk systems can email the night audit every morning. Open
+Hospitality can collect it from that mailbox so nobody has to drop a file:
+
+1. Open **Reports by email**. Choose the mail service (Gmail, Yahoo, iCloud,
+   or another IMAP service), type the address the reports go to, and the
+   password. For Gmail, Yahoo and iCloud that has to be an **app password**
+   — the page says where to make one. Microsoft 365 and Outlook.com no longer
+   let apps sign in this way; forward the reports to a Gmail address instead.
+2. Choose **when to look**: every morning at a time you pick (6 AM catches most
+   night audits), or every few hours. Tick **Collect reports from this
+   mailbox** and Save. Press **Check it connects**.
+3. Press **Look now**. The first look ends with “held: 1 sender” and lists the
+   address the reports come from. Press **Allow this sender**. Only senders
+   you allow are ever read; everything else stays untouched.
+
+Reports collected this way land in **Drop reports here** and are read like
+any other. The mailbox is opened read-only: nothing is marked read, moved or
+deleted, no email text is read, and no email is shown to the AI helper. Open
+Hospitality has to be running for a look to happen.
+
 ## 6. The AI helper, if you want it
 
 Off unless you turn it on, under **Modules**. It is the only part of the app

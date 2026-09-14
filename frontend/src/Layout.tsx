@@ -170,6 +170,7 @@ const SETTINGS: NavItem[] = [
   { to: '/backups', label: 'Backups', icon: FileIcon, desktopOnly: true },
   { to: '/updates', label: 'Updates', icon: SyncIcon, desktopOnly: true },
   { to: '/ai', label: 'AI helper', icon: SyncIcon, desktopOnly: true, show: isOrgAdmin },
+  { to: '/email', label: 'Reports by email', icon: SyncIcon, desktopOnly: true, show: isOrgAdmin },
   { to: '/modules', label: 'Modules', icon: GridIcon, desktopOnly: true },
   { to: '/integrations', label: 'Connections', icon: SyncIcon, show: isOrgAdmin },
   { to: '/coverage', label: 'Report codes', icon: CoverageIcon },

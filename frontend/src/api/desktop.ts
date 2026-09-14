@@ -512,6 +512,88 @@ export async function copyRotaWeek(body: {
   return (await res.json()) as RotaCopyResult
 }
 
+// --- Reports by email (src/usali/desktop/mail_api.py) ------------------------
+
+export type MailPreset = { id: string; name: string; host: string; port: number; hint: string }
+
+export type MailHeld = { sender: string; count: number; subjects: string[] }
+
+export type MailStatus = {
+  last_run_at: string | null
+  last_result: string | null
+  last_error: string | null
+  next_run_at: string | null
+  held: MailHeld[]
+  fetched: string[]
+}
+
+export type MailSettings = {
+  enabled: boolean
+  preset: string
+  host: string
+  port: number
+  username: string
+  folder: string
+  mode: string
+  at: string
+  every_hours: number
+  senders: string[]
+  /** Whether a password is saved on this computer. Never the password. */
+  password_saved: boolean
+  presets: MailPreset[]
+  status: MailStatus
+}
+
+export type MailSettingsIn = Omit<MailSettings, 'presets' | 'status' | 'password_saved'> & {
+  /** Only when setting or replacing it. Goes to the OS password store. */
+  password?: string
+}
+
+export type MailFetch = { fetched: number; held_senders: number; files: string[]; summary: string }
+
+/** Null outside the desktop edition. */
+export async function getMailSettings(): Promise<MailSettings | null> {
+  const res = await fetch('/api/desktop/mail', { headers: await authHeaders() })
+  if (res.status === 404) return null
+  if (res.status === 401) redirectToLogin()
+  if (!res.ok) throw new Error(await detail(res))
+  return (await res.json()) as MailSettings
+}
+
+export async function saveMailSettings(body: MailSettingsIn): Promise<MailSettings> {
+  const res = await signedIn('/api/desktop/mail', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return (await res.json()) as MailSettings
+}
+
+export async function forgetMailPassword(): Promise<void> {
+  await signedIn('/api/desktop/mail/password', { method: 'DELETE' })
+}
+
+/** Signs in and counts recent messages. Takes nothing. */
+export async function testMailConnection(): Promise<{ messages_seen: number; days: number }> {
+  const res = await signedIn('/api/desktop/mail/test', { method: 'POST' })
+  return (await res.json()) as { messages_seen: number; days: number }
+}
+
+export async function fetchMailNow(): Promise<MailFetch> {
+  const res = await signedIn('/api/desktop/mail/fetch', { method: 'POST' })
+  return (await res.json()) as MailFetch
+}
+
+/** Allow a held sender; what was held from them comes in straight away. */
+export async function allowMailSender(sender: string): Promise<MailFetch> {
+  const res = await signedIn('/api/desktop/mail/allow', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sender }),
+  })
+  return (await res.json()) as MailFetch
+}
+
 // --- The owner's folders (src/usali/desktop/folders_api.py) -----------------
 
 export type OwnerFolder = {

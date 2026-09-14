@@ -39,6 +39,7 @@ import AccountPage from './pages/AccountPage'
 import WelcomePage from './pages/WelcomePage'
 import OverviewPage from './pages/OverviewPage'
 import BackupsPage from './pages/BackupsPage'
+import EmailPage from './pages/EmailPage'
 import AiPage from './pages/AiPage'
 import CodesPage from './pages/CodesPage'
 import ReadWithAiPage from './pages/ReadWithAiPage'
@@ -377,6 +378,13 @@ const codesRoute = createRoute({
   component: CodesPage,
 })
 
+/** Desktop edition: night-audit reports collected from a mailbox. */
+const emailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/email',
+  component: EmailPage,
+})
+
 /** Desktop edition: backups (ADR-D4). */
 const backupsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -392,6 +400,7 @@ const childRoutes = [
   welcomeRoute,
   overviewRoute,
   backupsRoute,
+  emailRoute,
   codesRoute,
   aiRoute,
   readWithAiRoute,
