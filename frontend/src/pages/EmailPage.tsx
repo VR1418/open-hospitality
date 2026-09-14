@@ -12,7 +12,9 @@ import {
   fetchMailNow,
   forgetMailPassword,
   getMailSettings,
+  getStartup,
   saveMailSettings,
+  setStartup,
   testMailConnection,
   type MailSettings,
 } from '../api/desktop'
@@ -25,6 +27,35 @@ const primaryButtonClass =
   'rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-contrast hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
 const fieldClass = 'flex flex-col gap-1 text-sm'
 const labelClass = 'text-xs font-medium text-ink-muted'
+
+/** The steps for each mail service, in order. Nothing to install: the app
+ *  has its own mail reader built in. */
+const STEPS: Record<string, string[]> = {
+  gmail: [
+    'In Gmail, find the address your front-desk system sends the night audit to, or make one (reports@…).',
+    'Turn on 2-Step Verification: Google Account › Security › 2-Step Verification.',
+    'Make an app password: Google Account › Security › 2-Step Verification › App passwords. Name it "Open Hospitality" and copy the 16 letters.',
+    'Turn IMAP on: Gmail › Settings (gear) › See all settings › Forwarding and POP/IMAP › Enable IMAP › Save.',
+    'Below: choose Gmail, type the address, paste the app password, choose when to look, tick Collect, and Save.',
+    'Press "Check it connects", then "Look now". Allow the sender the reports come from when it appears above.',
+  ],
+  yahoo: [
+    'In Yahoo, go to Account Security › Generate app password. Name it "Open Hospitality" and copy it.',
+    'Below: choose Yahoo, type the address, paste the app password, choose when to look, tick Collect, and Save.',
+    'Press "Check it connects", then "Look now", and allow the sender the reports come from.',
+  ],
+  icloud: [
+    'At appleid.apple.com › Sign-In and Security › App-Specific Passwords, make one named "Open Hospitality" and copy it.',
+    'Below: choose iCloud, type the address, paste the password, choose when to look, tick Collect, and Save.',
+    'Press "Check it connects", then "Look now", and allow the sender the reports come from.',
+  ],
+  other: [
+    'Ask your mail provider for their IMAP server address and port (usually 993).',
+    'If they need an app password for mail programs, make one and use it here.',
+    'Below: choose Another mail service, type the server, port, address and password, choose when to look, tick Collect, and Save.',
+    'Microsoft 365 and Outlook.com no longer allow this kind of sign-in — have the reports forwarded to a Gmail address instead.',
+  ],
+}
 
 function when(iso: string | null): string {
   if (iso === null) return 'never'
@@ -89,6 +120,12 @@ export default function EmailPage() {
     onSettled: () => void refresh(),
   })
   const forget = useMutation({ mutationFn: forgetMailPassword, onSuccess: () => void refresh() })
+  const startup = useQuery({ queryKey: ['startup'], queryFn: getStartup, retry: false })
+  const startWithWindows = useMutation({
+    mutationFn: (enabled: boolean) => setStartup(enabled),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ['startup'] }),
+  })
+  const [showSteps, setShowSteps] = useState(false)
 
   if (settings === null) {
     return (
@@ -204,6 +241,27 @@ export default function EmailPage() {
         >
           <section aria-label="The mailbox" className="flex flex-col gap-4">
             <h2 className={sectionHeadClass}>The mailbox</h2>
+            <div className="rounded-lg border border-line bg-surface-sunken p-3">
+              <button
+                type="button"
+                className="text-sm font-medium text-accent underline"
+                aria-expanded={showSteps}
+                onClick={() => setShowSteps((v) => !v)}
+              >
+                {showSteps ? 'Hide the steps' : 'How to set this up, step by step'}
+              </button>
+              {showSteps && (
+                <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-ink" aria-label="Setup steps">
+                  {(STEPS[value('preset') ?? 'gmail'] ?? STEPS.gmail)!.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              )}
+              <p className="mt-2 text-xs text-ink-muted">
+                Nothing to install: Open Hospitality reads the mailbox itself. It only ever takes
+                PDF attachments, and only from senders you allow.
+              </p>
+            </div>
             <label className={fieldClass} htmlFor="mail-preset">
               <span className={labelClass}>Mail service</span>
               <select
@@ -350,8 +408,26 @@ export default function EmailPage() {
             </div>
             <p className="text-xs text-ink-muted">
               Night audits usually arrive between 3 and 5 in the morning, so 6 AM catches
-              them. Open Hospitality has to be running for a look to happen.
+              them. Open Hospitality has to be running for a look to happen — which is what
+              the switch below is for.
             </p>
+            {startup.data?.available && (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={startup.data.enabled}
+                  disabled={startWithWindows.isPending}
+                  onChange={(e) => startWithWindows.mutate(e.target.checked)}
+                  aria-label="Start Open Hospitality when Windows starts"
+                />
+                <span>
+                  Start Open Hospitality when Windows starts
+                  <span className="block text-xs text-ink-muted">
+                    So the morning look happens even if nobody has opened the app yet.
+                  </span>
+                </span>
+              </label>
+            )}
           </section>
 
           {save.isError && (

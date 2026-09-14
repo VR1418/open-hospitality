@@ -121,6 +121,14 @@ Expect ten or twenty minutes, once. It is the most useful thing you can do
 with this app, and the most useful thing you can report back on: **any code
 you could not work out yourself is worth telling us about.**
 
+## 4b. What's connected
+
+The Overview has a **What's connected** card: your hotels and their last
+report, the AI helper, reports by email, bank statements, backups, time
+clocks, and whether the app starts with Windows. Each says *Connected*, *Not
+set up* or *Needs attention*, with one line of why and a link to the page that
+fixes it. When something stops working, this is the place to look first.
+
 ## 5b. Reports by email, if your system emails them
 
 Most front-desk systems can email the night audit every morning. Open
@@ -138,10 +146,16 @@ Hospitality can collect it from that mailbox so nobody has to drop a file:
    address the reports come from. Press **Allow this sender**. Only senders
    you allow are ever read; everything else stays untouched.
 
+The page has a step-by-step walkthrough for each mail service (**How to set
+this up**), and nothing extra to install: Open Hospitality reads the mailbox
+itself.
+
 Reports collected this way land in **Drop reports here** and are read like
 any other. The mailbox is opened read-only: nothing is marked read, moved or
 deleted, no email text is read, and no email is shown to the AI helper. Open
-Hospitality has to be running for a look to happen.
+Hospitality has to be running for a look to happen — tick **Start Open
+Hospitality when Windows starts** on the same page so the morning look
+happens whether or not anyone has opened the app.
 
 ## 5c. Checking against your bank, and sorting the card
 

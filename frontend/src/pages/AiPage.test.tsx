@@ -65,6 +65,7 @@ const SETTINGS: AiSettings = {
   price_out: null,
   key_saved: true,
   local: false,
+  checked_at: '2026-09-13T21:02:00',
   spend: {
     month_start: '2026-06-01', calls: 12, estimated_cost: '0.34', unpriced_calls: 0,
     cap: '10.00', max_calls: 500, stopped: false,
@@ -186,6 +187,21 @@ describe('AiPage', () => {
     renderPage()
     await userEvent.click(await screen.findByRole('button', { name: 'Check it works' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('refused the key')
+  })
+
+  it('says whether the helper is connected, and when it was last checked', async () => {
+    renderPage()
+    const status = await screen.findByRole('region', { name: 'Connection' })
+    expect(within(status).getByText('Connected')).toBeInTheDocument()
+    expect(within(status).getByText(/claude-test via Anthropic \(Claude\)/)).toBeInTheDocument()
+    expect(within(status).getByText(/checked/)).toBeInTheDocument()
+  })
+
+  it('says a helper that was never checked is not yet known to work', async () => {
+    vi.mocked(getAiSettings).mockResolvedValue({ ...SETTINGS, checked_at: null })
+    renderPage()
+    const status = await screen.findByRole('region', { name: 'Connection' })
+    expect(within(status).getByText('Not checked yet')).toBeInTheDocument()
   })
 
   it('shows what it has cost this month against the limit (AI-3)', async () => {

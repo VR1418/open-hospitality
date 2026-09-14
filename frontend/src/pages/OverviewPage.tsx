@@ -17,6 +17,7 @@ import {
   type PortfolioHotel,
   type TrendPoint,
 } from '../api/desktop'
+import ConnectionsCard from '../components/ConnectionsCard'
 import FoldersCard from '../components/FoldersCard'
 import { barRampCss } from '../lib/chartBars'
 import {
@@ -255,6 +256,8 @@ export default function OverviewPage() {
           </p>
         </Card>
       )}
+
+      {canAdd && <ConnectionsCard />}
 
       <Card role="region" aria-label="Hotels">
         <h2 className={sectionHeadClass}>Hotels</h2>

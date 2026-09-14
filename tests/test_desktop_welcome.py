@@ -296,3 +296,22 @@ def test_the_folders_holding_the_reports_are_listed_and_can_be_opened(world: Wor
     finally:
         app.state.desktop_folders_reveal = original  # type: ignore[attr-defined]
     assert world.client.get("/api/desktop/folders").status_code == 401
+
+
+def test_what_is_connected_and_what_is_not_in_one_place(world: World) -> None:
+    """Asked for by the owner: "show what is connected and what is not"."""
+    body = world.get("/api/desktop/connections").json()  # type: ignore[attr-defined]
+    rows = {c["id"]: c for c in body["connections"]}
+    assert list(rows) == ["hotels", "ai", "email", "bank", "backups", "clocks", "startup"]
+    # A hotel with no reports yet is something to look at, and says which.
+    assert rows["hotels"]["state"] == "attention" and "no reports yet" in rows["hotels"]["detail"]
+    # The optional pieces say they are optional; the one that isn't nags.
+    assert rows["ai"]["state"] == "not_set_up" and "Optional" in rows["ai"]["detail"]
+    assert rows["email"]["state"] == "not_set_up" and rows["email"]["page"] == "/email"
+    assert rows["backups"]["state"] == "attention" and "No backup folder" in rows["backups"]["detail"]
+    assert rows["clocks"]["state"] == "not_set_up"
+    assert all(c["page"].startswith("/") for c in body["connections"])
+    # Not an installed copy here: starting with Windows can't be offered.
+    startup = world.get("/api/desktop/startup").json()  # type: ignore[attr-defined]
+    assert startup == {"enabled": False, "available": False}
+    assert world.client.get("/api/desktop/connections").status_code == 401

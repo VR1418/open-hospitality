@@ -11,12 +11,16 @@ vi.mock('../api/desktop', async (importOriginal) => ({
   fetchMailNow: vi.fn(),
   allowMailSender: vi.fn(),
   forgetMailPassword: vi.fn(),
+  getStartup: vi.fn(),
+  setStartup: vi.fn(),
 }))
 
 import {
   allowMailSender,
   fetchMailNow,
   getMailSettings,
+  getStartup,
+  setStartup,
   saveMailSettings,
   testMailConnection,
   type MailSettings,
@@ -67,6 +71,32 @@ describe('EmailPage', () => {
     vi.mocked(allowMailSender).mockReset().mockResolvedValue({
       fetched: 2, held_senders: 0, files: [], summary: '2 reports fetched.',
     })
+    vi.mocked(getStartup).mockReset().mockResolvedValue({ enabled: false, available: true })
+    vi.mocked(setStartup).mockReset().mockResolvedValue({ enabled: true, available: true })
+  })
+
+  it('walks through the steps for the chosen service, and says nothing needs installing', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByRole('button', { name: /How to set this up/ }))
+    const steps = screen.getByRole('list', { name: 'Setup steps' })
+    expect(within(steps).getAllByRole('listitem')).toHaveLength(6)
+    expect(within(steps).getByText(/App passwords/)).toBeInTheDocument()
+    expect(screen.getByText(/Nothing to install/)).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('Mail service'), 'other')
+    expect(screen.getByText(/forwarded to a Gmail address/)).toBeInTheDocument()
+  })
+
+  it('offers to start with Windows so the morning look happens', async () => {
+    renderPage()
+    await userEvent.click(await screen.findByLabelText('Start Open Hospitality when Windows starts'))
+    await waitFor(() => expect(setStartup).toHaveBeenCalledWith(true))
+  })
+
+  it('does not offer starting with Windows where it cannot', async () => {
+    vi.mocked(getStartup).mockResolvedValue({ enabled: false, available: false })
+    renderPage()
+    await screen.findByLabelText(/Email address the reports/)
+    expect(screen.queryByLabelText('Start Open Hospitality when Windows starts')).toBeNull()
   })
 
   it('sets up a Gmail mailbox with a time to look, and sends the password only when typed', async () => {

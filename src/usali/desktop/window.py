@@ -223,3 +223,51 @@ def _shortcut_script(exe: Path) -> str:
         "$link.Description = 'Open your hotel books'; "
         "$link.Save() }",
     ])
+
+
+# --- starting with Windows ------------------------------------------------------
+
+def _startup_link() -> Path | None:
+    """The shortcut in the owner's Startup folder, when this is an installed copy."""
+    if sys.platform != "win32" or not getattr(sys, "frozen", False) or os.environ.get("OH_DATA_DIR"):
+        return None
+    appdata = os.environ.get("APPDATA")
+    if not appdata:
+        return None
+    return Path(appdata) / "Microsoft/Windows/Start Menu/Programs/Startup" / f"{APP_NAME}.lnk"
+
+
+def startup_available() -> bool:
+    return _startup_link() is not None
+
+
+def starts_with_windows() -> bool:
+    link = _startup_link()
+    return link is not None and link.is_file()
+
+
+def set_start_with_windows(enabled: bool) -> None:
+    """Put a shortcut in the Startup folder, or take it away — so a scheduled
+    look at the mailbox happens each morning without anyone opening the app."""
+    link = _startup_link()
+    if link is None:
+        return
+    if not enabled:
+        link.unlink(missing_ok=True)
+        return
+    exe = Path(sys.executable).resolve()
+    script = "; ".join([
+        "$shell = New-Object -ComObject WScript.Shell",
+        f"$link = $shell.CreateShortcut({_ps_quote(str(link))})",
+        f"$link.TargetPath = {_ps_quote(str(exe))}",
+        f"$link.WorkingDirectory = {_ps_quote(str(exe.parent))}",
+        f"$link.IconLocation = {_ps_quote(str(exe) + ',0')}",
+        "$link.Description = 'Open Hospitality, started with Windows'",
+        "$link.Save()",
+    ])
+    subprocess.run(  # noqa: S603
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+         "-Command", script],
+        check=True, capture_output=True, timeout=30,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )

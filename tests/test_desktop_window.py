@@ -1,6 +1,7 @@
 """The app's own window, one copy at a time, and the desktop icon."""
 
 import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -64,3 +65,16 @@ def test_the_shortcut_script_quotes_a_folder_with_an_apostrophe() -> None:
     assert "o''brien" in script
     assert "GetFolderPath('Desktop')" in script and "GetFolderPath('Programs')" in script
     assert "'Open Hospitality.lnk'" in script
+
+
+def test_starting_with_windows_is_only_offered_by_an_installed_copy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A developer's run, or one on separate books, has nothing to point a
+    # Startup shortcut at — and must never touch this computer's Startup folder.
+    assert window.startup_available() is False
+    assert window.starts_with_windows() is False
+    window.set_start_with_windows(True)  # a no-op, not an error
+    monkeypatch.setenv("OH_DATA_DIR", r"C:\somewhere")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    assert window.startup_available() is False

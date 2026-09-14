@@ -17,7 +17,7 @@ own choice goes through — with `origin="ai-accepted"` and their subject in
 `decided_by` (AI-6). There is deliberately no "apply" endpoint on this router.
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from hashlib import sha256
 
@@ -51,6 +51,7 @@ from usali.desktop.ai.pages import safe_pages
 from usali.desktop.ai.port import AiError, NotConfigured, SpendCapReached
 from usali.desktop.ai.report import OTHER_SOURCE, REPORT_TYPE
 from usali.desktop.ai.spend import Prices
+from usali.desktop.settings import read_setting, write_setting
 from usali.desktop.codes_api import DEFAULT_EDITION, Line, known_lines, require_property
 from usali.desktop.keystore import KeyStore
 from usali.desktop.paths import DesktopPaths
@@ -125,6 +126,8 @@ class AiOut(BaseModel):
     #: Whether a key is saved on this computer. Never the key itself.
     key_saved: bool
     local: bool
+    #: When "Check it works" last succeeded for this model; null if never.
+    checked_at: str | None
     spend: SpendOut
     providers: list[ProviderChoice]
     #: Which of `services` the saved choice is; None when not set up.
@@ -182,6 +185,13 @@ def _spend_out(s: spend.Spend) -> SpendOut:
     )
 
 
+def _checked_at(session: object, model: str) -> str | None:
+    checked = read_setting(session, "ai_checked")  # type: ignore[arg-type]
+    if isinstance(checked, dict) and checked.get("model") == model:
+        return str(checked.get("at"))
+    return None
+
+
 def _providers() -> list[ProviderChoice]:
     return [
         ProviderChoice(
@@ -218,6 +228,7 @@ def settings(request: Request, _: Principal = Depends(_owner)) -> AiOut:
             key_saved=config.read_key(_store(request), _paths(request).sealed_keys_file)
             is not None,
             local=got.prices.local,
+            checked_at=_checked_at(session, got.model),
             spend=_spend_out(
                 spend.this_month(session, cap=got.cap, max_calls=got.max_calls)
             ),
@@ -305,6 +316,10 @@ def check_connection(request: Request, principal: Principal = Depends(_owner)) -
             raise HTTPException(status_code=409, detail=str(missing)) from None
         except AiError as failed:
             raise HTTPException(status_code=502, detail=str(failed)) from None
+        # Remembered, so the page and the Overview can say "checked ...".
+        write_setting(session, "ai_checked", {
+            "at": datetime.now().isoformat(timespec="seconds"), "model": checked.model,
+        })
         session.commit()
         settings = config.read(session)
         return TestOut(

@@ -681,6 +681,40 @@ export async function deleteStatement(statementId: number): Promise<void> {
   await signedIn(`/api/desktop/statements/${statementId}`, { method: 'DELETE' })
 }
 
+// --- What's connected (src/usali/desktop/connections_api.py) ----------------
+
+export type Connection = {
+  id: string
+  name: string
+  state: 'connected' | 'not_set_up' | 'attention'
+  detail: string
+  page: string
+}
+
+/** Null outside the desktop edition. */
+export async function getConnections(): Promise<{ connections: Connection[] } | null> {
+  const res = await fetch('/api/desktop/connections', { headers: await authHeaders() })
+  if (res.status === 404) return null
+  if (res.status === 401) redirectToLogin()
+  if (!res.ok) throw new Error(await detail(res))
+  return (await res.json()) as { connections: Connection[] }
+}
+
+export type Startup = { enabled: boolean; available: boolean }
+
+export function getStartup(): Promise<Startup> {
+  return signedIn('/api/desktop/startup').then((res) => res.json() as Promise<Startup>)
+}
+
+export async function setStartup(enabled: boolean): Promise<Startup> {
+  const res = await signedIn('/api/desktop/startup', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  })
+  return (await res.json()) as Startup
+}
+
 // --- The owner's folders (src/usali/desktop/folders_api.py) -----------------
 
 export type OwnerFolder = {
@@ -871,6 +905,8 @@ export type AiSettings = {
   price_out: string | null
   key_saved: boolean
   local: boolean
+  /** When "Check it works" last succeeded for this model; null if never. */
+  checked_at: string | null
   spend: AiSpend
   providers: AiProviderChoice[]
   /** Which of `services` the saved choice is; null until set up. */

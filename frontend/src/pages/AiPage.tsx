@@ -257,6 +257,35 @@ export default function AiPage() {
         subtitle="Your own AI account, used to suggest where charge codes belong"
       />
 
+      <Card>
+        <section aria-label="Connection" className="flex flex-wrap items-center gap-3">
+          {settings.provider === null ? (
+            <>
+              <Badge tone="neutral">Not set up</Badge>
+              <p className="text-sm text-ink">Choose who you have an account with below, then Save.</p>
+            </>
+          ) : settings.checked_at !== null ? (
+            <>
+              <Badge tone="ok">Connected</Badge>
+              <p className="text-sm text-ink">
+                {settings.model} via {settings.services.find((x) => x.id === settings.service)?.name.split(' — ')[0] ?? settings.provider}
+                {' · '}checked {new Date(settings.checked_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+              </p>
+            </>
+          ) : (
+            <>
+              <Badge tone="warn">Not checked yet</Badge>
+              <p className="text-sm text-ink">
+                {settings.model || 'No model chosen'}
+                {settings.key_saved || settings.local || settings.provider === 'mock'
+                  ? ' — press “Check it works” below to be sure it answers.'
+                  : ' — no key saved yet.'}
+              </p>
+            </>
+          )}
+        </section>
+      </Card>
+
       <SpendCard spend={settings.spend} local={settings.local} />
 
       <Card>

@@ -65,7 +65,7 @@ const STATE: CodesState = {
 
 const AI_ON: AiSettings = {
   provider: 'mock', model: 'practice', base_url: null, cap: '10.00', max_calls: 500,
-  price_in: null, price_out: null, key_saved: false, local: false,
+  price_in: null, price_out: null, key_saved: false, local: false, checked_at: null,
   spend: {
     month_start: '2026-04-01', calls: 3, estimated_cost: '0.02', unpriced_calls: 0,
     cap: '10.00', max_calls: 500, stopped: false,
