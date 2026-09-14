@@ -143,6 +143,20 @@ If you switch it on, go to **AI helper**:
 There is a **practice mode** that answers offline and costs nothing, if you
 just want to see what it does.
 
+**What it knows, in notes you can read.** The app keeps
+**Documents › Open Hospitality › AI memory** up to date:
+
+- a note for each hotel, with its code, ownership entity, the reports read,
+  and every charge code decided (by you, or from an AI suggestion you
+  accepted);
+- a **reading guide** for each front-desk system: how its night audit is laid
+  out and read, which is also what the AI helper is told.
+
+Open that folder in **Obsidian** (free, obsidian.md: choose "Open folder as
+vault") to browse it with links between hotels and guides, or read the files in
+Notepad. The notes are a mirror: editing one doesn't change how your reports
+are read. Make changes in the app.
+
 Then "Ask the AI" appears next to each code you are confirming. It suggests a
 line and says why, or it tells you it won't guess — on tax questions it is
 meant to refuse rather than risk it.

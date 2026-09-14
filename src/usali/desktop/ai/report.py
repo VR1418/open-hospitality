@@ -24,6 +24,7 @@ import json
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Any
 
 from usali.desktop.ai.pages import Page
@@ -64,12 +65,32 @@ Rules:
 """
 
 
+#: The skill half of "memory and skills" (docs/desktop/M4-ai-and-ledger.md):
+#: how a kind of report is read, shipped with the app, one Markdown file per
+#: system. They carry no hotel data, so they are safe to show a model.
+GUIDES = Path(__file__).resolve().parents[4] / "mapping" / "reading-guides"
+
+
+def reading_guide(system: str) -> str | None:
+    """The guide for a front-desk system, without its front matter; the
+    general one when the system has none of its own."""
+    for name in (system.lower(), OTHER_SOURCE.lower()):
+        path = GUIDES / f"{name}.md"
+        if path.is_file():
+            text = path.read_text(encoding="utf-8")
+            if text.startswith("---"):
+                text = text.split("---", 2)[2]
+            return text.strip()
+    return None
+
+
 @dataclass(frozen=True)
 class ReportQuestion:
-    """The hotel, and the pages that survived the scan."""
+    """The hotel, the pages that survived the scan, and how to read them."""
 
     hotel: str
     pages: tuple[Page, ...]
+    guide: str | None = None
 
 
 @dataclass(frozen=True)
@@ -95,8 +116,10 @@ def render(question: ReportQuestion) -> str:
     if not question.pages:
         raise AiError("there are no pages that can be shown to a model")
     body = "\n\n".join(f"--- page {p.number} ---\n{p.text}" for p in question.pages)
+    guide = f"READING GUIDE\n{question.guide}\n\n" if question.guide else ""
     return (
         f"{INSTRUCTIONS}\n"
+        f"{guide}"
         f"Hotel: {question.hotel}\n\n"
         f"REPORT PAGES\n{body}\n"
     )

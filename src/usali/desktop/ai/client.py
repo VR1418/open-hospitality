@@ -242,7 +242,9 @@ def read_report(
             "nothing on any page of this report that could be shown to a model"
         )
 
-    question = report.ReportQuestion(hotel=hotel, pages=reading.kept)
+    question = report.ReportQuestion(
+        hotel=hotel, pages=reading.kept, guide=report.reading_guide(report.OTHER_SOURCE)
+    )
     prompt = report.render(question)
     # Belt and braces: the pages passed one at a time, so the whole prompt
     # must pass too. A failure here is a bug in `pages`, not in the report.

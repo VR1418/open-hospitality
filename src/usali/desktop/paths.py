@@ -81,6 +81,12 @@ class DesktopPaths:
         return self.owner_root / "Reports we couldn't read"
 
     @property
+    def memory_folder(self) -> Path:
+        """What the AI helper knows, as notes an Obsidian vault can open
+        (usali.desktop.memory_notes)."""
+        return self.owner_root / "AI memory"
+
+    @property
     def saved_reports_folder(self) -> Path:
         """Daily summaries and accountant packs the app writes itself
         (usali.desktop.saved_reports)."""

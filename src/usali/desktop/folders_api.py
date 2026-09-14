@@ -53,6 +53,9 @@ def _folders(paths: DesktopPaths) -> list[tuple[str, str, Path, str, str]]:
          "Every night audit PDF that has been read into your books.", "*.pdf"),
         ("unreadable", "Reports we couldn't read", paths.unreadable_folder,
          "PDFs that couldn't be read, with the reason on the Add reports page.", "*.pdf"),
+        ("memory", "AI memory", paths.memory_folder,
+         "What the AI helper knows about each hotel, and how each system's reports are read. "
+         "Open the folder in Obsidian to browse it.", "**/*.md"),
     ]
     backups = BackupConfig.load(paths.backup_config_file).folder
     if backups is not None:

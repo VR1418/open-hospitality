@@ -289,3 +289,39 @@ def test_every_night_read_saves_a_daily_summary_and_the_months_accountant_pack(
         assert saved_reports.save_new(sessions, root) == []
     finally:
         serving.dispose()
+
+
+def test_the_ai_memory_is_written_as_notes_an_obsidian_vault_can_open(
+    running: tuple[PgCluster, int, DesktopKeys, Path], tmp_path: Path,
+) -> None:
+    """Runs on the books the intake test filled. Asked for by the owner:
+    memory for the AI helper, readable in Obsidian."""
+    from usali.desktop import memory_notes
+
+    _, port, keys, _ = running
+    serving = make_engine(app_url(port, keys))
+    sessions = OrgBoundSessionFactory(make_session_factory(serving), FOUNDING_ORG_ID)
+    vault = tmp_path / "AI memory"
+    try:
+        with sessions() as session:
+            written = memory_notes.write_notes(session, vault)
+        start = vault / "Start here.md"
+        hotel = vault / "Hotels" / "HISJ – Holiday Inn & Suites San Jose.md"
+        assert start in written and hotel in written
+        assert (vault / "Reading guides" / "skytouch.md").is_file()
+
+        note = hotel.read_text(encoding="utf-8")
+        # Front matter Obsidian reads as properties, and a link to the guide.
+        assert note.startswith("---\nhotel_code: HISJ\n")
+        assert "[[Reading guides/opera|Oracle OPERA reading guide]]" in note
+        assert "| Trial balance | 1 | 2026-07-07 | 2026-07-07 |" in note
+        # It says it is a mirror: editing it changes nothing.
+        assert "does not change how your reports are read" in note
+        assert "[[Hotels/HISJ – Holiday Inn & Suites San Jose|" in start.read_text(encoding="utf-8")
+
+        # Nothing changed, nothing rewritten — Obsidian and a syncing drive are
+        # not woken for nothing.
+        with sessions() as session:
+            assert memory_notes.write_notes(session, vault) == []
+    finally:
+        serving.dispose()

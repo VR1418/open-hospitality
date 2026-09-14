@@ -274,7 +274,7 @@ def test_the_folders_holding_the_reports_are_listed_and_can_be_opened(world: Wor
         body = world.get("/api/desktop/folders").json()  # type: ignore[attr-defined]
         ids = [f["id"] for f in body["folders"]]
         # The app's own saved reports come first; then the report folders.
-        assert ids[:4] == ["saved", "drop", "read", "unreadable"]
+        assert ids[:5] == ["saved", "drop", "read", "unreadable", "memory"]
         saved = body["folders"][0]
         assert saved["name"] == "Saved reports" and saved["path"].startswith(body["root"])
         assert "accountant pack" in saved["what"]

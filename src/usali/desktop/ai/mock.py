@@ -46,7 +46,10 @@ def _read_pages(prompt: str) -> str:
     """Stand in for reading a report: take the description, code and amount
     off each line that has them."""
     rows = []
-    for line in prompt.splitlines():
+    # Only the pages: the instructions and the reading guide above them are
+    # not the report.
+    pages = prompt.split("REPORT PAGES", 1)[-1]
+    for line in pages.splitlines():
         found = _ROW.match(line.strip())
         if found is None:
             continue
@@ -58,7 +61,7 @@ def _read_pages(prompt: str) -> str:
             "description": found.group("desc").strip(),
             "amount": ("-" + amount) if negative else amount,
         })
-    when = _DATE.search(prompt)
+    when = _DATE.search(pages)
     business_date = (
         f"{when.group(3)}-{int(when.group(1)):02d}-{int(when.group(2)):02d}"
         if when

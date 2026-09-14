@@ -57,6 +57,7 @@ from usali.desktop.identity import DesktopUser, LocalIssuer
 from usali.desktop.intake import ReportIntake
 from usali.desktop.modules import mount_predicate, resolve
 from usali.desktop.paths import DesktopPaths
+from usali.desktop.memory_notes import MemoryNotes
 from usali.desktop.saved_reports import SavedReports
 from usali.desktop import uninstall
 from usali.desktop.window import SingleInstance, ensure_shortcuts, open_window
@@ -508,6 +509,11 @@ def _serve(
             OrgBoundSessionFactory(serving_sessions, FOUNDING_ORG_ID), paths.saved_reports_folder
         )
         saved.start()
+        # The AI helper's memory, mirrored as notes the owner can open in Obsidian.
+        memory = MemoryNotes(
+            OrgBoundSessionFactory(serving_sessions, FOUNDING_ORG_ID), paths.memory_folder
+        )
+        memory.start()
 
         base_url = f"http://127.0.0.1:{api_port}"
 
@@ -548,6 +554,7 @@ def _serve(
             ):
                 _run_console(base_url, stopping)
         finally:
+            memory.stop()
             saved.stop()
             intake.stop()
             portal.stop()

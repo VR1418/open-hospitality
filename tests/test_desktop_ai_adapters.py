@@ -216,3 +216,23 @@ def test_the_practice_provider_reads_a_page_of_charges() -> None:
     # A figure in brackets is money going out.
     [visa] = [r for r in read.rows if r.code == "VI"]
     assert visa.amount < 0
+
+
+def test_reading_a_report_carries_the_reading_guide_and_the_practice_provider_ignores_it() -> None:
+    """The skill half of memory and skills: the model is told how night audits
+    are laid out, from a guide shipped with the app — and that guide is not
+    mistaken for the report itself."""
+    from usali.desktop.ai import report
+    from usali.desktop.ai.allowlist import check
+    from usali.desktop.ai.pages import Page
+
+    guide = report.reading_guide("SOME-NEW-SYSTEM")
+    assert guide is not None and "in brackets" in guide  # the general guide
+    assert not guide.startswith("---")  # front matter is for Obsidian, not the model
+    page = Page(number=1, text="Business Date: 9/10/2026\nRoom Charge (RM) 100.00")
+    prompt = report.render(report.ReportQuestion(hotel="Redstone Lodge", pages=(page,), guide=guide))
+    assert prompt.index("READING GUIDE") < prompt.index("REPORT PAGES")
+    check(prompt)  # nothing in a guide is refused on the way out
+    got = MockAdapter().ask(provider=PROVIDER, key="", prompt=prompt)
+    read = report.parse(got.text, got.usage)
+    assert [(r.code, str(r.amount)) for r in read.rows] == [("RM", "100.00")]
