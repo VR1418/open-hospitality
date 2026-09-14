@@ -3,7 +3,7 @@
     uv run python scripts/desktop/publish.py            # desktop/m1, desktop/prd, main
     uv run python scripts/desktop/publish.py --dry-run  # rewrite and verify, push nothing
 
-The public repository (VR1418/ophosp-desktop) carries the same commits as the
+The public repository (VR1418/open-hospitality, a GitHub fork of csharp36/open-hospitality) carries the same commits as the
 private one, with one difference: every commit of ours is authored and
 committed as "VR1418 <VR1418@users.noreply.github.com>", never a personal name
 or address. Upstream's commits (csharp36/open-hospitality) are left exactly as
@@ -27,11 +27,11 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-PUBLIC = "https://github.com/VR1418/ophosp-desktop.git"
+PUBLIC = "https://github.com/VR1418/open-hospitality.git"
 UPSTREAM_MAIN = "bba21e7220fd51f2fd9d1e8b66efb9dad44054a9"
 BRANCHES = ("desktop/m1", "desktop/prd")
 NAME, EMAIL = "VR1418", "VR1418@users.noreply.github.com"
-PUBLIC_REPO = "VR1418/ophosp-desktop"
+PUBLIC_REPO = "VR1418/open-hospitality"
 #: Words that must not appear anywhere in the published history — personal
 #: names, addresses, the private repository's name — and the private
 #: repository's name to replace in site/index.html. They live in an ignored

@@ -1,6 +1,6 @@
-# Splitting it where it splits — engine upstream, shell here
+# Everything goes upstream — no separate product
 
-*Agreed in principle with the upstream author on 14 September 2026: the engine — PMS readers, the AI fallback for unknown report formats, the USALI code mapping, the recalc and month-lock logic — belongs in csharp36/open-hospitality, where it helps everyone however they run it. The Windows shell, the setup wizard, the installer, code signing, ophosp.com and the downloads stay here, as OpHosp. In practice: OpHosp builds on the upstream library instead of carrying a copy of it.*
+*Decided 14 September 2026, after the upstream author's reply. There will be no separate product under the Open Hospitality name, nor under any other. The website is taken down. This work is offered back to csharp36/open-hospitality as pull requests from a fork under the contributor's account, and the desktop edition waits for upstream's own direction. The PII holdback the author asked about was hardened first: [PII-holdback.md](PII-holdback.md).*
 
 ## What goes upstream, in the order it is easiest to take
 
@@ -17,14 +17,14 @@ Each is a pull request against upstream `main`, small enough to review, with its
 
 What stays here: `src/usali/desktop/` (accounts, the wizard, backups, the tray and window, intake from a folder and a mailbox, the portfolio Overview, saved reports, the memory notes, uninstall), `packaging/`, `scripts/desktop/`, `site/`, and the desktop pages of the portal.
 
-## How OpHosp then builds on upstream instead of carrying it
+## What is left here, and how it relates to upstream
 
-Today this repository *is* upstream's, with our commits on top. After the PRs above land, the copy is no longer needed:
+This repository is upstream's, with our commits on top; it is a fork on GitHub, and the branches here are the PRs' source. Nothing is published from it as a product. If upstream wants a desktop edition, the pieces below are how it would build on the library rather than carry it:
 
 1. **Python.** `pyproject.toml` here declares a dependency on upstream's package (`usali`, from its Git tag), and `src/usali/desktop/` moves to its own package, `ophosp`, that imports `usali`. `build_app` composes upstream's `create_app(mount=…)` with the desktop routers. PyInstaller bundles both. Fixes flow by bumping the tag.
 2. **The portal.** The desktop pages live in upstream's React app today (`frontend/src/pages/*Page.tsx` for the desktop's own pages, plus `Layout.tsx`, `router.tsx` and a handful of shared changes). The clean split needs one thing from upstream: a way to **mount extra routes and nav entries** — a small extension point (`createAppRouter({ extraRoutes, extraNav })`, or a plugin directory the build picks up). With that, OpHosp keeps its pages in its own `frontend/` that depends on upstream's as a package; without it, the portal stays a fork a while longer while the Python side splits first. Proposed to upstream as PR 7.
 3. **Data.** The desktop's own tables stay in the `desktop.*` schema with their own Alembic branch (`d0001…`), on top of upstream's migrations — already the case, so nothing moves.
-4. **What owners see** changes only in the name: OpHosp, crediting Open Hospitality in the README, NOTICE and on the site.
+4. **Naming and distribution** are upstream's call.
 
 ## Order of work
 
@@ -35,4 +35,4 @@ Today this repository *is* upstream's, with our commits on top. After the PRs ab
 5. The Python split (`ophosp` package depending on `usali`), then the packaged walk on the result.
 6. The portal extension point, then the portal split.
 
-Until step 5 lands, this repository keeps working exactly as it does now, and `scripts/desktop/publish.py` keeps the public copy in step.
+Until upstream says otherwise, nothing is shipped from here; `scripts/desktop/publish.py` keeps the fork in step with this checkout under the contributor's public identity.
