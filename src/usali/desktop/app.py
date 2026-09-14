@@ -326,6 +326,9 @@ def _integrate_with_windows(paths: DesktopPaths) -> None:
     """Desktop and Start menu icons, and the entry under Settings > Apps."""
     from usali import __version__
 
+    if os.environ.get("OH_DATA_DIR"):
+        return  # a developer's or a test's separate books: not an installed copy
+
     ensure_shortcuts(paths.system_root)
     uninstall.register(Path(sys.executable), __version__)
 
