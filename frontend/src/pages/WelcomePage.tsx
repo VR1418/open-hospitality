@@ -347,7 +347,7 @@ function HotelStep({
         </Label>
         <Label
           text="Hotel code"
-          hint="The code your brand gives the hotel. It’s printed at the top of your night audit reports, next to “Property Code” — for example NM236."
+          hint="The code your brand gives the hotel. It’s printed at the top of your night audit reports, next to “Property Code” — for example RTI22."
         >
           <input
             aria-label="Hotel code"

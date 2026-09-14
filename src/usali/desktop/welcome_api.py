@@ -79,7 +79,7 @@ _MIN_REPORT_NAME = 4
 _owner = require_grants(ORG_ADMIN)
 
 #: Systems whose report headers print the hotel's code ("Property Code:
-#: NM236"). For these the code the owner types IS how a report is recognised,
+#: RTI22"). For these the code the owner types IS how a report is recognised,
 #: and they are not asked for a printed name at all: a brand name like
 #: "Rodeway Inn" prints on many hotels' reports, a code on one.
 PRINTS_PROPERTY_CODE = frozenset({"SKYTOUCH"})
@@ -237,7 +237,7 @@ class PropertyIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     #: The company that owns the hotel ("Carlsbad Hospitality LLC").
     ownership_entity: str = Field(default="", max_length=200)
-    #: The hotel's own code (NM236). Becomes its property id. Blank makes one
+    #: The hotel's own code (RTI22). Becomes its property id. Blank makes one
     #: from the name, as before codes were asked for.
     code: str = Field(default="", max_length=20)
     #: How its reports name it, for systems that print a name rather than a
@@ -301,13 +301,13 @@ def add_property(
     if code and not _CODE.match(code):
         raise HTTPException(
             status_code=422,
-            detail="A hotel code is letters and numbers, like NM236 — as it's printed on "
+            detail="A hotel code is letters and numbers, like RTI22 — as it's printed on "
                    "your reports.",
         )
     # `detect` joins the header's words with single spaces and upper-cases
     # them; the phrase is stored the same way so it matches as typed. Where
     # the system prints the code, the code in its printed context is the
-    # phrase: "PROPERTY CODE: NM236" cannot turn up in another hotel's header
+    # phrase: "PROPERTY CODE: RTI22" cannot turn up in another hotel's header
     # the way a bare "NM23" or a shared brand name could.
     printed = body.report_name
     if not printed.strip():

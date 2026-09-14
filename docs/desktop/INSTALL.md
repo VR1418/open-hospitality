@@ -62,7 +62,7 @@ doesn't appear, click the ◆ icon near the clock and choose **Open my books**.
 For each hotel it asks for three things: the **ownership entity** (the
 company that owns the hotel), the **hotel name**, and the **hotel code**. The
 code is the one printed at the top of your night audit reports next to
-"Property Code", for example NM236. That code is how the app knows which
+"Property Code", for example RTI22. That code is how the app knows which
 hotel a report belongs to, so type it exactly.
 
 It doesn't ask how many rooms the hotel has: it reads that from your first

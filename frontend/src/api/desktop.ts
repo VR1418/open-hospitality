@@ -296,7 +296,7 @@ export type NewHotel = {
   /** The company that owns the hotel. */
   ownership_entity: string
   name: string
-  /** The hotel's code (NM236) — becomes its id everywhere. */
+  /** The hotel's code (RTI22) — becomes its id everywhere. */
   code: string
   /** How its reports name it, only for systems that print no code. Blank
    *  means the code (or the name). */
