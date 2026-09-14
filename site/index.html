@@ -85,6 +85,20 @@
   .repo button { background: var(--teal); color: #fff; border: 0; border-radius: 8px; padding: 9px 14px; font: inherit; font-weight: 650; cursor: pointer; }
   .repo button:hover { background: #0b8a86; }
 
+  .shots a.shot { display: block; cursor: zoom-in; border-radius: 12px; }
+  .shots a.shot:focus-visible { outline: 3px solid var(--teal); outline-offset: 3px; }
+  dialog.lightbox { border: 0; padding: 0; background: transparent; max-width: none; max-height: none; width: 100vw; height: 100vh; margin: 0; }
+  dialog.lightbox::backdrop { background: rgba(10, 12, 16, 0.92); }
+  .lb { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 20px; }
+  .lb img { max-width: min(96vw, 1600px); max-height: 82vh; width: auto; height: auto; border-radius: 10px; background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  .lb figcaption { color: #E8EBEF; font-size: 15px; text-align: center; max-width: 60rem; }
+  .lb button { position: absolute; background: rgba(255,255,255,.12); color: #fff; border: 0; border-radius: 999px; width: 44px; height: 44px; font-size: 22px; line-height: 44px; cursor: pointer; }
+  .lb button:hover { background: rgba(255,255,255,.25); }
+  .lb .close { top: 16px; right: 16px; }
+  .lb .prev { left: 12px; top: 50%; transform: translateY(-50%); }
+  .lb .next { right: 12px; top: 50%; transform: translateY(-50%); }
+  .lb .count { position: absolute; top: 24px; left: 20px; color: #A7B0BC; font-size: 14px; }
+
   footer { margin: 64px 0 48px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
   footer a { color: var(--muted); }
 
@@ -170,38 +184,38 @@
 </div>
 
 <h2>See it</h2>
-<p class="muted">The real app on three demo hotels, as it looks after a month of night audits.</p>
+<p class="muted">The real app on three demo hotels, as it looks after a month of night audits. Click any picture to see it full size.</p>
 <div class="shots">
   <figure>
-    <img src="/screens/overview.png" width="2040" height="1290" loading="lazy" alt="The Overview: This morning with four ticks, and What's connected for every hotel">
+    <a class="shot" href="/screens/overview.png"><img src="/screens/overview.png" width="2040" height="1290" loading="lazy" alt="The Overview: This morning with four ticks, and What's connected for every hotel"></a>
     <figcaption><strong>This morning.</strong> Last night's reports in, codes confirmed, bank checked, backed up — four ticks, then What's connected.</figcaption>
   </figure>
   <figure>
-    <img src="/screens/add-reports.png" width="2040" height="1290" loading="lazy" alt="Add reports: drag and drop, and Just read listing each night audit as it lands">
+    <a class="shot" href="/screens/add-reports.png"><img src="/screens/add-reports.png" width="2040" height="1290" loading="lazy" alt="Add reports: drag and drop, and Just read listing each night audit as it lands"></a>
     <figcaption><strong>Add reports.</strong> Drop a PDF in; Just read shows each night audit as it lands, or why one couldn't be read.</figcaption>
   </figure>
   <figure>
-    <img src="/screens/codes.png" width="2040" height="1290" loading="lazy" alt="Codes to confirm: what the hotel calls each charge and where it goes">
+    <a class="shot" href="/screens/codes.png"><img src="/screens/codes.png" width="2040" height="1290" loading="lazy" alt="Codes to confirm: what the hotel calls each charge and where it goes"></a>
     <figcaption><strong>Codes to confirm.</strong> What your system calls each charge and where it goes — guesses confirmed in one press, changed any time, and every day worked out again.</figcaption>
   </figure>
   <figure>
-    <img src="/screens/profit-and-loss.png" width="2040" height="1290" loading="lazy" alt="The profit and loss statement for the last night read">
+    <a class="shot" href="/screens/profit-and-loss.png"><img src="/screens/profit-and-loss.png" width="2040" height="1290" loading="lazy" alt="The profit and loss statement for the last night read"></a>
     <figcaption><strong>Profit and loss.</strong> The statement from the journal, opened on the last night read; click a line to see the charges behind it.</figcaption>
   </figure>
   <figure>
-    <img src="/screens/schedule.png" width="2040" height="1290" loading="lazy" alt="The schedule: who works when, week by week">
+    <a class="shot" href="/screens/schedule.png"><img src="/screens/schedule.png" width="2040" height="1290" loading="lazy" alt="The schedule: who works when, week by week"></a>
     <figcaption><strong>Schedule.</strong> Standard shifts, "9:00 AM – Done" for housekeeping, drag onto a day, copy the week, print it.</figcaption>
   </figure>
   <figure>
-    <img src="/screens/bank.png" width="2040" height="1290" loading="lazy" alt="The bank statement checked against the night audits">
+    <a class="shot" href="/screens/bank.png"><img src="/screens/bank.png" width="2040" height="1290" loading="lazy" alt="The bank statement checked against the night audits"></a>
     <figcaption><strong>Check against your bank.</strong> A statement CSV matched to the card payouts and cash the front desk recorded.</figcaption>
   </figure>
   <figure>
-    <img src="/screens/email.png" width="2040" height="1290" loading="lazy" alt="Reports by email: the mailbox and when to look">
+    <a class="shot" href="/screens/email.png"><img src="/screens/email.png" width="2040" height="1290" loading="lazy" alt="Reports by email: the mailbox and when to look"></a>
     <figcaption><strong>Reports by email.</strong> It looks in a mailbox on your schedule and takes only PDFs from senders you allow.</figcaption>
   </figure>
   <figure>
-    <img src="/screens/ai.png" width="2040" height="1290" loading="lazy" alt="The AI helper settings: your own account, a spending limit">
+    <a class="shot" href="/screens/ai.png"><img src="/screens/ai.png" width="2040" height="1290" loading="lazy" alt="The AI helper settings: your own account, a spending limit"></a>
     <figcaption><strong>AI helper.</strong> Your own account, a monthly limit, and never shown a guest's name or a card number.</figcaption>
   </figure>
 </div>
@@ -269,6 +283,46 @@
   wrong, the log it keeps holds no guest names and no money — only what the app
   did — and sending it is the most useful thing you can do.
 </p>
+
+<dialog class="lightbox" id="lightbox" aria-label="Screenshot, full size">
+  <figure class="lb">
+    <span class="count" id="lb-count"></span>
+    <button type="button" class="close" id="lb-close" aria-label="Close">×</button>
+    <button type="button" class="prev" id="lb-prev" aria-label="Previous picture">‹</button>
+    <img id="lb-img" src="" alt="">
+    <figcaption id="lb-cap"></figcaption>
+    <button type="button" class="next" id="lb-next" aria-label="Next picture">›</button>
+  </figure>
+</dialog>
+<script>
+  // Click a screenshot: see it full size, with its caption. Esc or the
+  // backdrop closes; arrows move between pictures. Without JavaScript the
+  // link simply opens the image.
+  (function () {
+    var box = document.getElementById('lightbox');
+    if (!box || typeof box.showModal !== 'function') return;
+    var shots = Array.prototype.slice.call(document.querySelectorAll('.shots a.shot'));
+    var img = document.getElementById('lb-img'), cap = document.getElementById('lb-cap'), count = document.getElementById('lb-count');
+    var at = 0;
+    function show(i) {
+      at = (i + shots.length) % shots.length;
+      var a = shots[at], pic = a.querySelector('img'), fc = a.parentNode.querySelector('figcaption');
+      img.src = a.getAttribute('href'); img.alt = pic ? pic.alt : '';
+      cap.innerHTML = fc ? fc.innerHTML : ''; count.textContent = (at + 1) + ' of ' + shots.length;
+      if (!box.open) box.showModal();
+    }
+    shots.forEach(function (a, i) { a.addEventListener('click', function (e) { e.preventDefault(); show(i); }); });
+    document.getElementById('lb-close').addEventListener('click', function () { box.close(); });
+    document.getElementById('lb-prev').addEventListener('click', function () { show(at - 1); });
+    document.getElementById('lb-next').addEventListener('click', function () { show(at + 1); });
+    box.addEventListener('click', function (e) { if (e.target === box) box.close(); });
+    box.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight') show(at + 1); else if (e.key === 'ArrowLeft') show(at - 1);
+      else if (e.key === 'Escape') { e.preventDefault(); box.close(); }
+    });
+    box.addEventListener('close', function () { img.src = ''; });
+  })();
+</script>
 
 <h2>For the team</h2>
 <p>
