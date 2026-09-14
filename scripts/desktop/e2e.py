@@ -271,6 +271,30 @@ def run(exe: Path | None, keep: bool) -> int:
                 assert row["revenue"] not in (None, "0", "0.00"), row
             notes.append(f"{len(view['hotels'])} hotels in; group revenue {view['totals'].get('revenue')}")
 
+        with step("the owner's breakeven per hotel, and the profit picture") as notes:
+            for i, h in enumerate(demo.HOTELS):
+                # One hotel gets a breakeven it cannot reach; the others one they can.
+                annual = "9000000" if i == 0 else "120000"
+                got = ok(owner.put(f"/api/desktop/hotels/{h.code}/targets",
+                                   {"breakeven_annual": annual, "last_year_revenue": None}))
+                assert got["breakeven_annual"] == f"{annual}.00" and got["changed_at"], got
+            view = ok(owner.get("/api/desktop/portfolio"))
+            summary = view["totals"]["breakeven"]
+            assert summary["unset"] == 0 and summary["behind"] >= 1 and summary["above"] >= 1, summary
+            for row in view["hotels"]:
+                o = row["outlook"]
+                assert o is not None and o["projected_year"] and o["projection_basis"] in ("run_rate", "last_year"), row
+                # Rooms need a room count: choiceADVANTAGE prints one; AutoClerk and
+                # OPERA hotels wait for the owner to type theirs (the checklist says so).
+                if row["rooms_total"] is not None:
+                    assert row["rooms_sold_month"] and row["rooms_available_month"], row
+            assert any(f["kind"] == "behind_breakeven" for f in view["findings"]), view["findings"]
+            assert view["totals"]["rooms_total"] and view["totals"]["rooms_sold"], view["totals"]
+            one = ok(owner.get("/api/desktop/portfolio", property=demo.HOTELS[1].code))
+            assert [r["property_id"] for r in one["hotels"]] == [demo.HOTELS[1].code]
+            notes.append(f"{summary['above']} above breakeven, {summary['behind']} behind; "
+                         f"{view['totals']['rooms_sold']} of {view['totals']['rooms_total']} rooms sold; one hotel narrows the page")
+
         with step("codes to confirm, with the practice AI's help") as notes:
             decided = 0
             for h in demo.HOTELS:

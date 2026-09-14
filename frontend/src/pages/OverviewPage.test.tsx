@@ -17,6 +17,7 @@ vi.mock('../api/checklist', () => ({
 vi.mock('../api/desktop', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/desktop')>()),
   getPortfolio: vi.fn(),
+  putTargets: vi.fn(),
   getModules: vi.fn(),
   getWelcome: vi.fn(),
   getBackupStatus: vi.fn(),
@@ -29,12 +30,13 @@ import {
   getModules,
   getPortfolio,
   getWelcome,
+  putTargets,
   type BackupStatus,
   type Portfolio,
 } from '../api/desktop'
 import { AuthContext } from '../auth/authContext'
 import { createAppRouter } from '../router'
-import { AUTHED_CONTEXT } from '../test/fixtures'
+import { AUTHED_CONTEXT, HISJ_PROPERTY, SSSJ_PROPERTY } from '../test/fixtures'
 
 const PORTFOLIO: Portfolio = {
   business_date: '2026-07-07',
@@ -45,19 +47,34 @@ const PORTFOLIO: Portfolio = {
       property_id: 'HISJ', name: 'Holiday Inn San Jose', pms_source: 'OPERA', status: 'in',
       note: null, revenue: '9840.00', occupancy_pct: '76.0', adr: '131.25', revpar: '99.75',
       rooms_occupied: '60.0', rooms_total: '79.0', month_revenue: '61200.00',
+      rooms_sold_month: '420.0', rooms_available_month: '553.0', month_labour_pct: '23.2',
+      year_revenue: '412000.00',
       month_labour_cost: '14200.00', staff: { staff: 22, on_clock: 7, timecards_to_approve: 3 },
+      targets: { breakeven_annual: '540000.00', last_year_revenue: '580000.00', changed_at: '2026-09-14T10:00:00+00:00' },
+      outlook: {
+        breakeven_per_day: '1479.45', since: '2026-01-01', days_elapsed: 188, days_in_year: 365, night_gap: '160.55',
+        year_revenue: '412000.00', expected_year_to_date: '278136.99', year_gap: '133863.01',
+        projected_year: '598000.00', projection_basis: 'last_year', last_year_total: '580000.00',
+        last_year_source: 'owner', growth: '1.031',
+      },
     },
     {
       property_id: 'LAKE', name: 'Lakeside Suites', pms_source: 'SKYTOUCH', status: 'missing',
       note: 'No reports for this day yet.', revenue: null, occupancy_pct: null, adr: null,
       revpar: null, rooms_occupied: null, rooms_total: null, month_revenue: '30000.00',
+      rooms_sold_month: null, rooms_available_month: null, month_labour_pct: null, year_revenue: null,
       month_labour_cost: null, staff: { staff: 11, on_clock: 2, timecards_to_approve: 0 },
+      targets: { breakeven_annual: null, last_year_revenue: null, changed_at: null },
+      outlook: null,
     },
   ],
   totals: {
     hotels: 2, hotels_in: 1, revenue: '9840.00', occupancy_pct: '76.0', adr: '131.25',
-    revpar: '99.75', month_revenue: '91200.00', month_labour_cost: '14200.00',
-    month_labour_pct: '15.6', staff: { staff: 33, on_clock: 9, timecards_to_approve: 3 },
+    revpar: '99.75', rooms_total: '79.0', rooms_sold: '60.0', rooms_sold_month: '420.0',
+    rooms_available_month: '553.0', month_revenue: '91200.00', month_labour_cost: '14200.00',
+    month_labour_pct: '15.6', year_revenue: '412000.00',
+    breakeven: { above: 1, behind: 0, unset: 1, year_gap: '133863.01' },
+    staff: { staff: 33, on_clock: 9, timecards_to_approve: 3 },
   },
   trend: [
     { business_date: '2026-07-05', revenue: '8100.00' },
@@ -155,7 +172,7 @@ describe('OverviewPage', () => {
 
   it('shows what last night’s audit turned up, with the amount it is out by', async () => {
     renderAt()
-    const audit = await screen.findByRole('region', { name: 'Last night’s audit' })
+    const audit = await screen.findByRole('region', { name: 'Needs a look' })
     expect(within(audit).getByText('2 to look at')).toBeInTheDocument()
     expect(within(audit).getByText('No reports yet')).toBeInTheDocument()
     expect(within(audit).getByText('AR roll-forward')).toBeInTheDocument()
@@ -169,7 +186,7 @@ describe('OverviewPage', () => {
   it('says so plainly when the audit found nothing', async () => {
     vi.mocked(getPortfolio).mockResolvedValue({ ...PORTFOLIO, findings: [] })
     renderAt()
-    const audit = await screen.findByRole('region', { name: 'Last night’s audit' })
+    const audit = await screen.findByRole('region', { name: 'Needs a look' })
     expect(within(audit).getByText(/every hotel’s reports are in/)).toBeInTheDocument()
   })
 
@@ -195,6 +212,52 @@ describe('OverviewPage', () => {
     expect(screen.queryByRole('region', { name: 'Staff' })).toBeNull()
   })
 
+  it('shows rooms across the portfolio, sold last night and this month', async () => {
+    renderAt()
+    const totals = await screen.findByRole('region', { name: 'Totals' })
+    expect(within(totals).getByText('60 of 79')).toBeInTheDocument()
+    expect(within(totals).getByText(/this month 420 of 553 room-nights/)).toBeInTheDocument()
+    const hotels = screen.getByRole('region', { name: 'Hotels' })
+    expect(within(hotels).getByText('Rooms')).toBeInTheDocument()
+    expect(within(hotels).getByText('Labour %')).toBeInTheDocument()
+    expect(within(hotels).getByText('23.2%')).toBeInTheDocument()
+  })
+
+  it('narrows the whole page to one hotel from the picker', async () => {
+    vi.mocked(getProperties).mockResolvedValue([HISJ_PROPERTY, SSSJ_PROPERTY])
+    renderAt()
+    const picker = await screen.findByRole('combobox', { name: 'Which hotels' })
+    await userEvent.selectOptions(picker, 'HISJ')
+    await waitFor(() => expect(getPortfolio).toHaveBeenLastCalledWith(undefined, 'HISJ'))
+    // Back to everything (the earlier answer is still cached, so no new call is owed).
+    await userEvent.selectOptions(picker, '')
+    expect(picker).toHaveValue('')
+  })
+
+  it('says which hotels are above breakeven, by the owner’s own number, and lets it be set', async () => {
+    vi.mocked(putTargets).mockResolvedValue({
+      breakeven_annual: '500000.00', last_year_revenue: null, changed_at: '2026-09-14T10:00:00+00:00',
+    })
+    renderAt()
+    const card = await screen.findByRole('region', { name: 'Profit picture' })
+    expect(within(card).getByText(/2 hotels · 1 above breakeven, 0 behind, 1 not set/)).toBeInTheDocument()
+    expect(within(card).getByText('Above breakeven')).toBeInTheDocument()
+    expect(within(card).getByText(/Needs \$1,479 a day: \$161 above last night; \$133,863 ahead for the year so far\. Heading for \$598,000 this year against \$540,000 needed \(shaped by last year’s \$580,000, the figure you typed\)/))
+      .toBeInTheDocument()
+    expect(within(card).getByText('No breakeven set')).toBeInTheDocument()
+    // Behind and unset sort above "above": the eye goes to what needs it.
+    const heads = within(card).getAllByRole('listitem').map((li) => li.textContent ?? '')
+    expect(heads[0]).toMatch(/Holiday Inn San Jose/)
+    await userEvent.click(within(card).getByRole('button', { name: 'Set breakeven for Lakeside Suites' }))
+    const field = within(card).getByLabelText('Annual breakeven for Lakeside Suites')
+    await userEvent.type(field, '$500,000')
+    expect(within(card).getByText(/That is \$1,370 a day/)).toBeInTheDocument()
+    await userEvent.click(within(card).getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(putTargets).toHaveBeenCalledWith('LAKE', { breakeven_annual: '500000', last_year_revenue: null }),
+    )
+  })
+
   it('a hotel row opens that hotel’s dashboard, on the same day', async () => {
     const router = renderAt()
     await userEvent.click(await screen.findByRole('button', { name: 'Open Holiday Inn San Jose' }))
@@ -209,7 +272,7 @@ describe('OverviewPage', () => {
     const picker = await screen.findByLabelText('Show a different day')
     // A date input takes a whole value at once (jsdom can't type into one).
     fireEvent.change(picker, { target: { value: '2026-06-21' } })
-    await waitFor(() => expect(getPortfolio).toHaveBeenLastCalledWith('2026-06-21'))
+    await waitFor(() => expect(getPortfolio).toHaveBeenLastCalledWith('2026-06-21', undefined))
     expect(await screen.findByRole('button', { name: 'Latest' })).toBeInTheDocument()
   })
 

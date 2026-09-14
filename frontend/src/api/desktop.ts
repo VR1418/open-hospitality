@@ -327,6 +327,33 @@ export async function finishWelcome(): Promise<void> {
 
 export type PortfolioStaff = { staff: number; on_clock: number; timecards_to_approve: number }
 
+/** The owner's own figures for a hotel (docs/desktop/PLAN-multi-hotel.md B3). */
+export type Targets = {
+  /** Total revenue the hotel needs in a year to cover its costs. */
+  breakeven_annual: string | null
+  /** Last year's total revenue, typed until a report or the books supply it. */
+  last_year_revenue: string | null
+  changed_at: string | null
+}
+
+/** Where a hotel stands against its breakeven; null until one is typed. */
+export type Outlook = {
+  breakeven_per_day: string
+  /** The first night this year the books have; the year-to-date comparison starts here. */
+  since: string
+  days_elapsed: number
+  days_in_year: number
+  night_gap: string | null
+  year_revenue: string | null
+  expected_year_to_date: string
+  year_gap: string | null
+  projected_year: string | null
+  projection_basis: 'last_year' | 'run_rate' | null
+  last_year_total: string | null
+  last_year_source: 'owner' | 'books' | null
+  growth: string | null
+}
+
 export type PortfolioHotel = {
   property_id: string
   name: string
@@ -340,9 +367,22 @@ export type PortfolioHotel = {
   revpar: string | null
   rooms_occupied: string | null
   rooms_total: string | null
+  rooms_sold_month: string | null
+  rooms_available_month: string | null
   month_revenue: string | null
   month_labour_cost: string | null
+  month_labour_pct: string | null
+  year_revenue: string | null
   staff: PortfolioStaff | null
+  targets: Targets
+  outlook: Outlook | null
+}
+
+export type BreakevenSummary = {
+  above: number
+  behind: number
+  unset: number
+  year_gap: string | null
 }
 
 export type PortfolioTotals = {
@@ -352,9 +392,15 @@ export type PortfolioTotals = {
   occupancy_pct: string | null
   adr: string | null
   revpar: string | null
+  rooms_total: string | null
+  rooms_sold: string | null
+  rooms_sold_month: string | null
+  rooms_available_month: string | null
   month_revenue: string | null
   month_labour_cost: string | null
   month_labour_pct: string | null
+  year_revenue: string | null
+  breakeven: BreakevenSummary
   staff: PortfolioStaff | null
 }
 
@@ -373,6 +419,8 @@ export type Finding = {
     | 'check_failed'
     | 'not_in_books'
     | 'codes_to_confirm'
+    | 'behind_breakeven'
+    | 'occupancy_drop'
   label: string
   detail: string
   delta: string | null
@@ -822,13 +870,29 @@ export async function backupNow(): Promise<{ detail: string }> {
 
 /** Every hotel the caller may see, for one day (default: the latest day any
  * has reports for). Null on a hosted deployment, which has no such route. */
-export async function getPortfolio(date?: string): Promise<Portfolio | null> {
-  const qs = date ? `?date=${encodeURIComponent(date)}` : ''
+export async function getPortfolio(date?: string, property?: string): Promise<Portfolio | null> {
+  const params = new URLSearchParams()
+  if (date) params.set('date', date)
+  if (property) params.set('property', property)
+  const qs = params.size > 0 ? `?${params.toString()}` : ''
   const res = await fetch(`/api/desktop/portfolio${qs}`, { headers: await authHeaders() })
   if (res.status === 404) return null
   if (res.status === 401) redirectToLogin()
   if (!res.ok) throw new Error(await detail(res))
   return (await res.json()) as Portfolio
+}
+
+/** The owner's annual breakeven and last year's revenue for one hotel; null clears. */
+export async function putTargets(
+  propertyId: string,
+  body: { breakeven_annual: string | null; last_year_revenue: string | null },
+): Promise<Targets> {
+  const res = await signedIn(`/api/desktop/hotels/${encodeURIComponent(propertyId)}/targets`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return (await res.json()) as Targets
 }
 
 /** One USALI line a transaction code can be put on. Null `schedule_id` is

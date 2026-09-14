@@ -134,8 +134,8 @@ Either way, **one email per business date**: a late report re-read after the sen
 
 | Step | Builds | Owner gets | Effort |
 |---|---|---|---|
-| 1 | B1 selector · B2 rooms · table columns · sortable table | The whole portfolio in rooms and money, and one hotel in a click | 1 day |
-| 2 | B3 breakeven and last year's revenue · **B3c budget upload with a template** · Profit picture card · B4 list | Which hotels are making money, at a glance, by their own numbers — and against their budget | 1½–2 days |
+| 1 | B1 selector · B2 rooms · table columns · sortable table | The whole portfolio in rooms and money, and one hotel in a click | **Built 14 Sep** (sorting not yet) |
+| 2 | B3 breakeven and last year's revenue · **B3c budget upload with a template** · Profit picture card · B4 list | Which hotels are making money, at a glance, by their own numbers — and against their budget | **B3, B4 built 14 Sep**; B3c next |
 | 3 | A email rules · unrouted list · Add this hotel from an email · the reader's hint | Six hotels' audits in one inbox file themselves; a new hotel is two clicks | 1–1½ days |
 | 4 | B6 morning sheet · **C the report in the mailbox** (recipients, schedule, send once per date, Send a test) | The whole picture, every morning, in the owner's inbox — no app to open | 1–1½ days |
 | 5 | B5 month comparisons | The picture over time | ½ day |

@@ -8,7 +8,7 @@
 // ledger, so the statement stays empty. The hotel and its fiscal year are
 // saved in ONE request at the end of step 3, so there is never a half-made
 // hotel to resume from; the group name is saved as soon as it is given.
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 
 import {
@@ -447,6 +447,7 @@ function FiscalStep({
   const [type, setType] = useState<FiscalChoice['calendar_type']>('calendar_month')
   const [startMonth, setStartMonth] = useState(1)
   const [weekday, setWeekday] = useState(0)
+  const queryClient = useQueryClient()
   const save = useMutation({
     mutationFn: () =>
       addHotel({
@@ -458,7 +459,12 @@ function FiscalStep({
           week_start_weekday: type === '445' ? weekday : null,
         },
       }),
-    onSuccess: onDone,
+    onSuccess: () => {
+      // The new hotel appears in every picker at once, reports or not.
+      void queryClient.invalidateQueries({ queryKey: ['welcome'] })
+      void queryClient.invalidateQueries({ queryKey: ['properties'] })
+      onDone()
+    },
   })
 
   return (

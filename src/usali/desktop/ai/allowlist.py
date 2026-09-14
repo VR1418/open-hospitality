@@ -42,7 +42,26 @@ from usali.redaction import mask_pans
 #: between a guest list and a third party. Two or more capitalised runs either
 #: side of a comma, which report COLUMN HEADINGS ("NAME, COMPANY") do not
 #: match, because those are single words.
-_GUEST_NAME = re.compile(r"\b[A-Z]{2,}, ?[A-Z]{2,}\b")
+#: The comma may be followed by a line break: a report row clustered by the
+#: PDF reader, or an OCR'd pack, prints "DOE,\nJANE" as easily as "DOE, JANE".
+_GUEST_NAME = re.compile(r"\b[A-Z]{2,},\s*[A-Z]{2,}\b")
+
+#: A card number as an OCR'd or row-clustered page can print it: four groups
+#: of four (or Amex's 4-6-5) with ANY whitespace or hyphens between them,
+#: line breaks included — the shape `redaction._PAN_RUN` (one line, spaces or
+#: hyphens only) does not see. The digits are still put to the Luhn check, so
+#: four year-like columns ("2026 2025 2024 2023") are not a card.
+_CARD_GROUPS = re.compile(r"(?<!\d)(\d{4})[\s\-]+(\d{4})[\s\-]+(\d{4})[\s\-]+(\d{4})(?!\d)")
+_CARD_AMEX = re.compile(r"(?<!\d)(\d{4})[\s\-]+(\d{6})[\s\-]+(\d{5})(?!\d)")
+#: An SSN whose hyphens survived OCR but whose groups were split across a
+#: break: "123-45-\n6789", "123-\n45-6789". At least one hyphen is required;
+#: three-two-four digits with plain spaces is what a statistics row looks
+#: like ("Rooms 318 45 2026"), and holding every such page back would leave
+#: nothing to send.
+_SSN_SPLIT = re.compile(r"(?<!\d)\d{3}\s*-\s*\d{2}\s*-\s*\d{4}(?!\d)")
+#: Ways to reach a person that no summary page carries.
+_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_PHONE = re.compile(r"\(\d{3}\)\s*\d{3}[-.\s]\d{4}|(?<!\d)\d{3}[-.]\d{3}[-.]\d{4}(?!\d)")
 
 
 class BlockedContent(RuntimeError):
@@ -147,11 +166,28 @@ def forbidden_names(session: Session) -> frozenset[str]:
     )
 
 
+def _luhn(digits: str) -> bool:
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        d = int(ch)
+        if i % 2 == 1:
+            d = d * 2 - 9 if d > 4 else d * 2
+        total += d
+    return total % 10 == 0
+
+
 def _has_pan(text: str) -> bool:
-    """A Luhn-valid card-shaped digit run. Uses `redaction.mask_pans` rather
-    than a second copy of the rule: if masking would change the text, a card
-    number is in it."""
-    return mask_pans(text) != text
+    """A Luhn-valid card-shaped digit run — on one line, through
+    `redaction.mask_pans` (one rule, not a second copy); or split across
+    whitespace, hyphens and line breaks in card-like groups, which is how an
+    OCR'd or row-clustered page prints one and the one-line rule misses."""
+    if mask_pans(text) != text:
+        return True
+    for pattern in (_CARD_GROUPS, _CARD_AMEX):
+        for m in pattern.finditer(text):
+            if _luhn("".join(m.groups())):
+                return True
+    return False
 
 
 def check(text: str, *, names: Iterable[str] = ()) -> None:
@@ -181,6 +217,13 @@ def check(text: str, *, names: Iterable[str] = ()) -> None:
 
     if _GUEST_NAME.search(text):
         raise BlockedContent("something shaped like a person's name")
+
+    if _SSN_SPLIT.search(text):
+        raise BlockedContent("something shaped like a Social Security number")
+    if _EMAIL.search(text):
+        raise BlockedContent("an email address")
+    if _PHONE.search(text):
+        raise BlockedContent("something shaped like a phone number")
 
     lowered = text.lower()
     # An SSN as printed. The bare-digit rule above catches the unpunctuated form.

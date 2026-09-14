@@ -1,12 +1,22 @@
 """All hotels at a glance — the desktop Overview.
 
-    GET /api/desktop/portfolio?date=YYYY-MM-DD
+    GET /api/desktop/portfolio?date=YYYY-MM-DD[&property=RTI22]
+    PUT /api/desktop/hotels/{property_id}/targets   the owner's breakeven and last year
 
-One call for the owner's home screen: every hotel the caller may see, for one
-business day (by default the latest day any of them has reports for), with
-totals across them. When Payroll & People is on it adds who is on the clock
-now, staff, timecards waiting for approval, and labour cost against revenue
-for the month so far.
+One call for the owner's home screen: every hotel the caller may see (or the
+one asked for), for one business day (by default the latest day any of them
+has reports for), with totals across them. When Payroll & People is on it
+adds who is on the clock now, staff, timecards waiting for approval, and
+labour cost against revenue for the month so far.
+
+The multi-hotel owner's picture (docs/desktop/PLAN-multi-hotel.md): rooms
+across the portfolio as well as money; and, per hotel, the owner's own
+ANNUAL breakeven — divided by the days in the year and compared with last
+night, the month and the year to date — with a projection for the year that
+is shaped by last year's revenue where the report prints it (choiceADVANTAGE
+carries last year's YTD beside this year's), by a figure the owner typed
+otherwise, and by a plain run rate as the last resort. The card always says
+which. None of this is a book entry: the targets are an install setting.
 
 Every figure comes from upstream's own functions. The day and the month are
 `reporting.summary_operating_statement_from_journal` — the call the Profit
@@ -23,7 +33,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
-from fastapi import APIRouter, Depends, FastAPI, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -35,6 +45,8 @@ from usali.assignments import (
     primary_assignment_on,
 )
 from usali.auth import Principal, request_session_factory, require_active_org, require_operator
+from usali.auth import ORG_ADMIN, require_grants
+from usali.desktop.settings import read_setting, write_setting
 from usali.inventory import InventoryInconsistent, InventoryNotConfigured, rooms_available
 from usali.models import (
     Employee,
@@ -44,10 +56,22 @@ from usali.models import (
     Property,
     Punch,
     Timecard,
+    UsaliStatisticFact,
 )
 from usali.night_audit import ledger_checks, slot_status
 from usali.timecards import punch_states
 from usali.workforce import resolve_scope
+
+#: Where each hotel's owner-typed figures live — the same setting the wizard
+#: keeps the ownership entity in (welcome_api.PROFILES_KEY), so a hotel has
+#: one profile: entity, breakeven, last year's revenue.
+PROFILES_KEY = "hotel_profiles"
+#: A night whose occupancy is this many points under the hotel's own last
+#: seven is worth a look.
+OCCUPANCY_DROP_POINTS = Decimal(15)
+#: How many of last year's days the books must hold before the app trusts its
+#: own figure for last year's total (a year with a gap is not a year).
+_FULL_YEAR_DAYS = 360
 
 # How far back a clock-in can still mean "on the clock" — the same window
 # `timecards.punch_state` uses, so both answers agree.
@@ -69,6 +93,40 @@ class StaffOut(BaseModel):
     timecards_to_approve: int
 
 
+class TargetsOut(BaseModel):
+    """The owner's own figures for a hotel. Both optional, both theirs to change."""
+    #: Total revenue the hotel needs in a year to cover its costs.
+    breakeven_annual: str | None
+    #: Last year's total revenue, typed until a report or the books supply it.
+    last_year_revenue: str | None
+    changed_at: str | None
+
+
+class OutlookOut(BaseModel):
+    """Where the hotel stands against its breakeven, and where the year is heading."""
+    breakeven_per_day: str
+    #: The first night this year the books have for the hotel — Jan 1 when
+    #: they go back that far. The year-to-date comparison starts here, so a
+    #: hotel whose books began in August is not judged on January.
+    since: date
+    #: Nights from `since` to the day shown, inclusive.
+    days_elapsed: int
+    days_in_year: int
+    #: Last night's revenue minus the daily breakeven; None when no report.
+    night_gap: str | None
+    #: Year-to-date revenue, and what it should be by today (per day × days elapsed).
+    year_revenue: str | None
+    expected_year_to_date: str
+    year_gap: str | None
+    #: The year's projected total, and what shaped it.
+    projected_year: str | None
+    projection_basis: Literal["last_year", "run_rate"] | None
+    #: Last year's total and where it came from; growth = this YTD ÷ last YTD.
+    last_year_total: str | None
+    last_year_source: Literal["owner", "books"] | None
+    growth: str | None
+
+
 class HotelOut(BaseModel):
     property_id: str
     name: str
@@ -81,9 +139,25 @@ class HotelOut(BaseModel):
     revpar: str | None
     rooms_occupied: str | None
     rooms_total: str | None
+    #: Room-nights sold and available so far this month.
+    rooms_sold_month: str | None
+    rooms_available_month: str | None
     month_revenue: str | None
     month_labour_cost: str | None
+    month_labour_pct: str | None
+    year_revenue: str | None
     staff: StaffOut | None
+    targets: TargetsOut
+    #: None until the owner has typed an annual breakeven.
+    outlook: OutlookOut | None
+
+
+class BreakevenSummary(BaseModel):
+    above: int
+    behind: int
+    unset: int
+    #: Sum of the year gaps over the hotels with a breakeven.
+    year_gap: str | None
 
 
 class TotalsOut(BaseModel):
@@ -93,9 +167,15 @@ class TotalsOut(BaseModel):
     occupancy_pct: str | None
     adr: str | None
     revpar: str | None
+    rooms_total: str | None
+    rooms_sold: str | None
+    rooms_sold_month: str | None
+    rooms_available_month: str | None
     month_revenue: str | None
     month_labour_cost: str | None
     month_labour_pct: str | None
+    year_revenue: str | None
+    breakeven: BreakevenSummary
     staff: StaffOut | None
 
 
@@ -110,6 +190,7 @@ class FindingOut(BaseModel):
     property_id: str
     hotel: str
     kind: Literal[
+        "behind_breakeven", "occupancy_drop",
         "no_reports", "missing_report", "check_failed", "not_in_books", "codes_to_confirm"
     ]
     label: str
@@ -156,6 +237,13 @@ class _Day:
         self.room_revenue: Decimal | None = None
         self.month_revenue: Decimal | None = None
         self.month_labour: Decimal | None = None
+        self.rooms_sold_month: Decimal | None = None
+        self.rooms_available_month: Decimal | None = None
+        self.year_revenue: Decimal | None = None
+        #: This year's and last year's revenue to date as the REPORT prints
+        #: them (choiceADVANTAGE's YTD and Last YTD), for the growth ratio.
+        self.ytd_printed: Decimal | None = None
+        self.ytd_prior_printed: Decimal | None = None
 
 
 def _day_for(session: Session, property_id: str, day: date | None, has_reports: bool) -> _Day:
@@ -178,6 +266,9 @@ def _day_for(session: Session, property_id: str, day: date | None, has_reports: 
         return out
 
     stats = {m.metric_code: m.day for m in report.statistics}
+    for m in report.statistics:
+        if m.metric_code == "ROOM_REVENUE":
+            out.ytd_printed, out.ytd_prior_printed = m.ytd, m.ytd_prior
     out.status = "in"
     out.revenue = report.total_operating_revenue
     out.occupancy = stats.get("OCCUPANCY_PCT")
@@ -208,7 +299,114 @@ def _day_for(session: Session, property_id: str, day: date | None, has_reports: 
     out.month_revenue = month.total_operating_revenue
     # Estimated, from approved timecards (Schedule 14) — the statement's own figure.
     out.month_labour = month.payroll_expense_total
+    sold = _rooms_sold(session, property_id, day.replace(day=1), day)
+    out.rooms_sold_month = sold if sold else None
+    if out.rooms_total is not None:
+        out.rooms_available_month = out.rooms_total * day.day
+    try:
+        year = reporting.summary_operating_statement_from_journal(
+            session, property_id=property_id, date_from=day.replace(month=1, day=1), date_to=day,
+        )
+        out.year_revenue = year.total_operating_revenue
+    except ValueError:
+        pass
     return out
+
+
+def _rooms_sold(session: Session, property_id: str, start: date, end: date) -> Decimal:
+    """Room-nights sold over the window, from the promoted nightly statistic."""
+    rows = session.execute(
+        select(UsaliStatisticFact.business_date, UsaliStatisticFact.value).where(
+            UsaliStatisticFact.property_id == property_id,
+            UsaliStatisticFact.business_date >= start,
+            UsaliStatisticFact.business_date <= end,
+            UsaliStatisticFact.metric_code == "ROOMS_OCCUPIED",
+            UsaliStatisticFact.period == "DAY",
+            UsaliStatisticFact.is_prior_year.is_(False),
+        )
+    ).all()
+    by_day = {d: Decimal(str(v)) for d, v in rows}  # last write wins, as the statement pivots
+    return sum(by_day.values(), Decimal(0))
+
+
+# --- The owner's targets, and the outlook they make ---------------------------
+
+def _profiles(session: Session) -> dict[str, dict[str, object]]:
+    raw = read_setting(session, PROFILES_KEY)
+    return raw if isinstance(raw, dict) else {}
+
+
+def _targets(profile: dict[str, object]) -> TargetsOut:
+    def money(key: str) -> str | None:
+        value = profile.get(key)
+        return None if value is None else str(Decimal(str(value)).quantize(_CENT))
+    changed = profile.get("targets_changed_at")
+    return TargetsOut(breakeven_annual=money("breakeven_annual"),
+                      last_year_revenue=money("last_year_revenue"),
+                      changed_at=str(changed) if changed else None)
+
+
+def _days_in_year(year: int) -> int:
+    return 366 if (year % 4 == 0 and year % 100 != 0) or year % 400 == 0 else 365
+
+
+def _last_year_from_books(session: Session, property_id: str, year: int) -> Decimal | None:
+    """Last year's total revenue from the app's own books — only when they
+    hold nearly every day of it. A year with a gap is not a year."""
+    by_day = reporting.revenue_by_day(session, property_id, date(year, 1, 1), date(year, 12, 31))
+    if len(by_day) < _FULL_YEAR_DAYS:
+        return None
+    return sum(by_day.values(), Decimal(0))
+
+
+def _outlook(
+    session: Session, property_id: str, entry: _Day, targets: TargetsOut, day: date,
+    first_night: date | None,
+) -> OutlookOut | None:
+    if targets.breakeven_annual is None:
+        return None
+    days_in_year = _days_in_year(day.year)
+    since = max(date(day.year, 1, 1), first_night or date(day.year, 1, 1))
+    elapsed = (day - since).days + 1
+    per_day = Decimal(targets.breakeven_annual) / days_in_year
+    expected = per_day * elapsed
+
+    last_year_total: Decimal | None = None
+    source: Literal["owner", "books"] | None = None
+    if targets.last_year_revenue is not None:
+        last_year_total, source = Decimal(targets.last_year_revenue), "owner"
+    else:
+        from_books = _last_year_from_books(session, property_id, day.year - 1)
+        if from_books is not None:
+            last_year_total, source = from_books, "books"
+
+    growth: Decimal | None = None
+    if entry.ytd_printed and entry.ytd_prior_printed:
+        growth = entry.ytd_printed / entry.ytd_prior_printed
+
+    projected: Decimal | None = None
+    basis: Literal["last_year", "run_rate"] | None = None
+    if entry.year_revenue is not None:
+        if last_year_total is not None and growth is not None:
+            projected, basis = last_year_total * growth, "last_year"
+        elif elapsed > 0:
+            projected, basis = entry.year_revenue / elapsed * days_in_year, "run_rate"
+
+    return OutlookOut(
+        breakeven_per_day=_money(per_day) or "0.00", since=since, days_elapsed=elapsed,
+        days_in_year=days_in_year,
+        night_gap=_money(entry.revenue - per_day) if entry.revenue is not None else None,
+        year_revenue=_money(entry.year_revenue), expected_year_to_date=_money(expected) or "0.00",
+        year_gap=_money(entry.year_revenue - expected) if entry.year_revenue is not None else None,
+        projected_year=_money(projected), projection_basis=basis,
+        last_year_total=_money(last_year_total), last_year_source=source,
+        growth=None if growth is None else str(growth.quantize(Decimal("0.001"))),
+    )
+
+
+class TargetsIn(BaseModel):
+    breakeven_annual: Decimal | None = None
+    last_year_revenue: Decimal | None = None
 
 
 def _staff(
@@ -305,8 +503,33 @@ def _unknown_codes(session: Session, property_id: str) -> tuple[int, Decimal]:
     return len(codes), sum((abs(Decimal(r[1])) for r in rows), Decimal("0"))
 
 
+def _occupancy_drop(session: Session, property_id: str, entry: _Day, day: date) -> Decimal | None:
+    """Points of occupancy last night fell under the hotel's own previous
+    seven nights, when that is more than OCCUPANCY_DROP_POINTS; else None."""
+    if entry.rooms_occupied is None or not entry.rooms_total:
+        return None
+    rows = session.execute(
+        select(UsaliStatisticFact.business_date, UsaliStatisticFact.value).where(
+            UsaliStatisticFact.property_id == property_id,
+            UsaliStatisticFact.business_date >= day - timedelta(days=7),
+            UsaliStatisticFact.business_date < day,
+            UsaliStatisticFact.metric_code == "ROOMS_OCCUPIED",
+            UsaliStatisticFact.period == "DAY",
+            UsaliStatisticFact.is_prior_year.is_(False),
+        )
+    ).all()
+    nights = {d: Decimal(str(v)) for d, v in rows}
+    if len(nights) < 4:
+        return None
+    usual = sum(nights.values(), Decimal(0)) / len(nights) * 100 / entry.rooms_total
+    tonight = entry.rooms_occupied * 100 / entry.rooms_total
+    drop = usual - tonight
+    return drop if drop > OCCUPANCY_DROP_POINTS else None
+
+
 def _findings(
     session: Session, hotels: list[Property], days: dict[str, "_Day"], day: date | None,
+    outlooks: dict[str, OutlookOut | None],
 ) -> list[FindingOut]:
     """What last night's audit turned up, in the owner's words: a hotel that
     sent nothing, a report still to come, a balance check that failed, or a
@@ -332,6 +555,21 @@ def _findings(
     for prop in hotels:
         entry = days[prop.property_id]
         common = {"property_id": prop.property_id, "hotel": prop.name}
+        outlook = outlooks.get(prop.property_id)
+        if outlook is not None and outlook.year_gap is not None and Decimal(outlook.year_gap) < 0:
+            out.append(FindingOut(
+                **common, kind="behind_breakeven", label="Behind breakeven",
+                detail=f"${-Decimal(outlook.year_gap):,.0f} under where it should be since "
+                       f"{outlook.since.day} {outlook.since:%b}, at "
+                       f"${Decimal(outlook.breakeven_per_day):,.0f} a day.",
+                delta=None,
+            ))
+        drop = _occupancy_drop(session, prop.property_id, entry, day)
+        if drop is not None:
+            out.append(FindingOut(
+                **common, kind="occupancy_drop", label="Occupancy fell",
+                detail=f"{drop:.0f} points under this hotel's last seven nights.", delta=None,
+            ))
         if entry.status == "missing":
             out.append(FindingOut(**common, kind="no_reports", label="No reports yet",
                                   detail=entry.note or MISSING_DAY, delta=None))
@@ -383,6 +621,7 @@ def portfolio(
     request: Request,
     principal: Principal = Depends(require_operator),
     on: date | None = Query(default=None, alias="date"),
+    only: str | None = Query(default=None, alias="property"),
 ) -> PortfolioOut:
     now = datetime.now(UTC)
     staff_shown = "payroll" in getattr(request.app.state, "desktop_enabled_modules", frozenset())
@@ -390,22 +629,35 @@ def portfolio(
         scope = resolve_scope(principal, session)
         hotels = [
             p for p in session.scalars(select(Property).order_by(Property.property_id))
-            if scope.allows_property(p.property_id)
+            if scope.allows_property(p.property_id) and (only is None or p.property_id == only)
         ]
+        profiles = _profiles(session)
         visible = {p.property_id for p in hotels}
         # The latest day each hotel has reports for (a hotel on two PMS
         # sources has two rows; its latest is the later of them).
         latest: dict[str, date] = {}
+        first: dict[str, date] = {}
         for info in reporting.list_properties(session):
             if info.property_id in visible:
                 latest[info.property_id] = max(latest.get(info.property_id, info.last_date),
                                                info.last_date)
+                first[info.property_id] = min(first.get(info.property_id, info.first_date),
+                                              info.first_date)
         day = on if on is not None else max(latest.values(), default=None)
 
         days = {p.property_id: _day_for(session, p.property_id, day, p.property_id in latest)
                 for p in hotels}
+        targets = {p.property_id: _targets(profiles.get(p.property_id, {})) for p in hotels}
+        outlooks: dict[str, OutlookOut | None] = {
+            p.property_id: (
+                _outlook(session, p.property_id, days[p.property_id], targets[p.property_id], day,
+                         first.get(p.property_id))
+                if day is not None else None
+            )
+            for p in hotels
+        }
         trend = _trend(session, sorted(visible), day)
-        findings = _findings(session, hotels, days, day)
+        findings = _findings(session, hotels, days, day, outlooks)
         staff = _staff(session, sorted(visible), now.date(), now) if staff_shown else {}
         staff_total: StaffOut | None = None
         if staff_shown:
@@ -426,6 +678,8 @@ def portfolio(
     counted = [d for d in days.values() if d.status == "in"]
     month_rev = _sum(d.month_revenue for d in days.values())
     month_lab = _sum(d.month_labour for d in days.values())
+    with_target = [o for o in outlooks.values() if o is not None]
+    gaps = [Decimal(o.year_gap) for o in with_target if o.year_gap is not None]
     totals = TotalsOut(
         hotels=len(hotels),
         hotels_in=len(counted),
@@ -433,10 +687,22 @@ def portfolio(
         occupancy_pct=_pct(_pooled(counted, "rooms_occupied", "rooms_total", scale=100)),
         adr=_money(_pooled(counted, "room_revenue", "rooms_occupied")),
         revpar=_money(_pooled(counted, "room_revenue", "rooms_total")),
+        # Rooms across the portfolio: every hotel that says how many it has,
+        # whether or not last night's report is in.
+        rooms_total=_money(_sum(d.rooms_total for d in days.values())),
+        rooms_sold=_money(_sum(d.rooms_occupied for d in counted)),
+        rooms_sold_month=_money(_sum(d.rooms_sold_month for d in days.values())),
+        rooms_available_month=_money(_sum(d.rooms_available_month for d in days.values())),
         month_revenue=_money(month_rev),
         month_labour_cost=_money(month_lab) if staff_shown else None,
         month_labour_pct=_pct(None if month_lab is None or month_rev is None
                               else _ratio(month_lab * 100, month_rev)) if staff_shown else None,
+        year_revenue=_money(_sum(d.year_revenue for d in days.values())),
+        breakeven=BreakevenSummary(
+            above=sum(1 for g in gaps if g >= 0), behind=sum(1 for g in gaps if g < 0),
+            unset=len(hotels) - len(with_target),
+            year_gap=_money(sum(gaps, Decimal(0))) if gaps else None,
+        ),
         staff=staff_total,
     )
     return PortfolioOut(
@@ -453,10 +719,16 @@ def portfolio(
                 revpar=_money(days[p.property_id].revpar),
                 rooms_occupied=_pct(days[p.property_id].rooms_occupied),
                 rooms_total=_pct(days[p.property_id].rooms_total),
+                rooms_sold_month=_money(days[p.property_id].rooms_sold_month),
+                rooms_available_month=_money(days[p.property_id].rooms_available_month),
                 month_revenue=_money(days[p.property_id].month_revenue),
                 month_labour_cost=(_money(days[p.property_id].month_labour)
                                    if staff_shown else None),
+                month_labour_pct=_labour_pct(days[p.property_id]) if staff_shown else None,
+                year_revenue=_money(days[p.property_id].year_revenue),
                 staff=staff.get(p.property_id),
+                targets=targets[p.property_id],
+                outlook=outlooks[p.property_id],
             )
             for p in hotels
         ],
@@ -464,6 +736,41 @@ def portfolio(
         trend=trend,
         findings=findings,
     )
+
+
+def _labour_pct(d: _Day) -> str | None:
+    if d.month_labour is None or not d.month_revenue:
+        return None
+    return _pct(d.month_labour * 100 / d.month_revenue)
+
+
+@router.put("/api/desktop/hotels/{property_id}/targets")
+def put_targets(
+    property_id: str, body: TargetsIn, request: Request,
+    _: Principal = Depends(require_grants(ORG_ADMIN)),
+) -> TargetsOut:
+    """The owner's annual breakeven and last year's revenue for one hotel.
+    Null clears a figure; the rest of the profile (ownership entity) is kept."""
+    for name, value in (("breakeven_annual", body.breakeven_annual),
+                        ("last_year_revenue", body.last_year_revenue)):
+        if value is not None and (value < 0 or value > Decimal("1000000000")):
+            raise HTTPException(status_code=422, detail=f"{name.replace('_', ' ')} should be a "
+                                                        "yearly dollar figure, zero or more.")
+    with request_session_factory(request)() as session:
+        if session.get(Property, property_id) is None:
+            raise HTTPException(status_code=404, detail=f"No hotel called {property_id}.")
+        profiles = _profiles(session)
+        profile = dict(profiles.get(property_id, {}))
+        profile["breakeven_annual"] = (
+            None if body.breakeven_annual is None else str(body.breakeven_annual.quantize(_CENT))
+        )
+        profile["last_year_revenue"] = (
+            None if body.last_year_revenue is None else str(body.last_year_revenue.quantize(_CENT))
+        )
+        profile["targets_changed_at"] = datetime.now(UTC).isoformat(timespec="seconds")
+        write_setting(session, PROFILES_KEY, {**profiles, property_id: profile})
+        session.commit()
+        return _targets(profile)
 
 
 def install(app: FastAPI) -> None:

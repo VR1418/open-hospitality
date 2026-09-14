@@ -232,6 +232,21 @@ page under Settings (the accountant's view; owners have Codes to confirm).
 - A tester's real hotel code was used as the example in the docs and code;
   it is the demo hotel's now.
 
+## Update, 14 September (evening) — the multi-hotel owner's picture, steps 1 and 2
+
+Built from [PLAN-multi-hotel.md](PLAN-multi-hotel.md):
+
+| | |
+|---|---|
+| **All hotels ▾** | A picker on the Overview narrows the whole page to one hotel (`?property=` on the portfolio call); "All hotels" brings the group back. |
+| **Rooms** | A totals card: rooms across the group, sold last night, this month's room-nights sold of those available; rooms and labour % per hotel in the table. Portfolio occupancy stays sold ÷ available, never an average of percentages. |
+| **Profit picture** | The owner's **annual breakeven** per hotel (`PUT /api/desktop/hotels/{id}/targets`, kept in the hotel profile setting), divided by the days in the year; last night and the year to date against it; the projection shaped by last year where the report prints it (choiceADVANTAGE's YTD beside Last YTD), by last year's total the owner typed otherwise, by a plain run rate as the last resort — and the card says which. The year-to-date count starts where the books do this year, not on 1 January. |
+| **Needs a look** | Last night's audit list, renamed and extended: behind breakeven; occupancy 15+ points under the hotel's own last seven nights. |
+| **The walk** | A nineteenth step sets three breakevens and checks the picture, the rooms and the narrowing. |
+| **A hotel shows up as soon as it is set up** | Reported by the owner: hotels added in the wizard were missing from the picker. `/api/properties` lists hotels by their promoted facts, so a hotel with no report yet did not exist for the pickers. The desktop edition now fills the list from the wizard's own (`withEveryHotel` in `propertyContext.ts`), and adding a hotel refreshes it at once. |
+
+Next from the plan: the budget upload with a template (B3c), then email rules and *Add this hotel* from an unrouted email (A), then the morning email (C).
+
 ## 6. Send the three upstream changes back — *half a day*
 
 [UPSTREAM.md](UPSTREAM.md) has three, two of them written and tested here: the

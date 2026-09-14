@@ -175,3 +175,56 @@ def test_a_summary_line_of_codes_and_money_passes() -> None:
         "Hotel Journal Summary Business Date: 9/10/2026 Property Code: RTI22 "
         "RM Room Charge 7,147.07 T1 State Occ Tax 437.42 VI Visa Payment (2,406.13)"
     )
+
+
+# --- the shapes OCR and row-clustering produce (raised by upstream's author) -----
+
+def test_a_card_number_split_across_a_line_break_is_still_refused() -> None:
+    """An OCR'd pack, or a page the PDF reader clustered into rows, prints a
+    card number with the break wherever the layout put it. The one-line rule
+    misses that; this does not."""
+    for text in (
+        "Visa 4111 1111\n1111 1111 auth 3/4/26",
+        "4111-1111-\n1111-1111",
+        "card\t4111\t1111\t1111\t1111",
+        "AMEX 3782 822463\n10005",
+    ):
+        with pytest.raises(BlockedContent) as e:
+            check(text)
+        assert "card number" in str(e.value) and "4111" not in str(e.value)
+
+
+def test_four_year_like_columns_are_not_a_card() -> None:
+    """Groups of four digits with spaces between them are also what a
+    statistics page looks like. The Luhn check tells them apart."""
+    check("Rooms available 2026 2025 2024 2022")
+    check("Total Rooms 60 46 47 44 2026 47 318 45")
+
+
+def test_a_social_security_number_split_across_a_break_is_still_refused() -> None:
+    for text in ("123-45-\n6789", "123-\n45-6789", "SSN 123 - 45 - 6789"):
+        with pytest.raises(BlockedContent) as e:
+            check(text)
+        assert "Social Security" in str(e.value)
+
+
+def test_three_two_four_digits_with_plain_spaces_is_a_statistics_row() -> None:
+    """"318 45 2026" is rooms, a percentage and a year — not a Social
+    Security number. Holding every such page back would leave nothing."""
+    check("In House 318 45 2026 Occupied 46")
+
+
+def test_a_guest_name_with_the_break_after_the_comma_is_still_refused() -> None:
+    with pytest.raises(BlockedContent):
+        check("318 DOE,\nJANE MARIE 3/4/26")
+
+
+def test_an_email_address_or_phone_number_is_refused() -> None:
+    with pytest.raises(BlockedContent) as e:
+        check("contact jane.doe@example.com")
+    assert "email" in str(e.value) and "jane" not in str(e.value)
+    for phone in ("(408) 555-0134", "408-555-0134", "408.555.0134"):
+        with pytest.raises(BlockedContent):
+            check(f"call {phone}")
+    # Amounts and dates are not phone numbers.
+    check("Total 7,147.07 437.42 on 9/10/2026 to 9/12/2026")

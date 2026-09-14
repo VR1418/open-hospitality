@@ -134,6 +134,32 @@ On **Add reports**, **Just read** lists the last few files as they land:
 which hotel and night each one was, or why it couldn't be read — and how
 many codes are waiting to be confirmed.
 
+## 4a-ii. The profit picture, rooms, and one hotel at a time
+
+**All hotels ▾** at the top of the Overview narrows the whole page to one
+hotel; "All hotels" brings the group back. The totals now include **Rooms**:
+how many you have across the group, how many were sold last night, and this
+month's room-nights sold of those available. The hotels table shows rooms
+sold and labour as a percentage of revenue for each hotel.
+
+**Profit picture** is the card that says which hotels are making money — by
+your own number. For each hotel, press **Set breakeven** and type the
+**revenue it needs in a year to cover its costs** (rent or mortgage, payroll,
+utilities, franchise fees — from your past years). The card shows what that
+is a day, and from then on compares:
+
+- **last night** against the daily figure — above, or short, by how much;
+- **the year so far** against where it should be by today;
+- **heading for** — the year's projected total against the breakeven.
+
+The projection is shaped by last year's revenue where your front-desk
+system prints it beside this year's (choiceADVANTAGE does), or by **last
+year's total revenue** if you type it (from your tax return), or, failing
+both, by a plain run rate — and the card says which it used. Change either
+number whenever you know better; the whole picture is worked out again at
+once. A hotel behind breakeven also appears under **Needs a look**, as does
+a night whose occupancy fell well under the hotel's own last seven.
+
 ## 4b. What's connected
 
 The Overview has a **What's connected** card: your hotels and their last

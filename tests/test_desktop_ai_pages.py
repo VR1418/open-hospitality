@@ -54,3 +54,22 @@ def test_nothing_readable_means_nothing_is_sent(tmp_path: Path) -> None:
         # An unreadable file is unreadable — the caller says so properly
         # rather than this pretending it scanned something.
         safe_pages(empty)
+
+
+def test_a_page_about_people_is_held_back_for_what_it_is() -> None:
+    """A guest printed as "Jane Doe" in prose is not a shape a pattern can
+    tell from "Room Charge". So a page whose own title says it lists guests,
+    accounts or staff never reaches the scan — and a page that lists people
+    in mixed case, line after line, is a list of people whatever it is called."""
+    from usali.desktop.ai.pages import section_about_people
+
+    assert section_about_people("In House Guest List\nJane Doe 318 3/4/26") is not None
+    assert section_about_people("A/R Aging Detail\n...") is not None
+    assert section_about_people("Employee Time Report\n...") is not None
+    assert "list of people" in (section_about_people(
+        "Tonight\nDoe, Jane\nRoe, Richard\nPoe, Edgar Allan\n"
+    ) or "")
+    # The summary pages the books need are not about people.
+    assert section_about_people("Hotel Journal Summary\nRM Room Charge 7,147.07") is None
+    assert section_about_people("Hotel Statistics\nTotal Rooms 60") is None
+    assert section_about_people("Transaction Summary\nName, Company\nRM 1,234.00") is None

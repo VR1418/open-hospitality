@@ -20,6 +20,7 @@ import {
 import ConnectionsCard from '../components/ConnectionsCard'
 import FoldersCard from '../components/FoldersCard'
 import MorningCard from '../components/MorningCard'
+import ProfitPictureCard from '../components/ProfitPictureCard'
 import { barRampCss } from '../lib/chartBars'
 import {
   Badge,
@@ -118,6 +119,8 @@ function FindingRow({ finding }: { finding: Finding }) {
     check_failed: 'danger',
     not_in_books: 'danger',
     codes_to_confirm: 'danger',
+    behind_breakeven: 'warn',
+    occupancy_drop: 'warn',
   }
   return (
     <li className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 border-t border-line py-2 text-sm">
@@ -153,9 +156,12 @@ function ReportsBadge({ hotel }: { hotel: PortfolioHotel }) {
 
 export default function OverviewPage() {
   const [date, setDate] = useState<string | undefined>(undefined)
+  // All hotels, or one: the picker at the top of this page, not the global
+  // one — an owner narrows to a hotel here and the whole page follows.
+  const [only, setOnly] = useState<string | undefined>(undefined)
   const portfolio = useQuery({
-    queryKey: ['portfolio', date ?? 'latest'],
-    queryFn: () => getPortfolio(date),
+    queryKey: ['portfolio', date ?? 'latest', only ?? 'all'],
+    queryFn: () => getPortfolio(date, only),
     retry: false,
   })
   const me = useQuery({ queryKey: ['me'], queryFn: getMe })
@@ -166,7 +172,7 @@ export default function OverviewPage() {
     enabled: hasRole(me.data, 'org_admin'),
     retry: false,
   })
-  const { setProperty } = useGlobalProperty()
+  const { setProperty, properties } = useGlobalProperty()
   const navigate = useNavigate()
 
   /** The hotel's own dashboard, on the day this page is showing. */
@@ -215,7 +221,7 @@ export default function OverviewPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="All hotels"
+        title={only === undefined ? 'All hotels' : (hotels[0]?.name ?? only)}
         subtitle={
           data.business_date === null
             ? 'No reports read yet.'
@@ -223,6 +229,21 @@ export default function OverviewPage() {
         }
         actions={
           <>
+            {(properties?.length ?? 0) > 1 && (
+              <select
+                aria-label="Which hotels"
+                className={controlClass}
+                value={only ?? ''}
+                onChange={(e) => setOnly(e.target.value === '' ? undefined : e.target.value)}
+              >
+                <option value="">All hotels</option>
+                {properties!.map((p) => (
+                  <option key={p.property_id} value={p.property_id}>
+                    {p.name} · {p.property_id}
+                  </option>
+                ))}
+              </select>
+            )}
             <label className="flex items-center gap-2 text-sm text-ink-muted">
               <span className="sr-only">Show a different day</span>
               <input
@@ -258,8 +279,9 @@ export default function OverviewPage() {
         </Card>
       )}
 
-      {canAdd && <MorningCard />}
-      {canAdd && <ConnectionsCard />}
+      {canAdd && only === undefined && <MorningCard />}
+      <ProfitPictureCard hotels={hotels} summary={totals.breakeven} canEdit={canAdd} />
+      {canAdd && only === undefined && <ConnectionsCard />}
 
       <Card role="region" aria-label="Hotels">
         <h2 className={sectionHeadClass}>Hotels</h2>
@@ -278,7 +300,9 @@ export default function OverviewPage() {
                   <th className={`${headCellClass} text-right`}>Occupancy</th>
                   <th className={`${headCellClass} text-right`}>Average rate</th>
                   <th className={`${headCellClass} text-right`}>RevPAR</th>
+                  <th className={`${headCellClass} text-right`}>Rooms</th>
                   <th className={`${headCellClass} text-right`}>Month so far</th>
+                  <th className={`${headCellClass} text-right`}>Labour %</th>
                 </tr>
               </thead>
               <tbody>
@@ -309,8 +333,13 @@ export default function OverviewPage() {
                     <td className={`${cellClass} text-right tabular-nums`}>{dollars(h.adr, 2)}</td>
                     <td className={`${cellClass} text-right tabular-nums`}>{dollars(h.revpar, 2)}</td>
                     <td className={`${cellClass} text-right tabular-nums`}>
+                      {h.rooms_occupied === null ? '—' : Number(h.rooms_occupied).toFixed(0)}
+                      {h.rooms_total !== null && ` of ${Number(h.rooms_total).toFixed(0)}`}
+                    </td>
+                    <td className={`${cellClass} text-right tabular-nums`}>
                       {dollars(h.month_revenue)}
                     </td>
+                    <td className={`${cellClass} text-right tabular-nums`}>{percent(h.month_labour_pct)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -321,11 +350,24 @@ export default function OverviewPage() {
 
       <FoldersCard only={['saved', 'read', 'unreadable']} />
 
-      <section aria-label="Totals" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section aria-label="Totals" className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Metric
           label="Revenue"
           value={dollars(totals.revenue)}
           detail={`${totals.hotels_in} of ${totals.hotels} ${totals.hotels === 1 ? 'hotel' : 'hotels'} reported`}
+        />
+        <Metric
+          label="Rooms"
+          value={
+            totals.rooms_total === null
+              ? '—'
+              : `${totals.rooms_sold === null ? '—' : Number(totals.rooms_sold).toFixed(0)} of ${Number(totals.rooms_total).toFixed(0)}`
+          }
+          detail={
+            totals.rooms_sold_month !== null && totals.rooms_available_month !== null
+              ? `Sold last night · this month ${Number(totals.rooms_sold_month).toLocaleString()} of ${Number(totals.rooms_available_month).toLocaleString()} room-nights`
+              : 'Sold last night, across the hotels'
+          }
         />
         <Metric label="Occupancy" value={percent(totals.occupancy_pct)} detail="Rooms sold ÷ rooms" />
         <Metric
@@ -349,11 +391,12 @@ export default function OverviewPage() {
           )}
         </Card>
 
-        <Card role="region" aria-label="Last night’s audit">
-          <h2 className={sectionHeadClass}>Last night’s audit</h2>
+        <Card role="region" aria-label="Needs a look">
+          <h2 className={sectionHeadClass}>Needs a look</h2>
           {data.findings.length === 0 ? (
             <p className="mt-2 text-sm text-ink">
-              Nothing to look at — every hotel’s reports are in and their balances tie.
+              Nothing to look at — every hotel’s reports are in, their balances tie, and none is
+              behind breakeven.
             </p>
           ) : (
             <>

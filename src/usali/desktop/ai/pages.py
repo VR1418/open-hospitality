@@ -29,8 +29,26 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+import re
+
 from usali.adaptors.pdf import Word, cluster_rows, extract_pages
 from usali.desktop.ai.allowlist import BlockedContent, check
+
+#: Sections of a night-audit pack that are ABOUT people or accounts rather
+#: than totals. The scan below looks for shapes it can recognise; a page whose
+#: own title says it lists guests is held back before the scan gets a say,
+#: because a guest printed as "Jane Doe" in prose is not a shape any pattern
+#: can tell from "Room Charge". The title is the page's first line.
+_PEOPLE_SECTIONS = (
+    "GUEST", "LEDGER", "AGING", "IN HOUSE", "IN-HOUSE", "ARRIVAL", "DEPARTURE",
+    "NO SHOW", "NO-SHOW", "RESERVATION", "CASHIER", "FOLIO", "REGISTRATION",
+    "PAYROLL", "EMPLOYEE", "STAFF", "TAX EXEMPT", "PRE-PAID", "PREPAID", "DEPOSIT",
+    "CREDIT LIMIT", "DIRECT BILL DETAIL", "COMPANY", "TRAVEL AGENT", "MEMBER",
+)
+#: A list of people in mixed case — "Doe, Jane" — one line after another. One
+#: such line is a heading ("Name, Company"); several are a guest list.
+_LISTED_NAME = re.compile(r"^[A-Z][a-z]+(?:[ '\-][A-Z][a-z]+)*,\s+[A-Z][a-z]+", re.MULTILINE)
+_LISTED_NAMES_MAX = 2
 
 
 @dataclass(frozen=True)
@@ -95,6 +113,10 @@ def safe_pages(pdf: str | Path, *, names: Iterable[str] = ()) -> Reading:
         text = page_text(words)
         if not text:
             continue  # a blank page is nothing to send and nothing to report
+        about_people = section_about_people(text)
+        if about_people is not None:
+            held.append(HeldBack(number=i, why=about_people))
+            continue
         try:
             check(text, names=needles)
         except BlockedContent as blocked:
@@ -102,3 +124,16 @@ def safe_pages(pdf: str | Path, *, names: Iterable[str] = ()) -> Reading:
             continue
         kept.append(Page(number=i, text=text))
     return Reading(kept=tuple(kept), held_back=tuple(held))
+
+
+def section_about_people(text: str) -> str | None:
+    """Why a page is held back for what it IS, before the scan looks at what
+    is on it: its title names a section about guests, accounts or staff, or it
+    lists people in mixed case line after line. None when neither."""
+    title = text.split(chr(10), 1)[0].upper()
+    for word in _PEOPLE_SECTIONS:
+        if word in title:
+            return f"a section about people or accounts ({word.lower()})"
+    if len(_LISTED_NAME.findall(text)) > _LISTED_NAMES_MAX:
+        return "a list of people's names"
+    return None

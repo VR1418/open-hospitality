@@ -349,3 +349,91 @@ def test_the_overview_says_when_codes_are_holding_money_out_of_the_books(world: 
     # Standing, not nightly: it is true whichever day is on screen.
     assert any(f["kind"] == "codes_to_confirm"
                for f in world.portfolio(world.owner, day="2026-01-02")["findings"])
+
+
+def test_the_overview_can_be_narrowed_to_one_hotel(world: World) -> None:
+    """The picker at the top of the page: one hotel, the whole page follows."""
+    r = world.payroll.get("/api/desktop/portfolio", params={"property": "HISJ"}, headers=world.owner)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert [h["property_id"] for h in body["hotels"]] == ["HISJ"]
+    assert body["totals"]["hotels"] == 1
+    # A hotel the caller may not see is simply not there — not an error.
+    r = world.payroll.get("/api/desktop/portfolio", params={"property": "SSSJ"}, headers=world.gm)
+    assert r.status_code == 200 and r.json()["hotels"] == []
+
+
+def test_rooms_across_the_portfolio_are_sold_and_available_not_percentages(world: World) -> None:
+    body = world.portfolio(world.owner)
+    t = body["totals"]
+    hotels = body["hotels"]
+    with_rooms = [h for h in hotels if h["rooms_total"] is not None]
+    assert with_rooms, "no sample hotel says how many rooms it has"
+    assert Decimal(t["rooms_total"]) == sum((Decimal(h["rooms_total"]) for h in with_rooms), Decimal(0))
+    hisj = _hotel(body, "HISJ")
+    # Room-nights this month: the nightly statistic summed, over the days
+    # elapsed, against rooms × days elapsed.
+    assert hisj["rooms_sold_month"] is not None and Decimal(hisj["rooms_sold_month"]) > 0
+    assert Decimal(hisj["rooms_available_month"]) == Decimal(hisj["rooms_total"]) * DAY.day
+    assert hisj["year_revenue"] is not None and Decimal(hisj["year_revenue"]) >= Decimal(hisj["month_revenue"])
+
+
+def test_the_owner_sets_an_annual_breakeven_and_the_outlook_follows(world: World) -> None:
+    """The owner's number, divided by the days in the year, against last
+    night and the year to date; the projection names what shaped it."""
+    before = _hotel(world.portfolio(world.owner), "HISJ")
+    assert before["targets"] == {"breakeven_annual": None, "last_year_revenue": None, "changed_at": None}
+    assert before["outlook"] is None
+    assert world.portfolio(world.owner)["totals"]["breakeven"]["unset"] == 3
+
+    r = world.payroll.put("/api/desktop/hotels/HISJ/targets", headers=world.owner,
+                          json={"breakeven_annual": "365000", "last_year_revenue": None})
+    assert r.status_code == 200, r.text
+    assert r.json()["breakeven_annual"] == "365000.00" and r.json()["changed_at"]
+
+    body = world.portfolio(world.owner)
+    hisj = _hotel(body, "HISJ")
+    o = hisj["outlook"]
+    assert o is not None
+    assert Decimal(o["breakeven_per_day"]) == Decimal("1000.00")  # 365,000 over 365 days (2026)
+    # The comparison starts where the books do this year, not on 1 January.
+    since = date.fromisoformat(o["since"])
+    assert since >= date(DAY.year, 1, 1) and o["days_elapsed"] == (DAY - since).days + 1
+    assert o["days_in_year"] == 365
+    assert Decimal(o["night_gap"]) == Decimal(hisj["revenue"]) - Decimal("1000.00")
+    assert Decimal(o["expected_year_to_date"]) == Decimal("1000.00") * o["days_elapsed"]
+    assert Decimal(o["year_gap"]) == Decimal(hisj["year_revenue"]) - Decimal(o["expected_year_to_date"])
+    # No last-year figure from the report (OPERA prints none), none typed,
+    # and the books hold no full prior year: a plain run rate, and it says so.
+    assert o["projection_basis"] == "run_rate" and o["last_year_total"] is None
+    assert Decimal(o["projected_year"]) == (
+        Decimal(hisj["year_revenue"]) / o["days_elapsed"] * 365
+    ).quantize(Decimal("0.01"))
+    summary = body["totals"]["breakeven"]
+    assert summary["unset"] == 2 and summary["above"] + summary["behind"] == 1
+    assert (summary["behind"] == 1) == (Decimal(o["year_gap"]) < 0)
+    if summary["behind"] == 1:
+        assert any(f["kind"] == "behind_breakeven" and f["property_id"] == "HISJ"
+                   for f in body["findings"])
+
+    # Last year's revenue, typed, shapes the projection when the report's
+    # own last-year column exists; OPERA has none, so the basis stays the
+    # run rate — but the figure is kept and shown.
+    r = world.payroll.put("/api/desktop/hotels/HISJ/targets", headers=world.owner,
+                          json={"breakeven_annual": "365000", "last_year_revenue": "400000"})
+    assert r.status_code == 200
+    o = _hotel(world.portfolio(world.owner), "HISJ")["outlook"]
+    assert o["last_year_total"] == "400000.00" and o["last_year_source"] == "owner"
+
+    # Cleared again: null means "no figure", and the profile's other fields survive.
+    r = world.payroll.put("/api/desktop/hotels/HISJ/targets", headers=world.owner,
+                          json={"breakeven_annual": None, "last_year_revenue": None})
+    assert r.status_code == 200 and _hotel(world.portfolio(world.owner), "HISJ")["outlook"] is None
+
+    # Refusals: a negative number, an unknown hotel, someone who isn't the owner.
+    assert world.payroll.put("/api/desktop/hotels/HISJ/targets", headers=world.owner,
+                             json={"breakeven_annual": "-1"}).status_code == 422
+    assert world.payroll.put("/api/desktop/hotels/NOPE/targets", headers=world.owner,
+                             json={"breakeven_annual": "1"}).status_code == 404
+    assert world.payroll.put("/api/desktop/hotels/HISJ/targets", headers=world.gm,
+                             json={"breakeven_annual": "1"}).status_code == 403
