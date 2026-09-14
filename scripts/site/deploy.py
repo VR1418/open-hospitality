@@ -84,6 +84,12 @@ def main() -> int:
         _run("s3", "sync", str(SITE / "screens"), f"s3://{BUCKET}/screens", "--delete",
              "--content-type", "image/png", "--cache-control", "max-age=86400")
 
+    # Documents linked from the page, kept with the docs they come from.
+    for local, key in ((ROOT / "docs" / "desktop" / "AI-helper.pdf", "docs/ai-helper.pdf"),):
+        if local.is_file():
+            _run("s3", "cp", str(local), f"s3://{BUCKET}/{key}",
+                 "--content-type", "application/pdf", "--cache-control", "max-age=300")
+
     if not args.no_zip:
         zip_path = _newest_zip()
         sha = hashlib.sha256(zip_path.read_bytes()).hexdigest()
