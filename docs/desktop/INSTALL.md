@@ -143,6 +143,46 @@ any other. The mailbox is opened read-only: nothing is marked read, moved or
 deleted, no email text is read, and no email is shown to the AI helper. Open
 Hospitality has to be running for a look to happen.
 
+## 5c. Checking against your bank, and sorting the card
+
+Download a statement from your bank or credit card as a **CSV** (every bank
+has a Download or Export button) and upload it on **Check against your
+bank**.
+
+- **A bank statement** is checked against the night audits: card payouts
+  (Visa/MasterCard, American Express, Discover) are matched to the card
+  payments the front desk recorded, one to a few nights at a time and less
+  the processor's fee; cash deposits to cash taken at the desk; payroll is
+  marked as payroll. What's left is listed for you. Press **Not the hotel's**
+  on anything that isn't (a loan payment, say).
+- **A card statement** is the hotel's own credit card. Pick a category for
+  each purchase from the list; the app remembers the merchant, so next
+  month's statement arrives already sorted. The totals by category are what
+  your accountant wants.
+
+Nothing here changes your books. It is a check, and a sorting.
+
+## 5d. People: staff, schedules and the time clock
+
+Turn on **Payroll & People** under Modules. Then, under **People**:
+
+- **Staff:** add each person with their department and whether they're hourly
+  or salaried. A manager who should sign in gets an email and a role; give
+  them a **setup code** from Sign-in and security, and they choose a
+  password with it. A manager sees only their own hotel.
+- **Schedule:** every hotel starts with the standard shifts — Morning desk
+  7–3, Evening desk 3–11, Night audit 11–7, Housekeeping 9 until done,
+  Breakfast, Maintenance, Laundry. Press **+** on anyone's day, pick a
+  shift, change anything, add. Click a shift to change who, when or how
+  long, or to delete it. Type times the way you say them: "7am", "3:30 pm".
+  **Copy to next week** does the whole week again; **Print** gives a
+  one-page rota for the wall. Change or make your own shifts under
+  Ready-made shifts at the bottom.
+- **Time clock:** enrol a tablet under Time clock tablets, open the Time
+  clock screen on it, and staff punch in and out with a photo. Their
+  punches become **Timecards** for you to approve, and approved hours become
+  labour cost on the profit and loss.
+
 ## 6. The AI helper, if you want it
 
 Off unless you turn it on, under **Modules**. It is the only part of the app

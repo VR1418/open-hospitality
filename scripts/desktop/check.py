@@ -125,6 +125,15 @@ def checks() -> list[Check]:
         Check(
             "portal build", ["npm", "run", "build:desktop"], cwd=FRONTEND, needs=_have_npm
         ),
+        # The owner's and the staff's month, through the real app on its own
+        # books (scripts/desktop/e2e.py). The one check that runs the whole
+        # thing end to end rather than a layer of it.
+        Check(
+            "end-to-end walk (this checkout)",
+            ["uv", "run", "--extra", "desktop", "python", "scripts/desktop/e2e.py"],
+            needs=_have_cluster,
+            slow=True,
+        ),
     ]
 
 
