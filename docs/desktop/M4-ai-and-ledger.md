@@ -299,3 +299,62 @@ Email is a door into the machine. The mailbox is read-only, attachments are
 only ever PDFs, and nothing in an email's body is executed, followed or shown
 to a model. A sender the owner has not confirmed gets its report set aside
 rather than ingested.
+
+### Memory and skills (added 2026-09-13)
+
+*Asked for by the owner: "give it memory and skill on how to read the report"
+— and "use Obsidian for memory".*
+
+Two different things, kept apart because they fail differently:
+
+| | What it is | Where it lives | Who can change it |
+|---|---|---|---|
+| **Skill** | How a KIND of report is read: which page holds the figures, which column is the total, that a bracketed amount is money going out, where the business date prints. | Reading guides shipped with the app, one Markdown file per PMS report (`mapping/reading-guides/`), versioned with the parsers. | Us, in a release. |
+| **Memory** | What has been learned about THIS owner's hotels: which sender's email belongs to which hotel, the recipe for a report shape nobody has a parser for, and every code decision already made. | The database stays the source of truth (`mapping_decision`, and the recipe and route tables above). | The owner, by confirming — never the model on its own. |
+
+**How the skill is used.** When "Read with AI" (phase 3) or an emailed report
+is read, the prompt carries the reading guide for that report kind. The model
+then follows instructions instead of guessing the layout from scratch, which
+means fewer tokens, fewer misreads, and the same rules as the built-in parsers.
+Guides carry no hotel data, so they are safe to show the model.
+
+**How memory is made.** The model never writes memory. It PROPOSES a recipe:
+a JSON description of which page, which columns, and which sign rule. The app
+replays that recipe itself against the same pages and compares the result to
+the rows the owner confirmed. The recipe is stored only if the two are
+identical. After that, every report of that shape is read by replaying the
+recipe, with no model call and no cost, and it is read the same way every
+morning.
+
+**Obsidian.** An Obsidian vault is just a folder of Markdown files, so memory
+is written as notes into `Documents › Open Hospitality › AI memory`:
+
+- one note per hotel (its code, ownership entity, confirmed email senders, and
+  the codes decided and by whom);
+- one note per report shape (its fingerprint, the recipe as a readable table,
+  when it was confirmed and how many reports it has read since);
+- the reading guides, linked from the report shapes that use them.
+
+The owner can open that folder in Obsidian (free) to browse what the helper
+knows, with links between hotels, report shapes and guides. Nobody has to
+install Obsidian for the app to work.
+
+The notes are a **mirror, one way**. The app rewrites them from the database;
+editing a note in Obsidian does not change how the books are read. A hand edit
+that silently changed how figures are read would be the exact failure this
+design exists to prevent. A later version can notice an edit and offer it as
+a proposal for the owner to confirm in the app.
+
+The notes hold hotel names, codes and charge-code decisions, never a guest
+or an employee, because nothing that reaches memory ever held one. If the
+folder sits inside a synced drive, that's the only thing the sync carries.
+
+**Order to build:**
+
+1. **Memory notes** for what exists today (hotels and code decisions). Small,
+   useful at once, and it proves the vault layout.
+2. **Reading guides** for the PMS reports the app already parses, used by
+   "Read with AI".
+3. **Learned recipes**: proposed by the model, verified by replay, confirmed by
+   the owner, then replayed with no model call.
+4. **Email intake** (Himalaya) and sender → hotel routes, reading through 1–3.
