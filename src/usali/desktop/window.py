@@ -42,6 +42,7 @@ _LOG = logging.getLogger(__name__)
 
 APP_NAME = "Open Hospitality"
 _REQUEST = "open-window.request"
+_QUIT = "quit.request"
 _LOCK = "running.lock"
 _SHORTCUTS = "shortcuts.txt"
 
@@ -91,25 +92,42 @@ class SingleInstance:
         self._handle: IO[bytes] | None = None
         self._stop = threading.Event()
 
-    def acquire(self) -> bool:
+    def acquire(self, *, ask_to_open: bool = True) -> bool:
         self.folder.mkdir(parents=True, exist_ok=True)
         handle = open(self.folder / _LOCK, "a+b")  # noqa: SIM115 — held until release
         try:
             _lock(handle)
         except OSError:
             handle.close()
-            (self.folder / _REQUEST).touch()
+            if ask_to_open:
+                (self.folder / _REQUEST).touch()
             return False
         self._handle = handle
-        # A request left by a copy that raced a previous shutdown is stale.
+        # Requests left by a copy that raced a previous shutdown are stale.
         (self.folder / _REQUEST).unlink(missing_ok=True)
+        (self.folder / _QUIT).unlink(missing_ok=True)
         return True
 
-    def serve(self, open_books: Callable[[], None], poll_seconds: float = 1.0) -> None:
-        """Open a window whenever a second copy asks, until `release`."""
+    @staticmethod
+    def request_quit(folder: Path) -> None:
+        """Ask the running copy to shut down — the uninstaller's first step."""
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / _QUIT).touch()
+
+    def serve(
+        self, open_books: Callable[[], None], on_quit: Callable[[], None] | None = None,
+        poll_seconds: float = 1.0,
+    ) -> None:
+        """Open a window whenever a second copy asks, and quit when asked to,
+        until `release`."""
         def watch() -> None:
-            request = self.folder / _REQUEST
+            request, quit_request = self.folder / _REQUEST, self.folder / _QUIT
             while not self._stop.wait(poll_seconds):
+                if quit_request.exists() and on_quit is not None:
+                    quit_request.unlink(missing_ok=True)
+                    _LOG.info("asked to quit (uninstall)")
+                    on_quit()
+                    return
                 if request.exists():
                     request.unlink(missing_ok=True)
                     try:
@@ -164,6 +182,26 @@ def ensure_shortcuts(folder: Path, target: Path | None = None) -> bool:
     record.write_text(str(exe), encoding="utf-8")
     _LOG.info("desktop and Start menu shortcuts point at %s", exe)
     return True
+
+
+def remove_shortcuts() -> None:
+    """Take both icons away again (the uninstaller)."""
+    if sys.platform != "win32":
+        return
+    name = _ps_quote(APP_NAME + ".lnk")
+    script = (
+        "foreach ($place in @([Environment]::GetFolderPath('Desktop'), "
+        "[Environment]::GetFolderPath('Programs'))) { "
+        f"Remove-Item -LiteralPath (Join-Path $place {name}) -ErrorAction SilentlyContinue }}"
+    )
+    try:
+        subprocess.run(  # noqa: S603
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+            check=False, capture_output=True, timeout=30,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        _LOG.warning("could not remove the shortcuts")
 
 
 def _ps_quote(value: str) -> str:

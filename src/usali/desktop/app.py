@@ -58,6 +58,7 @@ from usali.desktop.intake import ReportIntake
 from usali.desktop.modules import mount_predicate, resolve
 from usali.desktop.paths import DesktopPaths
 from usali.desktop.saved_reports import SavedReports
+from usali.desktop import uninstall
 from usali.desktop.window import SingleInstance, ensure_shortcuts, open_window
 from usali.desktop.pg_runtime import (
     PgCluster,
@@ -316,9 +317,32 @@ def _icon_image() -> Any:
     return big.resize((size, size), Image.Resampling.LANCZOS)
 
 
+#: The tray icon while it runs, so a quit request from another thread can stop it.
+_TRAY: list[Any] = []
+
+
+def _integrate_with_windows(paths: DesktopPaths) -> None:
+    """Desktop and Start menu icons, and the entry under Settings > Apps."""
+    from usali import __version__
+
+    ensure_shortcuts(paths.system_root)
+    uninstall.register(Path(sys.executable), __version__)
+
+
+def _start_uninstall() -> None:
+    """The tray's Uninstall: a separate copy asks the questions, and asks
+    this one to quit when the owner confirms."""
+    if getattr(sys, "frozen", False):
+        subprocess.Popen([sys.executable, "--uninstall"], close_fds=True)  # noqa: S603
+    else:
+        subprocess.Popen(  # noqa: S603
+            [sys.executable, "-m", "usali.desktop.app", "--uninstall"], close_fds=True
+        )
+
+
 def _run_tray(
     open_books: Callable[[], None], show_reports: Callable[[], None],
-    show_saved: Callable[[], None],
+    show_saved: Callable[[], None], start_uninstall: Callable[[], None],
 ) -> bool:
     """Blocks until Quit. False when no tray library is installed."""
     try:
@@ -330,11 +354,17 @@ def _run_tray(
         pystray.MenuItem("Show my reports folder", lambda: show_reports()),
         pystray.MenuItem("Show my saved reports", lambda: show_saved()),
         pystray.Menu.SEPARATOR,
+        pystray.MenuItem("Uninstall Open Hospitality…", lambda: start_uninstall()),
         pystray.MenuItem("Quit Open Hospitality", lambda icon: icon.stop()),
     )
     # Only once the tray is certainly there: it is then how the app is reached.
     _hide_console()
-    pystray.Icon("open-hospitality", _icon_image(), "Open Hospitality", menu).run()
+    icon = pystray.Icon("open-hospitality", _icon_image(), "Open Hospitality", menu)
+    _TRAY[:] = [icon]
+    try:
+        icon.run()
+    finally:
+        _TRAY.clear()
     return True
 
 
@@ -351,12 +381,12 @@ def _hide_console() -> None:
         ctypes.windll.user32.ShowWindow(console, 0)  # SW_HIDE
 
 
-def _run_console(base_url: str) -> None:
+def _run_console(base_url: str, stopping: threading.Event) -> None:
     print(f"Open Hospitality is running at {base_url}")
     print("Press Ctrl+C to stop it.")
     try:
-        while True:
-            time.sleep(1)
+        while not stopping.wait(1):
+            pass
     except KeyboardInterrupt:
         pass
 
@@ -496,16 +526,27 @@ def _serve(
                   flush=True)
         else:
             open_books()
-        instance.serve(open_books)
+        stopping = threading.Event()
+
+        def quit_app() -> None:
+            # From the uninstaller: stop the tray (or the console loop), which
+            # unwinds through the `finally` blocks that stop the database.
+            stopping.set()
+            if _TRAY:
+                _TRAY[0].stop()
+
+        instance.serve(open_books, on_quit=quit_app)
         threading.Thread(
-            target=ensure_shortcuts, args=(paths.system_root,), name="shortcuts", daemon=True
+            target=_integrate_with_windows, args=(paths,), name="shortcuts", daemon=True
         ).start()
         try:
-            if args.no_tray or not _run_tray(
+            if stopping.is_set():
+                pass
+            elif args.no_tray or not _run_tray(
                 open_books, lambda: _reveal(paths.owner_root),
-                lambda: _reveal(paths.saved_reports_folder),
+                lambda: _reveal(paths.saved_reports_folder), _start_uninstall,
             ):
-                _run_console(base_url)
+                _run_console(base_url, stopping)
         finally:
             saved.stop()
             intake.stop()
@@ -538,10 +579,18 @@ def main(argv: list[str] | None = None) -> int:
         help="restore your books from a backup file (this computer must have none)",
     )
     parser.add_argument(
+        "--uninstall", action="store_true",
+        help="remove Open Hospitality from this computer (asks before deleting any books)",
+    )
+    parser.add_argument(
         "--recovery-code", metavar="CODE",
         help="the recovery code that opens the backup, if you'd rather not be asked",
     )
     args = parser.parse_args(argv)
+    if args.uninstall:
+        paths = DesktopPaths.default()
+        _configure_logging(paths.logs)
+        return uninstall.run(paths, OsKeyStore(), Path(sys.executable))
     try:
         return run(args)
     except (

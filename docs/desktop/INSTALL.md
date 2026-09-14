@@ -158,6 +158,23 @@ Three things worth knowing:
   detail or an account number. The key stays in this computer's password
   store, and is never included in a backup.
 
+## Removing it
+
+Use **Settings › Apps › Installed apps › Open Hospitality › Uninstall**,
+or right-click the ◆ icon near the clock and choose **Uninstall Open
+Hospitality…**.
+
+- The app closes itself first, so nothing is left half-written.
+- It removes the program folder, the Desktop and Start menu icons, and the
+  entry in Installed apps.
+- It then asks whether to delete **your books** from this computer. The
+  answer is **No** unless you choose Yes. Keep them and installing again
+  opens the same books. Delete them only if you have a backup and your
+  recovery code, or no longer need them.
+- It never deletes **Documents › Open Hospitality** (your reports and saved
+  reports) or your backups. Those are your files, and the last message says
+  where they are.
+
 ## 7. Backups, which is the part to get right
 
 You chose a folder during setup — ideally one OneDrive, iCloud or Dropbox
