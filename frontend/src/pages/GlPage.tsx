@@ -4,7 +4,7 @@
 // org_admin close/reopen controls — above its trial balance. All fetching
 // lives here (TanStack Query keyed on property + search params).
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { keepPreviousData, skipToken, useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 
@@ -35,7 +35,7 @@ export default function GlPage() {
   const search = routeApi.useSearch()
   const navigate = routeApi.useNavigate()
   // Property comes from the GLOBAL top-bar selector — picked once, app-wide.
-  const { property } = useGlobalProperty()
+  const { property, selected } = useGlobalProperty()
   // A deep-linked ?period= seeds the rail's year so rail and detail agree on
   // arrival; the first four characters are the year by construction — the
   // /gl route's validateSearch (PERIOD_RE in router.tsx) is where that shape
@@ -120,6 +120,22 @@ export default function GlPage() {
     // period switch invalidates an open drill, in the same render.
     void navigate({ search: (prev) => ({ ...prev, period: key }), replace: true })
   }
+
+  // Desktop edition: with nothing picked, open on the period holding the
+  // latest data (or the rail's last period when the data is elsewhere in
+  // the year) rather than on an empty rail.
+  const lastDate = selected?.last_date
+  const periods = periodsQuery.data
+  useEffect(() => {
+    if (period !== undefined || periods === undefined || periods.length === 0) return
+    const holding = lastDate === undefined
+      ? undefined
+      : periods.find((p) => p.date_from <= lastDate && lastDate <= p.date_to)
+    const pick = holding ?? periods[periods.length - 1]
+    if (pick !== undefined) {
+      void navigate({ search: (prev) => ({ ...prev, period: pick.period_key }), replace: true })
+    }
+  }, [period, periods, lastDate, navigate])
 
   return (
     <div className="space-y-4">

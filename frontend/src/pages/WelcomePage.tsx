@@ -18,6 +18,7 @@ import {
   getModules,
   getWelcome,
   nameGroup,
+  pickFolder,
   setBackupFolder,
   saveModules,
   waitForModules,
@@ -268,7 +269,9 @@ function HotelStep({
   const [name, setName] = useState(draft?.name ?? '')
   const [code, setCode] = useState(draft?.code ?? '')
   const [reportName, setReportName] = useState(draft?.report_name ?? '')
-  const [pms, setPms] = useState(draft?.pms_source ?? state.pms_choices[0]?.id ?? '')
+  // Nothing chosen until the owner chooses: a list that opened on the first
+  // system would be saved as-is by anyone who didn't notice it.
+  const [pms, setPms] = useState(draft?.pms_source ?? '')
   const [jurisdiction, setJurisdiction] = useState(draft?.wage_jurisdiction ?? 'US')
 
   if (!adding) {
@@ -362,8 +365,12 @@ function HotelStep({
             aria-label="Front-desk system (PMS)"
             className={controlLargeClass}
             value={pms}
+            required
             onChange={(e) => setPms(e.target.value)}
           >
+            <option value="" disabled>
+              Choose your front-desk system…
+            </option>
             {state.pms_choices.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -551,6 +558,12 @@ function BackupStep({ onDone }: { onDone: () => void }) {
     mutationFn: (value: string) => setBackupFolder(value),
     onSuccess: onDone,
   })
+  const choose = useMutation({
+    mutationFn: (start: string) => pickFolder(start, 'Where should backups of your books go?'),
+    onSuccess: (chosen) => {
+      if (chosen !== null) setFolder(chosen)
+    },
+  })
   const typed = folder ?? status.data?.folder ?? status.data?.suggested_folder ?? ''
 
   return (
@@ -568,15 +581,25 @@ function BackupStep({ onDone }: { onDone: () => void }) {
         }}
       >
         <Label text="Backup folder" hint="It's created for you if it isn't there yet.">
-          <input
-            aria-label="Backup folder"
-            className={controlLargeClass}
-            spellCheck={false}
-            value={typed}
-            onChange={(e) => setFolder(e.target.value)}
-          />
+          <span className="flex flex-wrap items-center gap-2">
+            <input
+              aria-label="Backup folder"
+              className={`${controlLargeClass} min-w-[14rem] flex-1`}
+              spellCheck={false}
+              value={typed}
+              onChange={(e) => setFolder(e.target.value)}
+            />
+            <button
+              type="button"
+              className={secondaryButtonClass}
+              disabled={choose.isPending}
+              onClick={() => choose.mutate(typed)}
+            >
+              {choose.isPending ? 'Choosing…' : 'Choose folder…'}
+            </button>
+          </span>
         </Label>
-        <Refusal error={save.error} />
+        <Refusal error={save.error ?? choose.error} />
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="submit"

@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Fragment, useState } from 'react'
 
 import {
+  confirmAllCodes,
   confirmCode,
   getAiSettings,
   getCodeLines,
@@ -19,6 +20,7 @@ import {
   type AiSuggestion,
   type CodeItem,
   type CodeLine,
+  type ConfirmAllResult,
   type ConfirmResult,
 } from '../api/desktop'
 import {
@@ -59,15 +61,28 @@ function StatusBadge({ status }: { status: CodeItem['status'] }) {
   return <Badge tone="ok">Confirmed</Badge>
 }
 
-/** The one-line reason this code is on the list, in the owner's words. */
-function why(item: CodeItem): string {
+/** The one-line reason this code is on the list, in the owner's words. A
+ *  guess says nothing here: the sentence above the table covers every guess
+ *  at once, and the badge marks each one. */
+function why(item: CodeItem): string | null {
   if (item.status === 'unknown') {
     return 'Nothing here knows this code, so its money is not on your profit and loss.'
   }
-  if (item.status === 'unconfirmed') {
-    return 'This is where we guessed it goes. Nobody at your hotel has agreed yet.'
-  }
+  if (item.status === 'unconfirmed') return null
   return `Confirmed by ${item.decided_by ?? 'someone here'}.`
+}
+
+/** Where the money goes, said the short way — the line's own name first,
+ *  the path to it underneath. */
+function Destination({ line }: { line: CodeLine }) {
+  return (
+    <>
+      <div>{line.line_item}</div>
+      <div className="text-xs text-ink-muted">
+        {line.major} › {line.sub}
+      </div>
+    </>
+  )
 }
 
 function Editor({
@@ -218,6 +233,7 @@ export default function CodesPage() {
   const { property, selected } = useGlobalProperty()
   const [editing, setEditing] = useState<string | null>(null)
   const [done, setDone] = useState<ConfirmResult | null>(null)
+  const [allDone, setAllDone] = useState<ConfirmAllResult | null>(null)
 
   const codes = useQuery({
     queryKey: ['codes', property],
@@ -263,6 +279,18 @@ export default function CodesPage() {
       setEditing(null)
       ask.reset()
       setDone(result)
+      setAllDone(null)
+      void queryClient.invalidateQueries({ queryKey: ['codes', property] })
+    },
+  })
+
+  const confirmAll = useMutation({
+    mutationFn: () => confirmAllCodes(property!),
+    onSuccess: (result) => {
+      setEditing(null)
+      ask.reset()
+      setDone(null)
+      setAllDone(result)
       void queryClient.invalidateQueries({ queryKey: ['codes', property] })
     },
   })
@@ -307,6 +335,7 @@ export default function CodesPage() {
     )
   }
   const missing = Number(state.money_not_in_the_books)
+  const guesses = state.items.filter((i) => i.status === 'unconfirmed').length
 
   return (
     <div className="flex flex-col gap-4">
@@ -314,6 +343,60 @@ export default function CodesPage() {
         title="Codes to confirm"
         subtitle={`What ${selected?.name ?? property} calls each charge, and where it goes`}
       />
+
+      {guesses > 0 && (
+        <Card>
+          <section aria-label="Guesses" className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-ink">
+              {guesses === 1
+                ? 'One code is where we guessed it goes. '
+                : `${guesses} codes are where we guessed they go. `}
+              Look down the <span className="font-medium">Goes to</span> column: if it reads
+              right, confirm them all at once. Change any one first if it doesn’t.
+            </p>
+            <button
+              type="button"
+              className={primaryButtonClass}
+              disabled={confirmAll.isPending || confirm.isPending}
+              onClick={() => confirmAll.mutate()}
+            >
+              {confirmAll.isPending
+                ? 'Working…'
+                : guesses === 1
+                  ? 'This looks right — confirm it'
+                  : `These look right — confirm all ${guesses}`}
+            </button>
+          </section>
+        </Card>
+      )}
+
+      {allDone !== null && (
+        <Card>
+          <section aria-label="What changed" className="flex flex-col gap-1">
+            <p className="text-sm text-ink">
+              {allDone.codes.length === 0
+                ? 'Nothing was waiting to be confirmed.'
+                : `${allDone.codes.join(', ')} ${allDone.codes.length === 1 ? 'is' : 'are'} confirmed, and ${
+                    allDone.days_restated.length
+                  } day${allDone.days_restated.length === 1 ? '' : 's'} worked out again.`}
+            </p>
+            {Object.keys(allDone.ledger_refused).length > 0 && (
+              <p className="text-sm text-danger-red">
+                Your books would not take {Object.keys(allDone.ledger_refused).length} of those
+                days: {Object.values(allDone.ledger_refused)[0]}
+              </p>
+            )}
+          </section>
+        </Card>
+      )}
+
+      {confirmAll.isError && (
+        <Card>
+          <p className="text-sm text-danger-red" role="alert">
+            {errorMessage(confirmAll.error)}
+          </p>
+        </Card>
+      )}
 
       {missing !== 0 && (
         <Card>
@@ -383,7 +466,9 @@ export default function CodesPage() {
                       <td className={`${cellClass} font-medium`}>{item.code}</td>
                       <td className={cellClass}>
                         <div>{item.description ?? '—'}</div>
-                        <div className="text-xs text-ink-muted">{why(item)}</div>
+                        {why(item) !== null && (
+                          <div className="text-xs text-ink-muted">{why(item)}</div>
+                        )}
                       </td>
                       <td className={cellClass}>
                         <div className="tabular-nums">{item.times_seen}×</div>
@@ -397,7 +482,7 @@ export default function CodesPage() {
                         {fmtDollars(item.amount)}
                       </td>
                       <td className={cellClass}>
-                        <div>{item.current === null ? 'Nowhere' : lineLabel(item.current)}</div>
+                        {item.current === null ? <div>Nowhere</div> : <Destination line={item.current} />}
                         <StatusBadge status={item.status} />
                       </td>
                       <td className={cellClass}>

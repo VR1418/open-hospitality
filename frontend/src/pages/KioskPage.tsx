@@ -319,8 +319,9 @@ function Enroll({
       >
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-xs font-medium text-ink-muted">Location name</span>
+          {/* Desktop edition: a plain placeholder, not a brand name. */}
           <input className={controlClass} value={label} aria-label="Location name"
-            placeholder="Holiday Inn Express" onChange={(e) => setLabel(e.target.value)} required />
+            placeholder="Front desk" onChange={(e) => setLabel(e.target.value)} required />
         </label>
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-xs font-medium text-ink-muted">Device token</span>

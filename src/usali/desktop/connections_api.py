@@ -177,6 +177,13 @@ def _backups(paths: DesktopPaths) -> ConnectionOut:
         return ConnectionOut(id="backups", name="Backups", state="attention",
                              detail=f"Folder chosen ({cfg.folder}) but not armed: confirm your recovery code.",
                              page="/backups")
+    if cfg.last_backup_at is None:
+        # Chosen and armed, but nothing written yet: a backup is taken while
+        # the database is stopped, so the first one comes at the next start.
+        return ConnectionOut(id="backups", name="Backups", state="attention",
+                             detail=f"Folder chosen ({cfg.folder}). The first backup is taken the "
+                                    "next time you start Open Hospitality.",
+                             page="/backups")
     return ConnectionOut(id="backups", name="Backups", state="connected",
                          detail=f"{cfg.folder} · last backup {_when(cfg.last_backup_at)}", page="/backups")
 
@@ -187,11 +194,11 @@ def _clocks(session: object) -> ConnectionOut:
         .group_by(KioskDevice.property_id).order_by(KioskDevice.property_id)
     ).all()
     if not rows:
-        return ConnectionOut(id="clocks", name="Time clocks", state="not_set_up",
-                             detail="No tablet enrolled. Optional: staff punch in and out on one.",
+        return ConnectionOut(id="clocks", name="Time clock", state="not_set_up",
+                             detail="Not set up. Optional: staff punch in and out on this computer's screen.",
                              page="/kiosk-devices")
-    return ConnectionOut(id="clocks", name="Time clocks", state="connected",
-                         detail="; ".join(f"{code}: {n} tablet{'s' if n != 1 else ''}" for code, n in rows),
+    return ConnectionOut(id="clocks", name="Time clock", state="connected",
+                         detail="; ".join(f"{code}: {n} time clock{'s' if n != 1 else ''}" for code, n in rows),
                          page="/kiosk-devices")
 
 

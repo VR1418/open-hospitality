@@ -10,12 +10,14 @@ const getBackupStatus = vi.fn<() => Promise<BackupStatus | null>>()
 const setBackupFolder = vi.fn<(folder: string) => Promise<BackupStatus>>()
 const armBackups = vi.fn<(code: string) => Promise<void>>()
 const backupNow = vi.fn<() => Promise<{ detail: string }>>()
+const pickFolder = vi.fn<(start: string, title: string) => Promise<string | null>>()
 
 vi.mock('../api/desktop', () => ({
   getBackupStatus: () => getBackupStatus(),
   setBackupFolder: (folder: string) => setBackupFolder(folder),
   armBackups: (code: string) => armBackups(code),
   backupNow: () => backupNow(),
+  pickFolder: (start: string, title: string) => pickFolder(start, title),
 }))
 
 const READY: BackupStatus = {
@@ -135,12 +137,26 @@ describe('BackupsPage', () => {
     expect(within(region).queryByLabelText('Recovery code')).toBeNull()
   })
 
-  it('tells the owner how to put a backup back', async () => {
+  it('tells the owner how to put a backup back, without a command line', async () => {
     renderPage()
     const region = await screen.findByRole('region', { name: 'Putting a backup back' })
-    expect(within(region).getByText(/oh-desktop --restore/)).toBeInTheDocument()
-    expect(within(region).getByText(/won’t write over books that are already there/))
+    expect(within(region).getByText(/Double-click the backup file/)).toBeInTheDocument()
+    expect(within(region).queryByText(/--restore/)).toBeNull()
+    expect(within(region).getByText(/won’t write over books that are already on a computer/))
       .toBeInTheDocument()
+  })
+
+  it('chooses the folder in a dialog and saves what was chosen', async () => {
+    getBackupStatus.mockResolvedValue(FRESH)
+    setBackupFolder.mockResolvedValue(READY)
+    pickFolder.mockResolvedValueOnce(null).mockResolvedValueOnce('D:\\Hotel backups')
+    renderPage()
+    const choose = await screen.findByRole('button', { name: 'Choose folder…' })
+    await userEvent.click(choose)
+    await waitFor(() => expect(pickFolder).toHaveBeenCalledTimes(1))
+    expect(setBackupFolder).not.toHaveBeenCalled() // cancelled
+    await userEvent.click(choose)
+    await waitFor(() => expect(setBackupFolder).toHaveBeenCalledWith('D:\\Hotel backups'))
   })
 
   it('on a hosted deployment, says backups are a desktop feature', async () => {

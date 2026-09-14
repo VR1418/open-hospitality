@@ -738,6 +738,18 @@ export async function getFolders(): Promise<OwnerFolders | null> {
 }
 
 /** Opens the folder in File Explorer, on this computer. */
+/** Windows' own folder dialog, on this computer. Resolves to the folder
+ * chosen, null when the owner cancelled, and throws where there is no
+ * dialog (the message says to type the path instead). */
+export async function pickFolder(start: string | null, title: string): Promise<string | null> {
+  const res = await signedIn('/api/desktop/folders/pick', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ start, title }),
+  })
+  return ((await res.json()) as { folder: string | null }).folder
+}
+
 export async function openFolder(id: string): Promise<void> {
   await signedIn(`/api/desktop/folders/${encodeURIComponent(id)}/open`, { method: 'POST' })
 }
@@ -831,6 +843,23 @@ export type ConfirmResult = {
   days_restated: string[]
   facts_written: number
   ledger_refused: Record<string, string>
+}
+
+export type ConfirmAllResult = {
+  codes: string[]
+  days_restated: string[]
+  ledger_refused: Record<string, string>
+}
+
+/** Every guess confirmed where it stands, in one pass. Unknown codes — the
+ * ones nothing decides — are left for the owner. */
+export async function confirmAllCodes(propertyId: string): Promise<ConfirmAllResult> {
+  const res = await signedIn('/api/desktop/codes/confirm-all', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ property_id: propertyId }),
+  })
+  return (await res.json()) as ConfirmAllResult
 }
 
 /** Every code this hotel's reports have used. Null on a hosted deployment,

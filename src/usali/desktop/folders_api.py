@@ -5,10 +5,16 @@ only reachable from the tray icon, which most owners never right-click.
 
     GET  /api/desktop/folders             the owner's folders, with how many files each holds
     POST /api/desktop/folders/{id}/open   open one in File Explorer
+    POST /api/desktop/folders/pick        a folder dialog, for pages that ask where to put things
 
 Opening happens on this computer — the app and the browser window are the
 same machine — and only ever one of the fixed folders below, by id. A path is
 never taken from the request.
+
+The dialog exists because the Backups page and the setup wizard used to offer
+a text box for a folder path, which an owner who has never typed one gets
+wrong. The dialog is Windows' own; the page gets back the folder chosen, or
+nothing when it was cancelled.
 """
 
 import os
@@ -39,6 +45,17 @@ class FoldersOut(BaseModel):
     #: The one folder that holds all of the others.
     root: str
     folders: list[FolderOut]
+
+
+class PickIn(BaseModel):
+    #: Where the dialog opens; the owner's folder when not given.
+    start: str | None = None
+    title: str = "Choose a folder"
+
+
+class PickOut(BaseModel):
+    #: None when the owner cancelled.
+    folder: str | None
 
 
 def _folders(paths: DesktopPaths) -> list[tuple[str, str, Path, str, str]]:
@@ -81,6 +98,36 @@ def reveal(folder: Path) -> None:
         subprocess.run(["xdg-open", str(folder)], check=False)  # noqa: S603, S607
 
 
+def _ps_quote(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+def pick_folder(start: Path | None, title: str) -> Path | None:
+    """Windows' own folder dialog, on this computer. None when cancelled;
+    OSError where there is no such dialog."""
+    if sys.platform != "win32":
+        raise OSError("no folder dialog on this platform")
+    script = (
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
+        f"$d.Description = {_ps_quote(title)}; $d.ShowNewFolderButton = $true; "
+        + (f"$d.SelectedPath = {_ps_quote(str(start))}; " if start is not None else "")
+        # An owner form on top, so the dialog is not lost behind the app window.
+        + "$owner = New-Object System.Windows.Forms.Form -Property @{TopMost = $true}; "
+        "if ($d.ShowDialog($owner) -eq 'OK') { Write-Output $d.SelectedPath }"
+    )
+    try:
+        done = subprocess.run(  # noqa: S603
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-STA", "-Command", script],
+            capture_output=True, text=True, timeout=600,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.SubprocessError as exc:
+        raise OSError(str(exc)) from exc
+    chosen = done.stdout.strip()
+    return Path(chosen) if chosen else None
+
+
 def _paths(request: Request) -> DesktopPaths:
     return request.app.state.desktop_folders_paths  # type: ignore[no-any-return]
 
@@ -110,9 +157,24 @@ def open_folder(folder_id: str, request: Request) -> None:
         ) from None
 
 
+@router.post("/api/desktop/folders/pick")
+def pick(body: PickIn, request: Request) -> PickOut:
+    paths = _paths(request)
+    start = Path(body.start) if body.start else paths.owner_root
+    try:
+        chosen = request.app.state.desktop_folders_pick(start, body.title[:120])
+    except OSError:
+        raise HTTPException(
+            status_code=501, detail="There's no folder dialog here. Type the folder's path instead."
+        ) from None
+    return PickOut(folder=str(chosen) if chosen is not None else None)
+
+
 def install(
     app: FastAPI, *, paths: DesktopPaths, reveal_folder: Callable[[Path], None] = reveal,
+    pick: Callable[[Path | None, str], Path | None] = pick_folder,
 ) -> None:
     app.state.desktop_folders_paths = paths
     app.state.desktop_folders_reveal = reveal_folder
+    app.state.desktop_folders_pick = pick
     app.include_router(router)

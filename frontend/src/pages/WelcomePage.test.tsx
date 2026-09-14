@@ -21,8 +21,10 @@ const saveModules = vi.fn<(enabled: string[]) => Promise<ModulesResponse>>()
 const waitForModules = vi.fn<(enabled: string[]) => Promise<void>>()
 const getBackupStatus = vi.fn<() => Promise<BackupStatus | null>>()
 const setBackupFolder = vi.fn<(folder: string) => Promise<BackupStatus>>()
+const pickFolder = vi.fn<(start: string, title: string) => Promise<string | null>>()
 
 vi.mock('../api/desktop', () => ({
+  pickFolder: (start: string, title: string) => pickFolder(start, title),
   getWelcome: () => getWelcome(),
   nameGroup: (name: string) => nameGroup(name),
   addHotel: (body: NewHotel) => addHotel(body),
@@ -208,6 +210,7 @@ describe('WelcomePage', () => {
     await type('Ownership entity name', 'Redstone Hospitality LLC')
     await type('Hotel name', 'Redstone Inn')
     await type('Hotel code', 'TX901')
+    await userEvent.selectOptions(screen.getByLabelText('Front-desk system (PMS)'), 'SKYTOUCH')
     await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Save and continue' }))
 

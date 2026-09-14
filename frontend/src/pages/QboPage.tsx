@@ -90,6 +90,15 @@ export default function QboPage() {
   // Property is GLOBAL (top-bar selector); only the month is page state.
   const { property, selected } = useGlobalProperty()
 
+  // Desktop edition: open on the month holding the latest data rather than
+  // on an empty picker.
+  const latestMonth = selected?.last_date.slice(0, 7)
+  useEffect(() => {
+    if (search.month === undefined && latestMonth !== undefined) {
+      void navigate({ search: (prev) => ({ ...prev, month: latestMonth }), replace: true })
+    }
+  }, [search.month, latestMonth, navigate])
+
   // A property switch invalidates everything the panel was showing: the open
   // preview, a pending confirm, and the last-push notice all belonged to the
   // previous property.

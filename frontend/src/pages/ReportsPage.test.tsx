@@ -114,10 +114,15 @@ describe('ReportsPage', () => {
     click.mockRestore()
   })
 
-  it('notes that CSV export stays a CLI concern', async () => {
+  it('points at the Excel pack in Saved reports, not at a command line', async () => {
     renderPage()
-    expect(await screen.findByText(/CSV stays a CLI concern/)).toBeInTheDocument()
-    expect(screen.getByText(/usali cpa-pack --format csv/)).toBeInTheDocument()
+    expect(await screen.findByText(/written as an Excel file in/)).toBeInTheDocument()
+    expect(screen.queryByText(/usali cpa-pack/)).toBeNull()
+  })
+
+  it('opens on the month holding the latest data when none is picked', async () => {
+    renderPage('/reports?property=HISJ')
+    await waitFor(() => expect(getCpaPack).toHaveBeenCalledWith('HISJ', '2026-07'))
   })
 
   it('renders the API detail on pack fetch failure', async () => {

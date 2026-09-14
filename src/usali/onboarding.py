@@ -9,12 +9,14 @@ that logs in) provisions a Keycloak user and writes the authoritative
 """
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from usali.attendance import business_date_for
 from usali.auth import DEPARTMENT_MANAGER, OPERATOR_ROLES, ORG_WIDE_ROLES
+from usali.config import get_settings
 from usali.keycloak_admin import KeycloakAdmin, KeycloakAdminConflict
 from usali.models import (
     PAY_TYPES,
@@ -22,6 +24,7 @@ from usali.models import (
     Employee,
     EmployeeAssignment,
     EmployeeFaceTemplate,
+    Property,
     RoleAssignment,
     Timecard,
     UsaliLaborFact,
@@ -43,6 +46,18 @@ def pay_type_violation(value: str) -> str | None:
     return (
         f"pay_type must be one of {sorted(PAY_TYPES)} "
         "(value withheld from this message)"
+    )
+
+
+def _business_today(session: Session, property_id: str) -> date:
+    """Today at the property, by the punch cutoff — `date.today()` when the
+    property row can't be read (the request fails on it later anyway)."""
+    prop = session.get(Property, property_id)
+    if prop is None or not prop.timezone:
+        return date.today()
+    return business_date_for(
+        datetime.now(UTC), prop.timezone,
+        cutoff_hour=get_settings().punch_business_day_cutoff_hour,
     )
 
 
@@ -100,6 +115,12 @@ def onboard_employee(
                 realm_roles=[req.role],  # type: ignore[list-item]  # provision => role is not None
             )
 
+    # Desktop edition: "today" is the PROPERTY's business date, the same frame
+    # the kiosk asks `in_effect_on` in (kiosk._property_business_date). With
+    # the server's own date, someone added by a night auditor between midnight
+    # and the punch cutoff was hired "tomorrow" and missing from the roster
+    # until the cutoff passed — the end-to-end walk found it at 01:51.
+    started = _business_today(session, req.property_id)
     employee = Employee(
         keycloak_subject=subject,
         full_name=req.full_name,
@@ -108,7 +129,7 @@ def onboard_employee(
         # here yet. Recording it keeps `hire_date` and the assignment's
         # `effective_from` from disagreeing, which is what let the backfill
         # produce assignments predating employment.
-        hire_date=date.today(),
+        hire_date=started,
         compensation_note=req.compensation_note,
     )
     session.add(employee)
@@ -129,7 +150,7 @@ def onboard_employee(
             # Same day as hire_date above, deliberately. An assignment starting
             # before the employee was hired resolves them as employed -- and
             # ADMISSIBLE at a kiosk -- before they existed.
-            effective_from=date.today(),
+            effective_from=started,
         )
     )
 

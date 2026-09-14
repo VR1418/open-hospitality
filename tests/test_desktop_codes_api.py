@@ -62,6 +62,9 @@ class World:
     def put(self, path: str, body: object) -> object:
         return self.client.put(path, json=body, headers=self.headers)
 
+    def post(self, path: str, body: object) -> object:
+        return self.client.post(path, json=body, headers=self.headers)
+
     def stage(self, *, day: date, code: str, desc: str, amount: str) -> None:
         with self.sessions() as s:  # type: ignore[operator]
             batch = IngestBatch(
@@ -258,3 +261,40 @@ def test_charges_and_payments_both_count_towards_the_figure(world: World) -> Non
     body = world.get(f"/api/desktop/codes?property={world.property_id}").json()  # type: ignore[attr-defined]
     figure = Decimal(body["money_not_in_the_books"])
     assert figure >= Decimal("800"), "both sides count as money, they do not cancel"
+
+
+def test_every_guess_can_be_confirmed_at_once(world: World) -> None:
+    """Eleven clicks became one: an owner who has read the list and finds
+    nothing wrong confirms every guess where it stands. Unknown codes are
+    left alone — there is nothing to agree with — and each day is worked
+    out again once, however many codes it carries."""
+    day = date(2026, 7, 9)
+    world.stage(day=day, code="T1", desc="State Tax", amount="36.0000")
+    before = _items(world.get(f"/api/desktop/codes?property={world.property_id}").json())  # type: ignore[attr-defined]
+    guesses = sorted(c for c, i in before.items() if i["status"] == "unconfirmed")
+    assert "RM" in guesses and "T1" in guesses
+    unknown = sorted(c for c, i in before.items() if i["status"] == "unknown")
+    assert "WXY" in unknown
+
+    r = world.post("/api/desktop/codes/confirm-all", {"property_id": world.property_id})
+    assert r.status_code == 200, r.text  # type: ignore[attr-defined]
+    out = r.json()  # type: ignore[attr-defined]
+    assert sorted(out["codes"]) == guesses
+    assert "2026-04-01" in out["days_restated"] and "2026-07-09" in out["days_restated"]
+    assert len(out["days_restated"]) == len(set(out["days_restated"]))
+    assert out["ledger_refused"] == {}
+
+    after = _items(world.get(f"/api/desktop/codes?property={world.property_id}").json())  # type: ignore[attr-defined]
+    for code in guesses:
+        assert after[code]["status"] == "confirmed", code
+        assert after[code]["decided_by"] is not None
+    for code in unknown:
+        assert after[code]["status"] == "unknown", code
+    [fact] = world.facts_for("T1")
+    assert fact.usali_line_item == "State Tax"
+
+    # Nothing left to confirm: the second press changes nothing and says so.
+    again = world.post("/api/desktop/codes/confirm-all", {"property_id": world.property_id})
+    assert again.json() == {"codes": [], "days_restated": [], "ledger_refused": {}}  # type: ignore[attr-defined]
+    assert world.client.post("/api/desktop/codes/confirm-all",
+                             json={"property_id": world.property_id}).status_code == 401

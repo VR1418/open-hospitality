@@ -54,6 +54,7 @@ Modified upstream files:
     frontend/src/pages/GlPage.test.tsx
     frontend/src/pages/IntegrationsPage.tsx
     frontend/src/pages/KioskDevicesPage.tsx
+    frontend/src/pages/KioskPage.tsx
     frontend/src/pages/NightAuditPage.test.tsx
     frontend/src/pages/NightAuditPage.tsx
     frontend/src/pages/PayrollDashboardPage.tsx
@@ -70,6 +71,7 @@ Modified upstream files:
     frontend/src/pages/UploadPage.tsx
     src/usali/gl_api.py
     src/usali/ingestion.py
+    src/usali/onboarding.py
     src/usali/gl_posting.py
     src/usali/reporting.py
     src/usali/schedule_api.py

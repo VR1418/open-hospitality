@@ -12,6 +12,7 @@ import {
   armBackups,
   backupNow,
   getBackupStatus,
+  pickFolder,
   setBackupFolder,
   type BackupFile,
 } from '../api/desktop'
@@ -79,6 +80,13 @@ export default function BackupsPage() {
     },
   })
   const now = useMutation({ mutationFn: backupNow, onSuccess: refresh })
+  // The dialog is Windows' own; a folder chosen there is saved straight away.
+  const choose = useMutation({
+    mutationFn: (start: string) => pickFolder(start, 'Where should backups of your books go?'),
+    onSuccess: (chosen) => {
+      if (chosen !== null) save.mutate(chosen)
+    },
+  })
 
   if (status.isPending) {
     return (
@@ -126,17 +134,27 @@ export default function BackupsPage() {
             <span className="mb-1 block text-xs font-medium text-ink-muted">
               Folder (in OneDrive, iCloud, Dropbox — anywhere that syncs)
             </span>
-            <input
-              aria-label="Backup folder"
-              className={controlLargeClass}
-              value={typed}
-              spellCheck={false}
-              onChange={(e) => setFolder(e.target.value)}
-            />
+            <span className="flex flex-wrap items-center gap-2">
+              <input
+                aria-label="Backup folder"
+                className={`${controlLargeClass} min-w-[16rem] flex-1`}
+                value={typed}
+                spellCheck={false}
+                onChange={(e) => setFolder(e.target.value)}
+              />
+              <button
+                type="button"
+                className={buttonClass}
+                disabled={choose.isPending || save.isPending}
+                onClick={() => choose.mutate(typed)}
+              >
+                {choose.isPending ? 'Choosing…' : 'Choose folder…'}
+              </button>
+            </span>
           </label>
-          {save.isError && (
+          {(save.isError || choose.isError) && (
             <p role="alert" className="text-sm text-danger-red">
-              {errorMessage(save.error)}
+              {errorMessage(save.isError ? save.error : choose.error)}
             </p>
           )}
           <div className="flex flex-wrap items-center gap-3">
@@ -250,16 +268,18 @@ export default function BackupsPage() {
 
       <Card role="region" aria-label="Putting a backup back">
         <h2 className={sectionHeadClass}>Putting a backup back</h2>
-        <p className="mt-2 text-sm text-ink">
-          On a computer with no books yet, start Open Hospitality with the backup file and your
-          recovery code. It won’t write over books that are already there.
-        </p>
-        <p className="mt-2 font-mono text-xs text-ink-muted">
-          oh-desktop --restore &quot;&lt;your backup file&gt;&quot;
-        </p>
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-ink">
+          <li>On the new computer, install Open Hospitality but don’t set it up yet.</li>
+          <li>
+            Double-click the backup file — it ends in <strong>.ohbackup</strong> — and type your
+            recovery code when asked.
+          </li>
+          <li>Start Open Hospitality. Your books are there, and you sign in as before.</li>
+        </ol>
         <p className="mt-2 text-sm text-ink-muted">
-          A backup holds your books and their keys — not the report PDFs, which are already in
-          your Open Hospitality folder.
+          It won’t write over books that are already on a computer. A backup holds your books
+          and their keys — not the report PDFs, which are already in your Open Hospitality
+          folder.
         </p>
       </Card>
     </div>

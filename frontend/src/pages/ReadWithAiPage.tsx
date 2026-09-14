@@ -84,7 +84,7 @@ export default function ReadWithAiPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Read a report with AI"
-        subtitle={`For ${propertyDisplayName(selected) ?? property ?? 'your hotel'}, whose system we have no reader for`}
+        subtitle={`For a ${propertyDisplayName(selected) ?? property ?? 'hotel'} report Open Hospitality couldn’t read on its own — the ones that land in “Reports we couldn’t read”`}
       />
 
       <Card>

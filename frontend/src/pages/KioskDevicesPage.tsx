@@ -41,8 +41,8 @@ export default function KioskDevicesPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Time clock tablets"
-        subtitle="The tablets running the time clock. Enroll one per hotel — a shared tablet gets one enrollment per hotel it serves."
+        title="Time clock"
+        subtitle="Staff punch in and out on the Time clock screen (People › Time clock screen) on this computer. Set one up per hotel it serves; a tablet on the hotel Wi‑Fi can’t reach this copy yet."
       />
 
       <Card role="region" aria-label="enroll kiosk">
@@ -75,7 +75,7 @@ export default function KioskDevicesPage() {
               value={name}
               aria-label="Device name"
               onChange={(e) => setName(e.target.value)}
-              placeholder="Front desk iPad"
+              placeholder="Front desk"
               required
             />
           </label>
@@ -101,8 +101,8 @@ export default function KioskDevicesPage() {
               {minted.token}
             </code>
             <p className="text-xs text-ink-muted">
-              On the tablet, open /kiosk and paste this token to enroll. If it is
-              lost, revoke the device and enroll again.
+              Open <strong>Time clock screen</strong> (People › Time clock screen) and paste this
+              token there. If it is lost, revoke the device and enroll again.
             </p>
             <button
               type="button"

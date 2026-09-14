@@ -1,7 +1,8 @@
 // Hotel overview dashboard: gradient hero, KPI tiles with colored icon chips,
 // and two charts (revenue by department, 14-day trend) for one property +
 // business date. The property/date filters portal into the Layout top bar
-// (#topbar-slot). Business date defaults to TODAY — a date with no facts shows
+// (#topbar-slot). Business date defaults to the last date with data (desktop
+// edition; today when nothing has been read yet) — a date with no facts shows
 // an honest empty state plus a jump-to-latest shortcut, never fake zeros.
 //
 // Everything but the first-run setup card comes from GET /api/sos — a day
@@ -438,7 +439,7 @@ export default function DashboardPage() {
     setSlot(document.getElementById('topbar-slot'))
   }, [])
 
-  const date = pickedDate ?? linkedDate ?? todayIso()
+  const date = pickedDate ?? linkedDate ?? selected?.last_date ?? todayIso()
 
   const ready = property !== undefined
 

@@ -309,9 +309,63 @@ def test_what_is_connected_and_what_is_not_in_one_place(world: World) -> None:
     assert rows["ai"]["state"] == "not_set_up" and "Optional" in rows["ai"]["detail"]
     assert rows["email"]["state"] == "not_set_up" and rows["email"]["page"] == "/email"
     assert rows["backups"]["state"] == "attention" and "No backup folder" in rows["backups"]["detail"]
-    assert rows["clocks"]["state"] == "not_set_up"
+    # The time clock runs on this computer's screen: nothing to enroll elsewhere.
+    assert rows["clocks"]["state"] == "not_set_up" and "this computer" in rows["clocks"]["detail"]
     assert all(c["page"].startswith("/") for c in body["connections"])
     # Not an installed copy here: starting with Windows can't be offered.
     startup = world.get("/api/desktop/startup").json()  # type: ignore[attr-defined]
     assert startup == {"enabled": False, "available": False}
     assert world.client.get("/api/desktop/connections").status_code == 401
+
+
+def test_a_backup_folder_is_not_connected_until_a_backup_has_been_taken(tmp_path: Path) -> None:
+    """The Overview said "Backups — Connected" beside "No backup has been
+    taken yet". A folder chosen and armed is still something to look at
+    until the first copy exists, and the line says when that happens."""
+    from datetime import UTC, datetime
+
+    from usali.desktop.backup import BackupConfig
+    from usali.desktop.connections_api import _backups
+
+    paths = DesktopPaths(owner_root=tmp_path / "owner", system_root=tmp_path / "system")
+    paths.ensure()
+    BackupConfig(folder=tmp_path / "synced").save(paths.backup_config_file)
+    paths.backup_wrap_file.write_text("{}", encoding="utf-8")
+    row = _backups(paths)
+    assert row.state == "attention" and "next time you start" in row.detail
+    BackupConfig(folder=tmp_path / "synced", last_backup_at=datetime(2026, 9, 13, 6, 0, tzinfo=UTC),
+                 last_file="x.ohbackup").save(paths.backup_config_file)
+    row = _backups(paths)
+    assert row.state == "connected" and "last backup 13 Sep" in row.detail
+
+
+def test_the_folder_dialog_answers_with_a_folder_or_nothing(world: World) -> None:
+    """A text box for a folder path is the thing an owner gets wrong; the
+    page asks Windows' own dialog instead, and hears back the folder chosen,
+    nothing when cancelled, or that there is no dialog here."""
+    app = world.client.app
+    original = app.state.desktop_folders_pick  # type: ignore[attr-defined]
+    asked: list[tuple[object, str]] = []
+
+    def chosen(start: object, title: str) -> Path:
+        asked.append((start, title))
+        return Path("D:/Hotel backups")
+
+    try:
+        app.state.desktop_folders_pick = chosen  # type: ignore[attr-defined]
+        r = world.post("/api/desktop/folders/pick", {"start": "C:/somewhere", "title": "Where?"})
+        assert r.status_code == 200 and r.json()["folder"] == str(Path("D:/Hotel backups"))  # type: ignore[attr-defined]
+        assert asked == [(Path("C:/somewhere"), "Where?")]
+
+        app.state.desktop_folders_pick = lambda start, title: None  # type: ignore[attr-defined]
+        assert world.post("/api/desktop/folders/pick", {}).json() == {"folder": None}  # type: ignore[attr-defined]
+
+        def nowhere(start: object, title: str) -> Path:
+            raise OSError("no dialog")
+
+        app.state.desktop_folders_pick = nowhere  # type: ignore[attr-defined]
+        r = world.post("/api/desktop/folders/pick", {})
+        assert r.status_code == 501 and "Type the folder" in r.json()["detail"]  # type: ignore[attr-defined]
+    finally:
+        app.state.desktop_folders_pick = original  # type: ignore[attr-defined]
+    assert world.client.post("/api/desktop/folders/pick", json={}).status_code == 401

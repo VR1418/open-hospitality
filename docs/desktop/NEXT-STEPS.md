@@ -165,6 +165,51 @@ Mac.
 | Six dots on a dark square are hard to pick out at a true 16px tab size. | the kit's `favicon.svg` |
 | **Portal tests are flaky under load.** Three sightings now — `PerformancePage`, `WelcomePage`, and once inside `check.py` — each passing alone and failing while something heavy ran beside them. They are `waitFor` timeouts, not real failures, but CI runs jobs in parallel and will hit this. Worth raising the timeout or reducing jsdom churn before it is dismissed as noise once too often. | `frontend/src/pages/*.test.tsx` |
 
+## Update, 14 September — the owner's walk
+
+The whole packaged app was walked once more as a brand-new owner who has
+never typed a folder path. Everything on the core path worked; what follows
+is what got in the way, and what was done about it today.
+
+| Fixed today | |
+|---|---|
+| **Command lines shown to owners** | Restore is now: install, double-click the `.ohbackup` file, type the recovery code (the file type is registered per user; the code is asked in a dialog). The accountant page points at the Excel pack in Saved reports. |
+| **Folder paths typed by hand** | **Choose folder…** on the wizard's backup step and the Backups page opens Windows' own folder window (`POST /api/desktop/folders/pick`). |
+| **Eleven clicks to confirm eleven guesses** | **These look right — confirm all** (`POST /api/desktop/codes/confirm-all`): one pass, each day worked out once. The repeated sentence under every row is said once, above the table; *Goes to* leads with the line's own name. |
+| **Pages that opened empty** | Hotel dashboard, Profit and loss, Books, For your accountant and Send to QuickBooks open on the last night read. |
+| **"Backups — Connected" beside "no backup yet"** | *Needs attention* until the first copy exists, with the line saying when that is. |
+| **"Whose system we have no reader for"** on a SkyTouch hotel | The Read-with-AI page now says what it is for: reports that land in *Reports we couldn't read*. |
+| **Wizard's front-desk list opened on AutoClerk** | Opens on "Choose your front-desk system…"; nothing saved until one is picked. |
+| **"Time clock tablets"** | The app listens on this computer only, so a tablet cannot reach it. The page and the Overview now say the clock runs on this computer's screen; the brand-name placeholder is gone. |
+| **Recovery code overflowed a narrow window** | Wraps. |
+
+Not a bug after all: Modules says it reads "Opera, AutoClerk and
+choiceADVANTAGE" — choiceADVANTAGE *is* SkyTouch.
+
+And one the walk found by running at 01:51: a person added between midnight
+and the 4 AM punch cutoff was hired "tomorrow" (the server's date) and missing
+from the time clock until the cutoff passed — the kiosk asks for who is in
+effect on the *property's* business date. Onboarding now stamps that date
+(`src/usali/onboarding.py`, listed in NOTICE). A night auditor adding staff is
+exactly who hits this.
+
+| Still to do — a wording pass, one PR the group can review for tone | |
+|---|---|
+| Setup checklist | "PMS report", "USALI statement", "sellable room inventory", "ADR and RevPAR divide by this", "4-4-5", "gross-to-net", "journal entry"; the demand-feed item leads nowhere in this edition and should be hidden. |
+| Close the day | "Roll window 00:00–05:00 America/Chicago", "ledger block", "trial balance has not landed". The drop folder already closes the day; shrink this page to *Last night: read ✓ · balances tie ✓*. |
+| Books | "trial balance"; period tiles "2026-P01…" → "January 2026 …". |
+| Occupancy and rates | "TRevPAR", "ADR room basis as_reported", a 28-digit reconciliation figure. Round; tuck reconciliation under Details. |
+| Report codes (Coverage) | Developer notes on screen — "staged codes", "GL mapping 21/21", "cf. AutoClerk ROOM\|LATE_CHECK_OUT", "confirm on real sample". Hide from owners. |
+| Staff and labour | "California pays overtime…" shown to every hotel regardless of state; "Schedule 14", "FTE", a "Pay runs page" not in the menu. |
+| Schedule, Add Employee | "payroll Monday grid", "hours-only by design"; "Onboarding into RTI22. An operator role provisions a login…", roles "Org Admin / Payroll Admin / Property GM". |
+| Chrome | A search box that says "(soon)", "build dev" in the footer, an Ops tab where every item says SOON, an Integrations page of bare "API token / Client secret" fields. |
+
+| And then — guidance for the first week | |
+|---|---|
+| Add reports shows nothing about what just happened | "Just read: RTI22 · Sep 10–12 ✓ · 11 codes waiting → Confirm". |
+| A "This morning" strip on the Overview | Reports in? Codes to confirm? Bank check due? Backup done? |
+| A ? on each page into INSTALL.md | Email has one; nothing else does. |
+
 ## 6. Send the three upstream changes back — *half a day*
 
 [UPSTREAM.md](UPSTREAM.md) has three, two of them written and tested here: the

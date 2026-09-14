@@ -397,7 +397,9 @@ def restore(
     if paths.database.exists():
         raise BackupError(
             f"This computer already has books ({paths.database}). Restoring would replace "
-            "them. Move that folder aside first if you are sure."
+            "them. If those books are empty and you want this backup instead, uninstall "
+            "Open Hospitality first (Windows Settings › Apps), say Yes to deleting the "
+            "books, then open the backup again."
         )
     if not archive.is_file():
         raise BackupError(f"There is no backup file at {archive}.")

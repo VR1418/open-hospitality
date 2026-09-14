@@ -343,6 +343,7 @@ def _integrate_with_windows(paths: DesktopPaths) -> None:
 
     ensure_shortcuts(paths.system_root)
     uninstall.register(Path(sys.executable), __version__)
+    uninstall.register_backup_files(Path(sys.executable))
 
 
 def _start_uninstall() -> None:
@@ -408,18 +409,36 @@ def _run_console(base_url: str, stopping: threading.Event) -> None:
 
 
 def _restore(paths: DesktopPaths, archive: Path, recovery_code: str | None,
-             store: KeyStore) -> int:
-    """`--restore`: the books from a backup file, on a computer that has none.
-    The recovery code is the key (ADR-D4); it is asked for rather than passed
-    on a command line unless the caller chose to."""
-    code = recovery_code or input("Your recovery code: ").strip()
-    manifest = backup.restore(paths, archive, recovery_code=code, store=store)
-    print(
-        f"\nRestored your books from {archive.name} "
+             store: KeyStore, args: argparse.Namespace) -> int:
+    """`--restore`, or a backup file double-clicked: the books from a backup
+    file, on a computer that has none. The recovery code is the key (ADR-D4);
+    it is asked for — in a dialog when there is no console — rather than
+    passed on a command line unless the caller chose to."""
+    code = recovery_code
+    if not code:
+        code = (
+            uninstall.ask_text("Open a backup", f"Your recovery code, to open {archive.name}:")
+            if _dialogs(args) else input("Your recovery code: ").strip()
+        )
+    if not code:
+        _tell("Open a backup", "No recovery code was typed, so nothing was changed.", args)
+        return 1
+    try:
+        manifest = backup.restore(paths, archive, recovery_code=code, store=store)
+    except backup.BackupError as exc:
+        # A wrong code, books already here, a file from another version: the
+        # message names the next step, under the title of what was tried.
+        _LOG.error("%s", exc)
+        print(f"\n{exc}\n", file=sys.stderr)
+        _tell("Open a backup", str(exc), args)
+        return 1
+    text = (
+        f"Restored your books from {archive.name} "
         f"(backed up {manifest.get('created_at', 'at an unknown time')}).\n"
-        "Start Open Hospitality again to open them.\n",
-        flush=True,
+        "Start Open Hospitality again to open them."
     )
+    print(f"\n{text}\n", flush=True)
+    _tell("Your books are back", text, args)
     return 0
 
 
@@ -429,7 +448,7 @@ def run(args: argparse.Namespace) -> int:
     _configure_logging(paths.logs)
     store = OsKeyStore()
     if args.restore is not None:
-        return _restore(paths, Path(args.restore), args.recovery_code, store)
+        return _restore(paths, Path(args.restore), args.recovery_code, store, args)
     # Before anything touches the database: a second copy on the same folder
     # would try to start a second server on it. It asks the running copy to
     # open a window instead (usali.desktop.window).
@@ -617,7 +636,16 @@ def main(argv: list[str] | None = None) -> int:
         "--recovery-code", metavar="CODE",
         help="the recovery code that opens the backup, if you'd rather not be asked",
     )
+    parser.add_argument(
+        "file", nargs="?", metavar="BACKUP",
+        help="a backup file (.ohbackup) to restore — what Windows passes when one is double-clicked",
+    )
     args = parser.parse_args(argv)
+    if args.file is not None and args.restore is None:
+        if args.file.lower().endswith(backup.SUFFIX):
+            args.restore = args.file
+        else:
+            _LOG.warning("ignoring an argument that isn't a backup file: %s", args.file)
     if args.uninstall:
         paths = DesktopPaths.default()
         _configure_logging(paths.logs)

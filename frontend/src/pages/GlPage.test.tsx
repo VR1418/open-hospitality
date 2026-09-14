@@ -290,23 +290,24 @@ describe('GlPage', () => {
     )
   })
 
-  it('clamps a malformed ?period= to no selection and fires no request', async () => {
+  it('clamps a malformed ?period= and opens on the period holding the latest data', async () => {
     renderPage('/gl?period=garbage')
-    const rail = await screen.findByRole('group', { name: 'Fiscal periods' })
-    for (const chip of within(rail).getAllByRole('button')) {
-      expect(chip).toHaveAttribute('aria-pressed', 'false')
-    }
-    expect(getTrialBalance).not.toHaveBeenCalled()
+    // The property's last date (2026-07-07, fixtures) falls in 2026-P07.
+    await screen.findByRole('region', { name: 'Period 2026-P07' })
+    expect(getTrialBalance).toHaveBeenCalledWith('HISJ', '2026-P07')
+    expect(getTrialBalance).not.toHaveBeenCalledWith('HISJ', 'garbage')
   })
 
-  it('prompts to pick a period before any period is selected', async () => {
+  it('opens on the period holding the latest data when none is picked', async () => {
     renderPage()
-    await screen.findByRole('group', { name: 'Fiscal periods' })
-    expect(
-      screen.getByText('Pick a period to view its trial balance.'),
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: /^Period / })).not.toBeInTheDocument()
-    expect(getTrialBalance).not.toHaveBeenCalled()
+    const rail = await screen.findByRole('group', { name: 'Fiscal periods' })
+    await screen.findByRole('region', { name: 'Period 2026-P07' })
+    expect(within(rail).getByRole('button', { name: /2026-P07/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.queryByText('Pick a period to view its trial balance.')).toBeNull()
+    expect(getTrialBalance).toHaveBeenCalledWith('HISJ', '2026-P07')
   })
 
   it('shows the trial balance loading line while a selected period is in flight', async () => {

@@ -526,7 +526,7 @@ function RecoveryCodeScreen({ code, replaced }: { code: string; replaced: boolea
       )}
       <p
         aria-label="Recovery code"
-        className="my-4 select-all rounded-lg border border-line bg-surface-sunken px-4 py-3 text-center font-mono text-lg tracking-wider text-ink"
+        className="my-4 select-all break-all rounded-lg border border-line bg-surface-sunken px-4 py-3 text-center font-mono text-lg tracking-wider text-ink"
       >
         {code}
       </p>

@@ -1,9 +1,10 @@
 """Codes to confirm: what this hotel's transaction codes mean, and what
 happens to the money while nobody has said.
 
-    GET /api/desktop/codes?property=RTI   every code this hotel's reports use
-    GET /api/desktop/codes/choices        the USALI lines a code may be put on
-    PUT /api/desktop/codes/{code}         confirm one, and restate its days
+    GET  /api/desktop/codes?property=RTI   every code this hotel's reports use
+    GET  /api/desktop/codes/choices        the USALI lines a code may be put on
+    PUT  /api/desktop/codes/{code}         confirm one, and restate its days
+    POST /api/desktop/codes/confirm-all    confirm every guess as it stands, in one pass
 
 Why this page exists. A code the shipped dictionary has never heard of is not
 dropped and does not quarantine the report: `transform` banks it as a
@@ -149,6 +150,18 @@ class ConfirmOut(BaseModel):
     ledger_refused: dict[str, str]
 
 
+class ConfirmAllIn(BaseModel):
+    property_id: str = Field(min_length=1, max_length=50)
+    edition: int = DEFAULT_EDITION
+
+
+class ConfirmAllOut(BaseModel):
+    #: The codes confirmed, at the line each was guessed to belong on.
+    codes: list[str]
+    days_restated: list[date]
+    ledger_refused: dict[str, str]
+
+
 def known_lines(session: object, edition: int) -> list[Line]:
     """The classifications this product already knows about.
 
@@ -198,72 +211,75 @@ def codes(
     anyone — has said what it means."""
     with request_session_factory(request)() as session:
         require_property(session, property_id)
+        return list_codes(session, property_id, edition)
 
-        seen = session.execute(
-            select(
-                PmsDailyFinancialStage.pms_source,
-                PmsDailyFinancialStage.pms_trx_code,
-                func.max(PmsDailyFinancialStage.pms_trx_desc),
-                func.count(),
-                func.coalesce(func.sum(PmsDailyFinancialStage.raw_amount), Decimal("0")),
-                func.min(PmsDailyFinancialStage.business_date),
-                func.max(PmsDailyFinancialStage.business_date),
-            )
-            .where(PmsDailyFinancialStage.property_id == property_id)
-            .group_by(PmsDailyFinancialStage.pms_source, PmsDailyFinancialStage.pms_trx_code)
-        ).all()
 
-        shipped = {
-            (m.pms_source, m.pms_trx_code): m
-            for m in session.execute(
-                select(UsaliMappingDictionary).where(
-                    UsaliMappingDictionary.usali_edition == edition
-                )
-            ).scalars()
-        }
-        decided = {
-            (d.pms_source, d.pms_trx_code): d
-            for d in decisions_for(session, property_id=property_id)
-            if d.usali_edition == edition
-        }
-
-        items: list[CodeItem] = []
-        settled = 0
-        not_in_books = Decimal("0")
-        for source, code, desc, times, amount, first, last in seen:
-            decision = decided.get((source, code))
-            row = shipped.get((source, code))
-            if decision is not None:
-                status: Literal["unknown", "unconfirmed", "confirmed"] = "confirmed"
-                current = Line.of(decision.classification)
-            elif row is None:
-                status = "unknown"
-                current = None
-                not_in_books += abs(Decimal(amount))
-            elif row.review_status != "reviewed" or row.confidence == "LOW":
-                status = "unconfirmed"
-                current = Line(
-                    schedule_id=row.usali_schedule_id, major=row.usali_major_category,
-                    sub=row.usali_sub_category, line_item=row.usali_line_item,
-                    gl_account_code=row.gl_account_code,
-                )
-            else:
-                settled += 1
-                continue
-            items.append(CodeItem(
-                code=code, description=desc, pms_source=source, status=status,
-                times_seen=times, amount=str(Decimal(amount)),
-                first_seen=first, last_seen=last, current=current,
-                decided_by=decision.decided_by if decision else None,
-                decided_at=decision.decided_at if decision else None,
-            ))
-
-        order = {"unknown": 0, "unconfirmed": 1, "confirmed": 2}
-        items.sort(key=lambda i: (order[i.status], -abs(Decimal(i.amount)), i.code))
-        return CodesOut(
-            property_id=property_id, edition=edition,
-            money_not_in_the_books=str(not_in_books), settled_count=settled, items=items,
+def list_codes(session: object, property_id: str, edition: int) -> CodesOut:
+    seen = session.execute(  # type: ignore[attr-defined]
+        select(
+            PmsDailyFinancialStage.pms_source,
+            PmsDailyFinancialStage.pms_trx_code,
+            func.max(PmsDailyFinancialStage.pms_trx_desc),
+            func.count(),
+            func.coalesce(func.sum(PmsDailyFinancialStage.raw_amount), Decimal("0")),
+            func.min(PmsDailyFinancialStage.business_date),
+            func.max(PmsDailyFinancialStage.business_date),
         )
+        .where(PmsDailyFinancialStage.property_id == property_id)
+        .group_by(PmsDailyFinancialStage.pms_source, PmsDailyFinancialStage.pms_trx_code)
+    ).all()
+
+    shipped = {
+        (m.pms_source, m.pms_trx_code): m
+        for m in session.execute(  # type: ignore[attr-defined]
+            select(UsaliMappingDictionary).where(
+                UsaliMappingDictionary.usali_edition == edition
+            )
+        ).scalars()
+    }
+    decided = {
+        (d.pms_source, d.pms_trx_code): d
+        for d in decisions_for(session, property_id=property_id)  # type: ignore[arg-type]
+        if d.usali_edition == edition
+    }
+
+    items: list[CodeItem] = []
+    settled = 0
+    not_in_books = Decimal("0")
+    for source, code, desc, times, amount, first, last in seen:
+        decision = decided.get((source, code))
+        row = shipped.get((source, code))
+        if decision is not None:
+            status: Literal["unknown", "unconfirmed", "confirmed"] = "confirmed"
+            current = Line.of(decision.classification)
+        elif row is None:
+            status = "unknown"
+            current = None
+            not_in_books += abs(Decimal(amount))
+        elif row.review_status != "reviewed" or row.confidence == "LOW":
+            status = "unconfirmed"
+            current = Line(
+                schedule_id=row.usali_schedule_id, major=row.usali_major_category,
+                sub=row.usali_sub_category, line_item=row.usali_line_item,
+                gl_account_code=row.gl_account_code,
+            )
+        else:
+            settled += 1
+            continue
+        items.append(CodeItem(
+            code=code, description=desc, pms_source=source, status=status,
+            times_seen=times, amount=str(Decimal(amount)),
+            first_seen=first, last_seen=last, current=current,
+            decided_by=decision.decided_by if decision else None,
+            decided_at=decision.decided_at if decision else None,
+        ))
+
+    order = {"unknown": 0, "unconfirmed": 1, "confirmed": 2}
+    items.sort(key=lambda i: (order[i.status], -abs(Decimal(i.amount)), i.code))
+    return CodesOut(
+        property_id=property_id, edition=edition,
+        money_not_in_the_books=str(not_in_books), settled_count=settled, items=items,
+    )
 
 
 @router.get("/api/desktop/codes/choices")
@@ -274,6 +290,112 @@ def choices(
 ) -> ChoicesOut:
     with request_session_factory(request)() as session:
         return ChoicesOut(lines=known_lines(session, edition))
+
+
+class _Decision(BaseModel):
+    """One code and where it goes — the unit `_restate` works in."""
+    pms_source: str
+    code: str
+    line: Line
+    origin: Literal["owner", "ai-accepted"]
+    note: str | None
+
+
+class _Restated(BaseModel):
+    days: list[date]
+    facts_written: int
+    refused: dict[str, str]
+
+
+def _restate(
+    session: object, principal: Principal, property_id: str, edition: int,
+    decisions: list[_Decision],
+) -> _Restated:
+    """Record each decision, then work every affected day out again — once
+    per day, however many codes it carries."""
+    by_code: dict[tuple[str, str], list[int]] = {}
+    for d in decisions:
+        by_code[(d.pms_source, d.code)] = list(session.scalars(  # type: ignore[attr-defined]
+            select(PmsDailyFinancialStage.stage_id).where(
+                PmsDailyFinancialStage.property_id == property_id,
+                PmsDailyFinancialStage.pms_source == d.pms_source,
+                PmsDailyFinancialStage.pms_trx_code == d.code,
+            )
+        ))
+    all_ids = [i for ids in by_code.values() for i in ids]
+    day_rows = session.execute(  # type: ignore[attr-defined]
+        select(PmsDailyFinancialStage.pms_source, PmsDailyFinancialStage.business_date)
+        .where(PmsDailyFinancialStage.stage_id.in_(all_ids)).distinct()
+    ).all() if all_ids else []
+    days_by_source: dict[str, list[date]] = {}
+    for source, day in day_rows:
+        days_by_source.setdefault(source, []).append(day)
+    days = sorted({day for _, day in day_rows})
+
+    # Refuse BEFORE writing anything: a restatement the ledger cannot
+    # take would leave the facts changed and the journal stale, which is
+    # the one state nothing in the product detects.
+    closed = [d for d in days if _is_closed(session, property_id, d)]
+    if closed:
+        raise HTTPException(
+            status_code=409,
+            detail="These days are in a closed month, so they can't be restated: "
+                   + ", ".join(d.isoformat() for d in closed)
+                   + ". Reopen the month first.",
+        )
+
+    before = _fact_count(session, all_ids)
+    for d in decisions:
+        record(
+            session, property_id=property_id, pms_source=d.pms_source,  # type: ignore[arg-type]
+            trx_code=d.code, edition=edition, classification=d.line.classification(),
+            origin=d.origin, decided_by=principal.subject, note=d.note,
+        )
+        stage_ids = by_code[(d.pms_source, d.code)]
+        if not stage_ids:
+            continue
+        # A fact that has been posted is referenced by its journal lines
+        # (fk_journal_line_fact) and cannot be deleted — nor should it be:
+        # the line is how a posted amount traces back to the report. So a
+        # fact that exists is RE-CLASSIFIED in place; its id, amount and
+        # provenance stay, and the ledger sees a changed day and reposts
+        # (a reversal plus a fresh entry). Only rows that never became a
+        # fact — the unmapped ones, held as exceptions — are transformed
+        # afresh, once their exception row (what marks a stage row
+        # "already processed") is gone.
+        c = d.line.classification()
+        session.execute(  # type: ignore[attr-defined]
+            update(UsaliFinancialFact)
+            .where(UsaliFinancialFact.stage_id.in_(stage_ids))
+            .values(
+                usali_schedule_id=c.usali_schedule_id,
+                usali_major_category=c.usali_major_category,
+                usali_sub_category=c.usali_sub_category,
+                usali_line_item=c.usali_line_item,
+                gl_account_code=c.gl_account_code,
+            )
+        )
+        session.execute(  # type: ignore[attr-defined]
+            delete(MappingException).where(MappingException.stage_id.in_(stage_ids))
+        )
+        session.add(AuditEvent(  # type: ignore[attr-defined]
+            actor_subject=principal.subject, action=f"mapping_decision_{d.origin}",
+            resource_type="pms_trx_code", resource_id=f"{property_id}:{d.code}"[:64],
+        ))
+    session.flush()  # type: ignore[attr-defined]
+
+    refused: dict[str, str] = {}
+    for source, source_days in days_by_source.items():
+        for day in sorted(source_days):
+            transform(session, source=source, business_date=day, edition=edition)  # type: ignore[arg-type]
+            outcome = gl_posting.post_and_record(
+                session, property_id=property_id, business_date=day,  # type: ignore[arg-type]
+                source_type="pms_daily", actor=principal.subject,
+            )
+            if outcome.status == "failed" and outcome.message:
+                refused[day.isoformat()] = outcome.message
+    return _Restated(days=days, facts_written=_fact_count(session, all_ids) - before,
+                     refused=refused)
 
 
 @router.put("/api/desktop/codes/{code}")
@@ -288,84 +410,42 @@ def confirm(
                 status_code=422,
                 detail="That isn't a line this product knows about. Pick one from the list.",
             )
-
-        stage_ids = list(session.scalars(
-            select(PmsDailyFinancialStage.stage_id).where(
-                PmsDailyFinancialStage.property_id == body.property_id,
-                PmsDailyFinancialStage.pms_source == body.pms_source,
-                PmsDailyFinancialStage.pms_trx_code == code,
-            )
-        ))
-        days = sorted(set(session.scalars(
-            select(PmsDailyFinancialStage.business_date).where(
-                PmsDailyFinancialStage.stage_id.in_(stage_ids)
-            )
-        ))) if stage_ids else []
-
-        # Refuse BEFORE writing anything: a restatement the ledger cannot
-        # take would leave the facts changed and the journal stale, which is
-        # the one state nothing in the product detects.
-        closed = [d for d in days if _is_closed(session, body.property_id, d)]
-        if closed:
-            raise HTTPException(
-                status_code=409,
-                detail="These days are in a closed month, so they can't be restated: "
-                       + ", ".join(d.isoformat() for d in closed)
-                       + ". Reopen the month first.",
-            )
-
-        record(
-            session, property_id=body.property_id, pms_source=body.pms_source,
-            trx_code=code, edition=body.edition, classification=body.line.classification(),
-            origin=body.origin, decided_by=principal.subject, note=body.note,
-        )
-
-        before = _fact_count(session, stage_ids)
-        if stage_ids:
-            # A fact that has been posted is referenced by its journal lines
-            # (fk_journal_line_fact) and cannot be deleted — nor should it be:
-            # the line is how a posted amount traces back to the report. So a
-            # fact that exists is RE-CLASSIFIED in place; its id, amount and
-            # provenance stay, and the ledger sees a changed day and reposts
-            # (a reversal plus a fresh entry). Only rows that never became a
-            # fact — the unmapped ones, held as exceptions — are transformed
-            # afresh, once their exception row (what marks a stage row
-            # "already processed") is gone.
-            c = body.line.classification()
-            session.execute(
-                update(UsaliFinancialFact)
-                .where(UsaliFinancialFact.stage_id.in_(stage_ids))
-                .values(
-                    usali_schedule_id=c.usali_schedule_id,
-                    usali_major_category=c.usali_major_category,
-                    usali_sub_category=c.usali_sub_category,
-                    usali_line_item=c.usali_line_item,
-                    gl_account_code=c.gl_account_code,
-                )
-            )
-            session.execute(
-                delete(MappingException).where(MappingException.stage_id.in_(stage_ids))
-            )
-            session.flush()
-
-        refused: dict[str, str] = {}
-        for day in days:
-            transform(session, source=body.pms_source, business_date=day, edition=body.edition)
-            outcome = gl_posting.post_and_record(
-                session, property_id=body.property_id, business_date=day,
-                source_type="pms_daily", actor=principal.subject,
-            )
-            if outcome.status == "failed" and outcome.message:
-                refused[day.isoformat()] = outcome.message
-
-        session.add(AuditEvent(
-            actor_subject=principal.subject, action=f"mapping_decision_{body.origin}",
-            resource_type="pms_trx_code", resource_id=f"{body.property_id}:{code}"[:64],
-        ))
-        written = _fact_count(session, stage_ids) - before
+        done = _restate(session, principal, body.property_id, body.edition, [_Decision(
+            pms_source=body.pms_source, code=code, line=body.line, origin=body.origin,
+            note=body.note,
+        )])
         session.commit()
         return ConfirmOut(
-            code=code, days_restated=days, facts_written=written, ledger_refused=refused,
+            code=code, days_restated=done.days, facts_written=done.facts_written,
+            ledger_refused=done.refused,
+        )
+
+
+@router.post("/api/desktop/codes/confirm-all")
+def confirm_all(
+    body: ConfirmAllIn, request: Request, principal: Principal = Depends(_owner)
+) -> ConfirmAllOut:
+    """Every guess, confirmed where it stands — for the owner who has read
+    the list and finds nothing wrong with it. Eleven clicks become one, and
+    each day is worked out again once rather than once per code. Unknown
+    codes are not touched: there is nothing to agree with."""
+    with request_session_factory(request)() as session:
+        require_property(session, body.property_id)
+        guesses = [
+            item for item in list_codes(session, body.property_id, body.edition).items
+            if item.status == "unconfirmed" and item.current is not None
+        ]
+        if not guesses:
+            return ConfirmAllOut(codes=[], days_restated=[], ledger_refused={})
+        done = _restate(session, principal, body.property_id, body.edition, [
+            _Decision(pms_source=g.pms_source, code=g.code, line=g.current, origin="owner",  # type: ignore[arg-type]
+                      note="Confirmed with the other guesses.")
+            for g in guesses
+        ])
+        session.commit()
+        return ConfirmAllOut(
+            codes=[g.code for g in guesses], days_restated=done.days,
+            ledger_refused=done.refused,
         )
 
 

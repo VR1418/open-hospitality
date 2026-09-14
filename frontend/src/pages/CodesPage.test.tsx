@@ -12,12 +12,14 @@ vi.mock('../api/desktop', async (importOriginal) => ({
   getCodes: vi.fn(),
   getCodeLines: vi.fn(),
   confirmCode: vi.fn(),
+  confirmAllCodes: vi.fn(),
   getAiSettings: vi.fn(),
   suggestCode: vi.fn(),
 }))
 
 import { getProperties } from '../api/client'
 import {
+  confirmAllCodes,
   confirmCode,
   getAiSettings,
   getCodeLines,
@@ -125,6 +127,21 @@ describe('CodesPage', () => {
     expect(within(list).getByText('Nowhere')).toBeInTheDocument()
     expect(within(list).getByText(/Confirmed by priya/)).toBeInTheDocument()
     expect(within(list).getByText(/3 other codes/)).toBeInTheDocument()
+  })
+
+  it('confirms every guess at once, and says what changed', async () => {
+    vi.mocked(confirmAllCodes).mockResolvedValue({
+      codes: ['RM'], days_restated: ['2026-03-01', '2026-03-02'], ledger_refused: {},
+    })
+    renderPage()
+    const guesses = await screen.findByRole('region', { name: 'Guesses' })
+    expect(within(guesses).getByText(/One code is where we guessed/)).toBeInTheDocument()
+    await userEvent.click(within(guesses).getByRole('button', { name: /confirm it/ }))
+    await waitFor(() => expect(confirmAllCodes).toHaveBeenCalledWith('HISJ'))
+    const changed = await screen.findByRole('region', { name: 'What changed' })
+    expect(changed).toHaveTextContent('RM is confirmed, and 2 days worked out again.')
+    // The unknown code is left for the owner: nothing to agree with.
+    expect(screen.getByRole('button', { name: 'Confirm ZZQ' })).toBeInTheDocument()
   })
 
   it('confirms a code on a line the product knows, and says what changed', async () => {

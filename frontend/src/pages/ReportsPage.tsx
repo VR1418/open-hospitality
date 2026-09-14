@@ -3,11 +3,13 @@
 // (with the room-revenue base), and A/R balances. The A/R "opening" column is
 // labeled "First reported": it is the earliest balance reported IN the month,
 // not the prior month's close (see ArLine in api/types.ts). "Download JSON"
-// saves the exact API payload; CSV export deliberately stays a CLI concern
-// (`usali cpa-pack --format csv`) — noted in the page footer.
+// saves the exact API payload. Desktop edition: the page opens on the month
+// holding the latest data, and the footer points at the Excel pack the app
+// writes to Saved reports rather than at a command line.
 
 import { skipToken, useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
+import { useEffect } from 'react'
 
 import { getCpaPack } from '../api/client'
 import type { ArReport, CpaPack, SalesReport, TaxReport } from '../api/types'
@@ -40,6 +42,16 @@ export default function ReportsPage() {
 
   // Property is GLOBAL (top-bar selector); only the month is page state.
   const { property, selected } = useGlobalProperty()
+
+  // Desktop edition: open on the month holding the latest data rather than
+  // on an empty picker — an owner arriving here wants last month's pack, not
+  // a form.
+  const latestMonth = selected?.last_date.slice(0, 7)
+  useEffect(() => {
+    if (search.month === undefined && latestMonth !== undefined) {
+      void navigate({ search: (prev) => ({ ...prev, month: latestMonth }), replace: true })
+    }
+  }, [search.month, latestMonth, navigate])
 
   const params =
     property !== undefined && search.month !== undefined
@@ -82,9 +94,9 @@ export default function ReportsPage() {
       )}
 
       <p className="text-xs text-ink-muted">
-        Need CSV? Export from the CLI: <code>usali cpa-pack --format csv --out DIR</code>. CSV
-        stays a CLI concern by design — this page serves the on-screen review and the JSON
-        download.
+        Download JSON keeps the exact figures. Each month’s pack is also written as an Excel
+        file in <strong>Saved reports</strong>, by hotel and month — the folders are listed on
+        the Add reports page.
       </p>
     </div>
   )

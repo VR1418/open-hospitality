@@ -64,6 +64,83 @@ def tell(title: str, text: str) -> None:
     ctypes.windll.user32.MessageBoxW(None, text, title, _OK | _INFO)
 
 
+def ask_text(title: str, prompt: str) -> str | None:
+    """One line typed into a dialog — the recovery code, when a backup is
+    opened by double-clicking it. None when cancelled or left empty."""
+    if sys.platform != "win32":
+        answer = input(f"{title}\n{prompt}: ").strip()
+        return answer or None
+    script = (
+        "Add-Type -AssemblyName Microsoft.VisualBasic; "
+        f"[Microsoft.VisualBasic.Interaction]::InputBox({_ps(prompt)}, {_ps(title)}, '')"
+    )
+    try:
+        done = subprocess.run(  # noqa: S603
+            ["powershell.exe", "-NoProfile", "-NonInteractive", "-STA", "-Command", script],
+            capture_output=True, text=True, timeout=600,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    answer = done.stdout.strip()
+    return answer or None
+
+
+def _ps(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+# --- Backup files ---------------------------------------------------------------
+
+#: The Windows "file type" a .ohbackup file is given, so double-clicking one
+#: starts this program with the file — the restore an owner can do without a
+#: command line.
+BACKUP_CLASS = "OpenHospitality.Backup"
+BACKUP_SUFFIX = ".ohbackup"
+
+
+def register_backup_files(exe: Path) -> bool:
+    """Per user, like the rest of the app. True when written."""
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return False
+    import winreg
+
+    classes = r"Software\Classes"
+    try:
+        for key, value in (
+            (rf"{classes}\{BACKUP_SUFFIX}", BACKUP_CLASS),
+            (rf"{classes}\{BACKUP_CLASS}", f"{APP_NAME} backup"),
+            (rf"{classes}\{BACKUP_CLASS}\DefaultIcon", f"{exe},0"),
+            (rf"{classes}\{BACKUP_CLASS}\shell\open\command", f'"{exe}" "%1"'),
+        ):
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, key) as handle:
+                winreg.SetValueEx(handle, "", 0, winreg.REG_SZ, value)
+    except OSError:
+        _LOG.warning("could not register %s files", BACKUP_SUFFIX)
+        return False
+    return True
+
+
+def unregister_backup_files() -> None:
+    if sys.platform != "win32":
+        return
+    import winreg
+
+    classes = r"Software\Classes"
+    for key in (
+        rf"{classes}\{BACKUP_CLASS}\shell\open\command",
+        rf"{classes}\{BACKUP_CLASS}\shell\open",
+        rf"{classes}\{BACKUP_CLASS}\shell",
+        rf"{classes}\{BACKUP_CLASS}\DefaultIcon",
+        rf"{classes}\{BACKUP_CLASS}",
+        rf"{classes}\{BACKUP_SUFFIX}",
+    ):
+        try:
+            winreg.DeleteKey(winreg.HKEY_CURRENT_USER, key)
+        except OSError:
+            pass  # not there, which is the goal
+
+
 # --- Installed apps -------------------------------------------------------------
 
 def register(exe: Path, version: str) -> bool:
@@ -196,6 +273,7 @@ def run(paths: DesktopPaths, store: KeyStore, exe: Path) -> int:
 
     remove_shortcuts()
     unregister()
+    unregister_backup_files()
     folder = program_folder(exe)
     tell(
         f"{APP_NAME} is uninstalled",

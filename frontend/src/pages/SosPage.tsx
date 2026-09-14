@@ -38,6 +38,21 @@ export default function SosPage() {
   // Changing property invalidates any open drill window.
   useEffect(() => setDrillLine(null), [property])
 
+  // Desktop edition: open on the last night read rather than on an empty
+  // picker. Only when nothing at all is picked — a linked date or range wins.
+  const lastDate = selected?.last_date
+  useEffect(() => {
+    if (
+      mode === 'single' &&
+      search.date === undefined &&
+      search.from === undefined &&
+      search.to === undefined &&
+      lastDate !== undefined
+    ) {
+      void navigate({ search: (prev) => ({ ...prev, date: lastDate }), replace: true })
+    }
+  }, [mode, search.date, search.from, search.to, lastDate, navigate])
+
   function updateSearch(patch: Partial<SosSearch>) {
     setDrillLine(null) // any picker change invalidates the open drill window
     void navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true })

@@ -112,10 +112,12 @@ holding account, which is why nothing else in the app mentions it.
 
 Open **Accounting › Codes to confirm**. The number at the top is what your
 unrecognised codes add up to. Each row says what your report calls the code,
-how often it has appeared and for how much. Pick the line it belongs on and
-press Confirm: every day that code appears on is worked out again and your
-books reposted. Days in a month you have already closed are left alone, and
-it tells you so.
+how often it has appeared and for how much, and where it goes. Read down the
+**Goes to** column: if the guesses read right, press **These look right —
+confirm all** and they are settled in one go. Change any one first if it
+doesn't — press its Confirm button, pick the line it belongs on, and every
+day that code appears on is worked out again and your books reposted. Days
+in a month you have already closed are left alone, and it tells you so.
 
 Expect ten or twenty minutes, once. It is the most useful thing you can do
 with this app, and the most useful thing you can report back on: **any code
@@ -192,10 +194,12 @@ Turn on **Payroll & People** under Modules. Then, under **People**:
   **Copy to next week** does the whole week again; **Print** gives a
   one-page rota for the wall. Change or make your own shifts under
   Ready-made shifts at the bottom.
-- **Time clock:** enrol a tablet under Time clock tablets, open the Time
-  clock screen on it, and staff punch in and out with a photo. Their
-  punches become **Timecards** for you to approve, and approved hours become
-  labour cost on the profit and loss.
+- **Time clock:** it runs on this computer's screen. Under **Time clock**
+  set one up for the hotel, then open **Time clock screen** and paste the
+  token it gave you; staff punch in and out there with a photo. Their punches
+  become **Timecards** for you to approve, and approved hours become labour
+  cost on the profit and loss. A tablet on the hotel Wi‑Fi can't reach this
+  copy yet.
 
 ## 6. The AI helper, if you want it
 
@@ -267,22 +271,23 @@ Hospitality…**.
 
 ## 7. Backups, which is the part to get right
 
-You chose a folder during setup — ideally one OneDrive, iCloud or Dropbox
-already syncs. A copy of your books is written there when you start the app,
-once a day.
+You chose a folder during setup — **Choose folder…** opens the usual Windows
+folder window — ideally one OneDrive, iCloud or Dropbox already syncs. A copy
+of your books is written there when you start the app, once a day. Until the
+first copy exists, the Overview says so under *What's connected*.
 
 To put a backup back on a new computer you need **two things**: the backup
 file, and your recovery code. Keep the code somewhere separate from the
 computer.
 
-Restoring is a command for now, on a computer with no books on it yet:
+1. On the new computer, install Open Hospitality but don't set it up yet.
+2. Double-click the backup file — it ends in `.ohbackup` — and type your
+   recovery code when asked.
+3. Start Open Hospitality. Your books are there, and you sign in as before.
 
-```
-"Open Hospitality.exe" --restore "D:\your-folder\Open Hospitality 2026-09-11 0410.ohbackup"
-```
-
-It asks for your recovery code, and it refuses to write over books that are
-already there.
+It refuses to write over books that are already on a computer: if you have
+already opened the app there, uninstall it first (Windows Settings › Apps),
+say Yes to deleting the books, and open the backup again.
 
 ## 7b. Installing a newer version
 
