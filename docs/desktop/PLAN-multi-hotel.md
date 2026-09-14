@@ -55,7 +55,16 @@ A **Rooms** card beside the totals: *412 rooms across 3 hotels · 318 sold last 
 
 The verdict, in words: **"Above breakeven — $1,640 a night against $1,479 needed; heading for $598,000 this year against $540,000"** in green, or **"Behind — $310 a night short; at this pace $497,000 against $540,000"** in red, or **"No breakeven set — type this hotel's annual breakeven"** with the pencil.
 
-**Where it is entered.** On the Overview's Profit picture card (a pencil beside each hotel → *Annual breakeven* → Save; the card shows the per-day figure it makes, so the owner can sanity-check it), and on **Your hotels**. Stored in the hotel profile setting (`hotel_profiles`, beside the ownership entity), per hotel, with when it was last changed. Changing it re-reads the whole picture at once — nothing is stored from an old number.
+**Heading for — shaped by last year, when the report carries it.** A plain run rate ignores the seasons. But the night audit itself often prints **last year**: choiceADVANTAGE's Hotel Statistics carries *Last Year PTD* and *Last YTD* revenue beside this year's, and the app already keeps those columns apart (`is_prior_year`). So where they exist, the projection is shaped by the hotel's own past year:
+
+- *growth so far* = this year's revenue to date ÷ last year's revenue to the same date (both printed on the report);
+- *heading for* = last year's full-year revenue × growth so far.
+
+Last year's full-year revenue comes from the report where a report prints it (a January audit's *Last YTD* is the whole prior year), from the app's own books once it has read a full year, or — until then — from **one more number the owner can type beside the breakeven: last year's total revenue**, which every owner has from their tax return. When none of the three is known, the card falls back to the plain run rate and says so: *"a plain run rate — type last year's revenue for a seasonal projection"*. Systems that print no last-year column (AutoClerk's pack, OPERA's trial balance) use the owner's number or the run rate, and the card names which it used.
+
+The projection is then compared with the annual breakeven: **"Heading for $598,000 this year (shaped by last year's seasons) against $540,000 needed."**
+
+**Where it is entered.** On the Overview's Profit picture card (a pencil beside each hotel → *Annual breakeven* and, optionally, *Last year's revenue* → Save; the card shows the per-day figure it makes, so the owner can sanity-check it), and on **Your hotels**. Stored in the hotel profile setting (`hotel_profiles`, beside the ownership entity), per hotel, with when it was last changed. Changing it re-reads the whole picture at once — nothing is stored from an old number.
 
 A **Profit picture** card at the top, under This morning: one bar per hotel (year to date against where the year should be by today, with last night marked), the portfolio total on the first line — *"3 hotels · 2 above breakeven, 1 behind · $9,300 above year to date"* — and the worst first.
 
@@ -118,7 +127,7 @@ Each step ships with its own tests, an e2e step (rules with three hotels' subjec
 ## Two things to confirm before step 2
 
 1. **Breakeven is one annual total-revenue figure per hotel**, from the owner's own past years; the app divides it by the days in the year and compares every day, month and year against that. Room revenue only, or a monthly figure, would both mislead — total revenue and a year it is.
-2. **The verdict uses a plain run rate.** Year-to-date ÷ days elapsed × days in the year, named as such. A later version can weight by the hotel's own seasons once a full year of books exists.
+2. **The projection is shaped by last year where the report prints it** (growth so far × last year's total), and by a plain run rate otherwise — the card always says which. Last year's total may be typed by the owner until the books or a report supply it.
 
 3. **The email is sent from the same account the reports are collected from.** Simplest for the owner, and the app password already saved covers sending. A separate sending account can be added later if someone needs it.
 
