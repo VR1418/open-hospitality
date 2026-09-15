@@ -52,6 +52,8 @@ def _git(*args: str, cwd: Path, check: bool = True) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--force", action="store_true",
+                        help="rewrite the public branches (after history here was rewritten)")
     args = parser.parse_args()
 
     if not LOCAL.is_file():
@@ -112,7 +114,7 @@ def main() -> int:
             print("dry run: nothing pushed")
             return 0
         _git("remote", "add", "public", PUBLIC, cwd=clone)
-        _git("push", "-q", "public", "main", *BRANCHES, cwd=clone)
+        _git("push", "-q", *(["--force"] if args.force else []), "public", "main", *BRANCHES, cwd=clone)
         print(f"pushed main, {', '.join(BRANCHES)} to {PUBLIC}")
         return 0
     finally:
