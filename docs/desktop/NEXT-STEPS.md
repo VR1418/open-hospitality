@@ -247,6 +247,17 @@ Built from [PLAN-multi-hotel.md](PLAN-multi-hotel.md):
 
 Next from the plan: the budget upload with a template (B3c), then email rules and *Add this hotel* from an unrouted email (A), then the morning email (C).
 
+## 15 September — the design paper
+
+[SELF-LEARNING-ENGINE.md](SELF-LEARNING-ENGINE.md) (also as a PDF beside it): a
+self-learning, privacy-preserving engine for reading operational reports and
+mapping them to a standard chart — the layers L0–L8, memory and the data
+layer, how the engine knows what to look for, photographs of receipts, the
+security envelope, the holdback specified, the AI contract, the corpus and
+gates, an eight-phase build plan (about twelve weeks), and how to adopt it in
+another domain. Written for this project and for any system with the same
+shape of problem.
+
 ## 6. Send the three upstream changes back — *half a day*
 
 [UPSTREAM.md](UPSTREAM.md) has three, two of them written and tested here: the
